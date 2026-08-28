@@ -14,14 +14,14 @@ input, textarea{
   user-select:text;
 }
 :root{
-  --primary:#4C8C3C; --on-primary:#FFFFFF; --primary-container:#DCEDD2; --on-primary-container:#1B4021;
+  --primary:#4E7FE0; --on-primary:#FFFFFF; --primary-container:#EAF1FF; --on-primary-container:#1B3A6D;
   --secondary:#5C5240; --secondary-container:#E6DCC6;
   --success:#2E7D32; --success-container:#D7ECD9;
   --danger:#B3261E; --danger-container:#F9DEDC;
   --surface:#FAF7F2; --surface-container:#F1ECE2; --surface-container-high:#E8E1D3; --surface-container-low:#FCFAF6;
   --on-surface:#26303B; --on-surface-variant:#5A6472;
   --outline:#D6CFC0; --outline-variant:#E8E2D5;
-  --navy:#1E3B24;
+  --navy:#2E4A7D;
   --maroon:#7A2618;
 }
 *{box-sizing:border-box;-webkit-tap-highlight-color:transparent;}
