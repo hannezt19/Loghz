@@ -2,6 +2,7 @@
 const TITLES = {
   beranda:['BERANDA', 'Ringkasan'],
   hari:['HARI INI', ()=>fmtLabel(todayIso())],
+  proker:['PROKER', 'Program Kerja'],
   peta:['PETA', 'Lokasi Kerja'],
   rekap:['REKAP', 'Riwayat & Laporan']
 };
@@ -16,6 +17,7 @@ function showScreen(name){
   document.getElementById('tb-badge').textContent = USER.mainBt ? btLabel(USER.mainBt) : '-';
   if(name==='beranda'){ renderBeranda(); fetchWeatherIfNeeded(); }
   if(name==='hari') renderHari();
+  if(name==='proker') renderProker();
   if(name==='rekap') renderRekap();
   if(name==='peta') renderPeta();
 }

@@ -273,7 +273,7 @@ function renderHari(){
     <div class="card">
       <div class="grid2">
         <div><label class="flabel">HM Awal</label><input type="text" inputmode="numeric" value="${escapeHtml(e.hmAwal)}" oninput="this.value=fmtHmLive(this.value)" onchange="quickSave('hmAwal', this.value);checkHmWarning('qf')" id="qf-hmA"></div>
-        <div><label class="flabel">HM Akhir</label><input type="text" inputmode="numeric" class="${hmBad(e)?'field-error':''}" value="${escapeHtml(e.hmAkhir)}" oninput="this.value=fmtHmLive(this.value)" onchange="quickSave('hmAkhir', this.value);checkHmWarning('qf')" id="qf-hmB"></div>
+        <div><label class="flabel">HM Akhir</label><input type="text" inputmode="numeric" class="${hmBad(e)?'field-error':''}" value="${escapeHtml(e.hmAkhir)}" oninput="this.value=fmtHmLive(this.value)" onchange="onHmAkhirChangeQf(this)" id="qf-hmB"></div>
         <div class="full" id="qf-hmWarning">${hmBad(e)?'<div class="field-sub" style="color:var(--danger);">'+ic('warning')+' HM Akhir lebih kecil dari HM Awal.</div>':''}</div>
         <div><label class="flabel">BBM (ml)</label><input type="text" inputmode="numeric" value="${escapeHtml(fmtThousandsLive(e.bbmLiter))}" oninput="this.value=fmtThousandsLive(this.value)" onchange="quickSave('bbmLiter', stripDots(this.value))"></div>
         <div><label class="flabel">Jam Lembur</label><input type="text" inputmode="decimal" value="${escapeHtml(e.lembur)}" onchange="quickSave('lembur', this.value)"></div>
@@ -306,14 +306,22 @@ function deleteSecondaryUnit(id){
 }
 function quickSaveEntry(entryId, key, val){
   const idx = ENTRIES.findIndex(x=>x.id===entryId); if(idx<0) return;
-  if(key==='hmAkhir' && val!==''){
-    maybeDetectHmReset(ENTRIES[idx].btId, val, ENTRIES[idx].date);
-  }
   ENTRIES[idx][key] = val;
   recomputeLemburIfNeeded(ENTRIES[idx], key);
   saveEntries();
   toast('Tersimpan');
   renderHari();
+}
+/* Pembungkus khusus HM Akhir unit tambahan (poin 1): sama seperti onHmAkhirChangeQf()
+ * tapi untuk entri unit tambahan (isSecondary) di layar Hari Ini. */
+function onHmAkhirChangeQf2(entryId, el){
+  const entry = ENTRIES.find(x=>x.id===entryId); if(!entry) return;
+  const prevVal = entry.hmAkhir;
+  const newVal = el.value;
+  handleHmBaruInput(entry.btId, entry.date, newVal,
+    ()=>{ quickSaveEntry(entryId, 'hmAkhir', newVal); },
+    ()=>{ el.value = prevVal; checkHmWarning2(entryId); }
+  );
 }
 function selectWithCustomHari(entryId, fieldKey, list, currentVal){
   return `<select onchange="handleSelectCustomHari('${entryId}','${fieldKey}', this.value)">
@@ -415,7 +423,7 @@ function renderSecondaryUnitCard(e, idx){
 
       <div class="grid2" style="margin-top:8px;">
         <div><label class="flabel">HM Awal</label><input type="text" inputmode="numeric" value="${escapeHtml(e.hmAwal)}" oninput="this.value=fmtHmLive(this.value)" onchange="quickSaveEntry('${e.id}','hmAwal', this.value);checkHmWarning2('${e.id}')" id="qf2-hmA-${e.id}"></div>
-        <div><label class="flabel">HM Akhir</label><input type="text" inputmode="numeric" class="${hmBad(e)?'field-error':''}" value="${escapeHtml(e.hmAkhir)}" oninput="this.value=fmtHmLive(this.value)" onchange="quickSaveEntry('${e.id}','hmAkhir', this.value);checkHmWarning2('${e.id}')" id="qf2-hmB-${e.id}"></div>
+        <div><label class="flabel">HM Akhir</label><input type="text" inputmode="numeric" class="${hmBad(e)?'field-error':''}" value="${escapeHtml(e.hmAkhir)}" oninput="this.value=fmtHmLive(this.value)" onchange="onHmAkhirChangeQf2('${e.id}', this)" id="qf2-hmB-${e.id}"></div>
         <div class="full" id="qf2-hmWarning-${e.id}">${hmBad(e)?'<div class="field-sub" style="color:var(--danger);">'+ic('warning')+' HM Akhir lebih kecil dari HM Awal.</div>':''}</div>
         <div><label class="flabel">BBM (ml)</label><input type="text" inputmode="numeric" value="${escapeHtml(fmtThousandsLive(e.bbmLiter))}" oninput="this.value=fmtThousandsLive(this.value)" onchange="quickSaveEntry('${e.id}','bbmLiter', stripDots(this.value))"></div>
         <div><label class="flabel">Jam Lembur (manual)</label><input type="text" inputmode="decimal" value="${escapeHtml(e.lembur)}" onchange="quickSaveEntry('${e.id}','lembur', this.value)"></div>
@@ -566,14 +574,23 @@ function computeLemburFinal(e){
 }
 function quickSave(key, val){
   const e = getTodayEntry();
-  if(key==='hmAkhir' && val!==''){
-    maybeDetectHmReset(e.btId, val, e.date);
-  }
   e[key] = val;
   recomputeLemburIfNeeded(e, key);
   saveEntries();
   toast('Tersimpan');
   if(LEMBUR_TRIGGER_KEYS.includes(key)) renderHari();
+}
+/* Pembungkus khusus HM Akhir entri harian utama (poin 1): cek dulu lewat
+ * handleHmBaruInput() sebelum benar-benar quickSave(). Kalau user batal
+ * ("Periksa Lagi"), field HM Akhir dikembalikan ke nilai lama. */
+function onHmAkhirChangeQf(el){
+  const e = getTodayEntry();
+  const prevVal = e.hmAkhir;
+  const newVal = el.value;
+  handleHmBaruInput(e.btId, e.date, newVal,
+    ()=>{ quickSave('hmAkhir', newVal); checkHmWarning('qf'); },
+    ()=>{ el.value = prevVal; checkHmWarning('qf'); }
+  );
 }
 
 /* ================= HM & SERVIS ================= */
@@ -624,26 +641,89 @@ function hitungLiterPerJam(btId){
   const literPerJam = totalHm>0 ? (totalLiter/totalHm) : null;
   return {literPerJam, totalLiter, totalHm, cukupData:literPerJam!==null, jumlahIsi:timeline.length};
 }
+/* Ambang batas HM baru (poin 1): kalau nilai yang diketik user untuk HM Akhir
+ * lebih kecil dari ini, dianggap indikasi meter HM unit tsb baru diganti/direset,
+ * dan WAJIB dikonfirmasi dulu lewat popup sebelum data boleh tersimpan. */
+const HM_BARU_AMBANG = 9.9;
+
+/**
+ * hmServiceStatus (poin 2): "sisa" (jam terpakai sejak servis terakhir) dihitung
+ * dengan MEMPERHITUNGKAN setiap "Ganti HM baru" (HM_RESETS) yang terjadi SETELAH
+ * servis terakhir tercatat — supaya progres/jadwal servis TIDAK reset ke 0 saat
+ * meter diganti, melainkan tetap melanjutkan akumulasi jam sebelumnya lalu
+ * menambah jalannya HM baru di atasnya. Setiap kali ada reset, dijumlahkan dulu
+ * sisa jam dari segmen SEBELUM reset itu (pakai r.hmSebelumReset yang dicatat
+ * saat reset dibuat), baru segmen berikutnya dihitung dari 0 (karena meter baru
+ * dianggap mulai dari titik hampir-nol sesuai HM_BARU_AMBANG).
+ */
 function hmServiceStatus(btId){
   const last = lastServisForBt(btId);
   const current = currentHmForBt(btId);
   const baseHm = last ? (parseFloat(last.hm)||0) : null;
-  const sisa = (baseHm!==null && current!==null) ? Math.max(0, current-baseHm) : null;
+  if(baseHm===null || current===null) return {last, current, baseHm, sisa:null};
+  const resetsRelevan = HM_RESETS
+    .filter(r=>r.btId===btId && r.date>=last.date)
+    .sort((a,b)=>a.date.localeCompare(b.date) || (a.id>b.id?1:-1));
+  let sisa = 0;
+  let segStart = baseHm;
+  resetsRelevan.forEach(r=>{
+    const hmSebelum = (r.hmSebelumReset!=null && !isNaN(r.hmSebelumReset)) ? r.hmSebelumReset : segStart;
+    sisa += Math.max(0, hmSebelum - segStart);
+    segStart = 0; // segmen baru (setelah meter diganti) dimulai dari hampir-nol
+  });
+  sisa += Math.max(0, current - segStart);
   return {last, current, baseHm, sisa};
 }
-function maybeDetectHmReset(btId, newHmAkhirVal, entryDate){
-  if(newHmAkhirVal===''||newHmAkhirVal==null||!btId) return;
-  const newVal = parseFloat(newHmAkhirVal);
-  if(isNaN(newVal)) return;
-  const prevMax = currentHmForBt(btId);
-  if(prevMax!==null && prevMax>50 && newVal < prevMax*0.7 && (prevMax-newVal)>100){
-    const ok = confirm('HM Akhir ('+newVal.toFixed(1)+') turun drastis dari catatan sebelumnya ('+prevMax.toFixed(1)+') untuk '+btLabel(btId)+'.\\n\\nApakah HM meter unit ini diganti/direset (misalnya karena rusak)?');
-    if(ok){
-      HM_RESETS.push({id:uid(), btId, date: entryDate||todayIso(), note:'Reset otomatis: HM turun dari '+prevMax.toFixed(1)+' ke '+newVal.toFixed(1)});
-      saveHmResets();
-      toast('Dicatat: HM '+btLabel(btId)+' di-reset mulai '+fmtLabel(entryDate||todayIso()));
-    }
+
+/**
+ * Dipanggil dari SEMUA titik input HM Akhir (entri harian utama, unit tambahan,
+ * edit di Rekap, dan HM saat isi BBM Susulan) sebelum nilai benar-benar disimpan.
+ * Kalau nilai >= HM_BARU_AMBANG, langsung lanjut simpan seperti biasa (tidak ada
+ * perubahan perilaku). Kalau < HM_BARU_AMBANG, data DITAHAN dulu — tampil popup
+ * konfirmasi wajib (poin 1). commitFn() baru dipanggil kalau user pilih
+ * "Ya, Memang Benar"; revertFn() dipanggil kalau user pilih "Periksa Lagi"
+ * (batalkan, biarkan user mengedit lagi, tidak ada yang tersimpan).
+ */
+function handleHmBaruInput(btId, tanggal, rawVal, commitFn, revertFn){
+  const val = parseFloat(rawVal);
+  if(rawVal===''||rawVal==null||isNaN(val)||!btId||val>=HM_BARU_AMBANG){
+    commitFn();
+    return;
   }
+  window._hmBaruPending = {btId, tanggal: tanggal||todayIso(), val, commitFn, revertFn};
+  openModal(renderHmBaruConfirmHtml());
+}
+function renderHmBaruConfirmHtml(){
+  const p = window._hmBaruPending;
+  return `
+    <div class="mhead"><h2>${ic('warning')} Konfirmasi HM Baru</h2></div>
+    <div class="field-sub" style="margin-bottom:10px;">
+      HM Akhir yang kamu masukkan untuk <b>${escapeHtml(btLabel(p.btId))}</b> adalah <b>${p.val.toFixed(1)}</b> — sangat rendah dibanding biasanya, kemungkinan ini penanda meter HM unit ini baru diganti/direset.
+    </div>
+    <div class="field-sub" style="margin-bottom:16px;">Apakah ini memang benar? Kalau ya, ini akan dicatat sebagai <b>Ganti HM baru</b> khusus untuk ${escapeHtml(btLabel(p.btId))} saja (unit lain tidak terpengaruh) — dan jadwal servis unit ini akan tetap lanjut, tidak reset ke 0.</div>
+    <div style="display:flex;gap:8px;">
+      <button class="pill-btn outline" style="flex:1;justify-content:center;" onclick="batalkanHmBaru()">Periksa Lagi</button>
+      <button class="btn-block" style="flex:1;margin:0;" onclick="konfirmasiHmBaru()">Ya, Memang Benar</button>
+    </div>
+  `;
+}
+function batalkanHmBaru(){
+  const p = window._hmBaruPending;
+  closeModal();
+  window._hmBaruPending = null;
+  if(p && p.revertFn) p.revertFn();
+}
+function konfirmasiHmBaru(){
+  const p = window._hmBaruPending;
+  window._hmBaruPending = null;
+  if(!p){ closeModal(); return; }
+  const hmSebelumReset = currentHmForBt(p.btId);
+  HM_RESETS.push({id:uid(), btId:p.btId, date:p.tanggal, hmSebelumReset,
+    note:'Ganti HM baru (dikonfirmasi user)'+(hmSebelumReset!=null?' — HM sebelumnya '+hmSebelumReset.toFixed(1):'')});
+  saveHmResets();
+  closeModal();
+  toast('Ganti HM baru dicatat untuk '+btLabel(p.btId));
+  p.commitFn();
 }
 function daysBetween(d1, d2){
   if(!d1 || !d2) return null;
@@ -913,7 +993,8 @@ function renderGantiHmModal(){
 function saveGantiHm(){
   const date = document.getElementById('gantiHmDate').value;
   const note = document.getElementById('gantiHmNote').value;
-  HM_RESETS.push({id:uid(), btId:USER.mainBt, date, note: note || 'Ganti HM manual'});
+  const hmSebelumReset = currentHmForBt(USER.mainBt);
+  HM_RESETS.push({id:uid(), btId:USER.mainBt, date, hmSebelumReset, note: note || 'Ganti HM manual'});
   saveHmResets();
   toast('Perubahan HM dicatat');
   renderGantiHmModal();

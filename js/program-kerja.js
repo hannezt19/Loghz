@@ -15,17 +15,17 @@ let pkRekapExpandedDrivers = new Set(); // accordion: nama driver yang sedang di
 let pkRekapExpandedDates = new Set();   // accordion: tanggal yang sedang dibuka di "Rincian per Tanggal"
 function togglePkRekapDriver(nama){
   if(pkRekapExpandedDrivers.has(nama)) pkRekapExpandedDrivers.delete(nama); else pkRekapExpandedDrivers.add(nama);
-  renderRekap();
+  renderProker();
 }
 function togglePkRekapDate(tgl){
   if(pkRekapExpandedDates.has(tgl)) pkRekapExpandedDates.delete(tgl); else pkRekapExpandedDates.add(tgl);
-  renderRekap();
+  renderProker();
 }
 
-function setPkSubTab(tab){ pkSubTab = tab; renderRekap(); }
-function setPkTanggalMulai(val){ pkTanggalMulai = val; renderRekap(); }
-function setPkTanggalSampai(val){ pkTanggalSampai = val; renderRekap(); }
-function setPkAktualTanggal(val){ pkAktualTanggal = val; renderRekap(); }
+function setPkSubTab(tab){ pkSubTab = tab; renderProker(); }
+function setPkTanggalMulai(val){ pkTanggalMulai = val; renderProker(); }
+function setPkTanggalSampai(val){ pkTanggalSampai = val; renderProker(); }
+function setPkAktualTanggal(val){ pkAktualTanggal = val; renderProker(); }
 /* Semua baris Program yang rentangnya mencakup tanggal tertentu (dipakai Aktual & Rekap) */
 function pkProgramRowsForDate(tanggal){
   return PROGRAM_RENCANA.filter(r=>r.tanggalMulai<=tanggal && r.tanggalSampai>=tanggal);
@@ -44,7 +44,15 @@ function pkExpandDates(tanggalMulai, tanggalSampai){
   return dates;
 }
 
-function renderProgramKerjaHtml(topToggle){
+/* Entry point tab bottom-nav "Proker" (posisi 3) — dipanggil dari showScreen('proker')
+ * di nav-master.js. Halaman ini tetap terhubung ke drawer: No Unit, Jenis Layanan &
+ * Tipe (termasuk Jenis Drone), dan Shift Operator (lewat drawer + link Kelola Driver
+ * di bawah), sama seperti sebelum dipindah keluar dari tab Rekap. */
+function renderProker(){
+  const host = document.getElementById('screen-proker');
+  host.innerHTML = renderProgramKerjaHtml();
+}
+function renderProgramKerjaHtml(){
   const chipRow = `
     <div style="display:flex;gap:8px;margin:2px 0 4px;">
       <button class="chip ${pkSubTab==='program'?'active':''}" onclick="setPkSubTab('program')">Program</button>
@@ -53,13 +61,11 @@ function renderProgramKerjaHtml(topToggle){
     </div>`;
   const driverNotice = DRIVER_LIST.length===0 ? `<div class="card" style="border-color:var(--primary);"><div class="field-sub">Belum ada Driver terdaftar. Tambahkan dulu lewat menu &middot; <b onclick="openKelolaDriver()" style="cursor:pointer;color:var(--primary);">Kelola Driver</b>.</div></div>` : '';
   if(pkSubTab==='rekap'){
-    // Sticky sampai sebelum "Total Jam per Driver": toggle Rekap Pribadi/Program Kerja,
-    // chip Program/Aktual/Rekap, dan semua kontrol filter Rekap ikut menempel di atas
-    // saat discroll — supaya tidak perlu scroll balik ke atas untuk ganti bulan/filter.
+    // Sticky sampai sebelum "Total Jam per Driver": chip Program/Aktual/Rekap dan
+    // semua kontrol filter Rekap ikut menempel di atas saat discroll — supaya
+    // tidak perlu scroll balik ke atas untuk ganti bulan/filter.
     return `
       <div style="position:sticky;top:0;z-index:5;background:var(--surface);margin:0 -16px;padding:1px 16px 8px;">
-        ${topToggle}
-        <div style="height:8px;"></div>
         ${chipRow}
         ${driverNotice}
         ${renderPkRekapFilters()}
@@ -68,8 +74,6 @@ function renderProgramKerjaHtml(topToggle){
     `;
   }
   return `
-    ${topToggle}
-    <div style="height:8px;"></div>
     ${chipRow}
     ${driverNotice}
     ${pkSubTab==='program' ? renderPkProgramTab() : renderPkAktualTab()}
@@ -86,7 +90,7 @@ function togglePkTandaLiburLembur(tanggal, checked){
   if(!t){ t = {tanggal, tandaLiburLembur:checked}; PROGRAM_TANDA_LL.push(t); }
   else t.tandaLiburLembur = checked;
   saveProgramTandaLL();
-  renderRekap();
+  renderProker();
 }
 function addPkRencanaRow(){
   if(!pkTanggalMulai || !pkTanggalSampai){ toast('Isi Tanggal Mulai & Tanggal Sampai dulu'); return; }
@@ -94,7 +98,7 @@ function addPkRencanaRow(){
   const r = {id:uid(), tanggalMulai:pkTanggalMulai, tanggalSampai:pkTanggalSampai, unitId:'', sopir:'', isInti:true, layanan:'', tipe:''};
   PROGRAM_RENCANA.push(r);
   saveProgramRencana();
-  renderRekap();
+  renderProker();
   openPkRencanaEdit(r.id);
 }
 function updatePkRencanaField(rowId, field, val){
@@ -103,7 +107,7 @@ function updatePkRencanaField(rowId, field, val){
   r[field] = val;
   if(field==='layanan') r.tipe = ''; // ganti Layanan -> reset Tipe (opsi Tipe lama mungkin sudah tidak relevan)
   saveProgramRencana();
-  renderRekap();
+  renderProker();
 }
 function setPkRencanaSopirFromDriver(rowId, val){
   const r = PROGRAM_RENCANA.find(x=>x.id===rowId);
@@ -111,21 +115,21 @@ function setPkRencanaSopirFromDriver(rowId, val){
   if(val==='__LAINNYA__'){ r.sopir=''; r.isInti=false; }
   else { const d=DRIVER_LIST.find(x=>x.id===val); r.sopir=d?d.nama:''; r.isInti=true; }
   saveProgramRencana();
-  renderRekap();
+  renderProker();
 }
 function setPkRencanaSopirManual(rowId, val){
   const r = PROGRAM_RENCANA.find(x=>x.id===rowId);
   if(!r) return;
   r.sopir = val; r.isInti=false;
   saveProgramRencana();
-  renderRekap();
+  renderProker();
 }
 function addPkRencanaShiftLain(rowId){
   const r = PROGRAM_RENCANA.find(x=>x.id===rowId);
   if(!r) return;
   PROGRAM_RENCANA.push({id:uid(), tanggalMulai:r.tanggalMulai, tanggalSampai:r.tanggalSampai, unitId:r.unitId, sopir:'', isInti:true, layanan:r.layanan, tipe:r.tipe||''});
   saveProgramRencana();
-  renderRekap();
+  renderProker();
   toast('Shift lain ditambahkan untuk unit & rentang yang sama');
 }
 function deletePkRencanaRow(rowId){
@@ -134,7 +138,7 @@ function deletePkRencanaRow(rowId){
   PROGRAM_AKTUAL = PROGRAM_AKTUAL.filter(x=>x.rencanaId!==rowId);
   saveProgramRencana();
   saveProgramAktual();
-  renderRekap();
+  renderProker();
 }
 /* Baris ringkas di tabel Program (tap untuk buka form edit kecil) */
 function renderPkRencanaRowCompact(r){
@@ -248,7 +252,7 @@ function updatePkAktual(rencanaId, tanggal, field, val){
   }
   prunePkAktualIfSameAsProgram(rencanaId, tanggal);
   saveProgramAktual();
-  renderRekap();
+  renderProker();
 }
 function updatePkAktualSopir(rencanaId, tanggal, val){
   const a = ensurePkAktualRow(rencanaId, tanggal);
@@ -257,7 +261,7 @@ function updatePkAktualSopir(rencanaId, tanggal, val){
   else { const d=DRIVER_LIST.find(x=>x.id===val); a.sopir=d?d.nama:''; a.isInti=true; }
   prunePkAktualIfSameAsProgram(rencanaId, tanggal);
   saveProgramAktual();
-  renderRekap();
+  renderProker();
 }
 function updatePkAktualOvertime(rencanaId, tanggal, val){
   const a = ensurePkAktualRow(rencanaId, tanggal);
@@ -267,7 +271,7 @@ function updatePkAktualOvertime(rencanaId, tanggal, val){
   a.overtimeJam = isNaN(num) ? pkJamOtomatis(a.layanan, a.tipe) : num;
   prunePkAktualIfSameAsProgram(rencanaId, tanggal);
   saveProgramAktual();
-  renderRekap();
+  renderProker();
 }
 /* Baris ringkas di tabel Aktual (tap untuk buka form edit kecil) */
 function renderPkAktualRowCompact(r, tanggal){
@@ -375,10 +379,10 @@ function pkRekapRows(){
   if(pkRekapHanyaLL) rows = rows.filter(r=>r.tandaLiburLembur);
   return rows;
 }
-function setPkRekapMode(m){ pkRekapMode=m; renderRekap(); }
-function setPkRekapBulan(v){ pkRekapBulan=v; renderRekap(); }
-function setPkRekapTahun(v){ pkRekapTahun=v; renderRekap(); }
-function setPkRekapHanyaLL(v){ pkRekapHanyaLL=v; renderRekap(); }
+function setPkRekapMode(m){ pkRekapMode=m; renderProker(); }
+function setPkRekapBulan(v){ pkRekapBulan=v; renderProker(); }
+function setPkRekapTahun(v){ pkRekapTahun=v; renderProker(); }
+function setPkRekapHanyaLL(v){ pkRekapHanyaLL=v; renderProker(); }
 /* Bagian filter Rekap yang di-sticky-kan (dipanggil dari renderProgramKerjaHtml) —
  * radio Per Bulan/Tahun, dropdown periode, checkbox Hanya Libur & Lembur, tombol export. */
 function renderPkRekapFilters(){
@@ -506,7 +510,7 @@ async function doPkExport(fmt){
   if(typeof doc.autoTable === 'function'){
     doc.autoTable({
       columns: headers.map(h=>({header:h, dataKey:h})),
-      body: data, startY:31, styles:{fontSize:9, cellPadding:2.5}, headStyles:{fillColor:[76,140,60]}, theme:'grid'
+      body: data, startY:31, styles:{fontSize:9, cellPadding:2.5}, headStyles:{fillColor:[78,127,224]}, theme:'grid'
     });
   }
   const pdfBlob = doc.output('blob');

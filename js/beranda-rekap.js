@@ -27,7 +27,7 @@ function renderRingkasanHmLemburHtml(){
     const hmPct = d.hm>0 ? Math.max(8, Math.round(d.hm/maxHm*100)) : 0;
     const lemburPct = d.lembur>0 ? Math.max(8, Math.round(d.lembur/maxLembur*100)) : 0;
     return `<div style="display:grid;grid-template-columns:1fr 40px 1fr;align-items:center;gap:4px;padding:3px 0;">
-      <div style="display:flex;justify-content:flex-end;">${d.hm>0?`<div style="background:#4C8C3C;color:#fff;font-size:11px;font-weight:700;padding:3px 6px;border-radius:4px 0 0 4px;width:${hmPct}%;text-align:right;min-width:22px;">${d.hm.toFixed(1)}</div>`:''}</div>
+      <div style="display:flex;justify-content:flex-end;">${d.hm>0?`<div style="background:#4E7FE0;color:#fff;font-size:11px;font-weight:700;padding:3px 6px;border-radius:4px 0 0 4px;width:${hmPct}%;text-align:right;min-width:22px;">${d.hm.toFixed(1)}</div>`:''}</div>
       <div style="text-align:center;font-size:10.5px;color:var(--on-surface-variant);">${label}</div>
       <div style="display:flex;">${d.lembur>0?`<div style="background:#E8A33D;color:#fff;font-size:11px;font-weight:700;padding:3px 6px;border-radius:0 4px 4px 0;width:${lemburPct}%;min-width:22px;">${d.lembur.toFixed(1)}</div>`:''}</div>
     </div>`;
@@ -36,7 +36,7 @@ function renderRingkasanHmLemburHtml(){
     <div class="mhead"><h2>Ringkasan HM &amp; Lembur</h2><button class="mclose" onclick="closeModal()">&times;</button></div>
     <div class="field-sub" style="margin-bottom:8px;">30 hari terakhir (bergerak mengikuti tanggal hari ini)</div>
     <div style="display:flex;justify-content:space-between;font-size:12px;font-weight:700;margin-bottom:6px;padding:0 2px;">
-      <span style="color:#4C8C3C;">HM &middot; total ${totalHm.toFixed(1)} j</span>
+      <span style="color:#4E7FE0;">HM &middot; total ${totalHm.toFixed(1)} j</span>
       <span style="color:#E8A33D;">Lembur &middot; total ${totalLembur.toFixed(1)} j</span>
     </div>
     <div style="max-height:60vh;overflow-y:auto;">${rows}</div>
@@ -94,24 +94,30 @@ function renderSusulanForm(){
 function simpanSusulanDraft(){
   const d = window._susulanDraft;
   if(!d.btId || !d.tanggal || d.hm===''||d.hm==null || d.bbmMl===''||d.bbmMl==null){ toast('Lengkapi semua field'); return; }
-  tambahBbmSusulan(d.btId, d.tanggal, d.hm, parseFloat(d.bbmMl)||0);
-  window._susulanDraft = null;
-  window._bbmShowSusulanForm = false;
-  toast('Data susulan tersimpan');
-  renderBbmDetailModal();
-  renderBerandaIfActive();
+  handleHmBaruInput(d.btId, d.tanggal, d.hm,
+    ()=>{
+      tambahBbmSusulan(d.btId, d.tanggal, d.hm, parseFloat(d.bbmMl)||0);
+      window._susulanDraft = null;
+      window._bbmShowSusulanForm = false;
+      toast('Data susulan tersimpan');
+      renderBbmDetailModal();
+      renderBerandaIfActive();
+    },
+    ()=>{ renderBbmDetailModal(); }
+  );
 }
 function openLiterJamDetailModal(){
   const units = unitsForSelect().filter(u=>!u.isSystem);
+  // Poin 4: ranking cuma menampilkan 7 unit paling irit (Liter/Jam terendah ke
+  // tertinggi) yang datanya sudah cukup dihitung — bukan semua unit.
   const ranking = units.map(u=>({u, r:hitungLiterPerJam(u.id)}))
-    .sort((a,b)=>{
-      if(a.r.cukupData && b.r.cukupData) return a.r.literPerJam-b.r.literPerJam;
-      if(a.r.cukupData) return -1;
-      if(b.r.cukupData) return 1;
-      return 0;
-    });
+    .filter(row=>row.r.cukupData)
+    .sort((a,b)=>a.r.literPerJam-b.r.literPerJam)
+    .slice(0,7);
   openModal(`
     <div class="mhead"><h2>Ranking Liter/Jam</h2><button class="mclose" onclick="closeModal()">&times;</button></div>
+    <div class="field-sub" style="margin-bottom:8px;">7 unit paling irit (Liter/Jam terendah)</div>
+    ${ranking.length===0 ? '<div class="empty-note">Belum ada unit dengan data cukup untuk ranking.</div>' : ''}
     ${ranking.map((row,i)=>`
       <div class="card" style="margin-bottom:8px;padding:12px 14px;display:flex;justify-content:space-between;align-items:center;">
         <div>
@@ -272,7 +278,7 @@ function renderBeranda(){
 
     <div class="section-eyebrow section-eyebrow-row">HM &amp; Lembur 15 Hari Terakhir
       <span style="display:flex;align-items:center;gap:10px;font-size:12px;font-weight:600;color:var(--on-surface-variant);">
-        <span style="display:flex;align-items:center;gap:4px;"><span style="width:9px;height:9px;border-radius:2px;background:#4C8C3C;display:inline-block;"></span>HM</span>
+        <span style="display:flex;align-items:center;gap:4px;"><span style="width:9px;height:9px;border-radius:2px;background:#4E7FE0;display:inline-block;"></span>HM</span>
         <span style="display:flex;align-items:center;gap:4px;"><span style="width:9px;height:9px;border-radius:2px;background:#E8A33D;display:inline-block;"></span>Lembur</span>
       </span>
     </div>
@@ -283,7 +289,7 @@ function renderBeranda(){
           const lemburH = Math.max(d.lembur>0?4:0, d.lembur/maxTotal15*70);
           return `<div style="flex:1;display:flex;flex-direction:column;align-items:center;gap:4px;">
           <div style="width:100%;display:flex;flex-direction:column-reverse;">
-            <div style="width:100%;background:#4C8C3C;border-radius:${d.lembur>0?'0':'4px 4px'} 0 0;height:${hmH}px;"></div>
+            <div style="width:100%;background:#4E7FE0;border-radius:${d.lembur>0?'0':'4px 4px'} 0 0;height:${hmH}px;"></div>
             ${d.lembur>0?`<div style="width:100%;background:#E8A33D;border-radius:4px 4px 0 0;height:${lemburH}px;"></div>`:''}
           </div>
           <div class="field-sub" style="font-size:10.5px;">${d.iso.slice(8,10)}</div>
@@ -337,15 +343,23 @@ function editEntryField(entryId, key, val){
   if(key==='hmAwal' || key==='hmAkhir'){
     val = val===''?'':parseFloat(val).toFixed(1);
   }
-  if(key==='hmAkhir' && val!==''){
-    maybeDetectHmReset(ENTRIES[idx].btId, val, ENTRIES[idx].date);
-  }
   ENTRIES[idx][key] = val;
   recomputeLemburIfNeeded(ENTRIES[idx], key);
   saveEntries();
   toast('Tersimpan');
   expandedRowId = entryId;
   renderRekap();
+}
+/* Pembungkus khusus HM Akhir saat edit baris di Rekap (poin 1): sama seperti
+ * onHmAkhirChangeQf() di masterdata.js, tapi commit-nya lewat editEntryField(). */
+function onHmAkhirChangeEdit(entryId, el){
+  const entry = ENTRIES.find(x=>x.id===entryId); if(!entry) return;
+  const prevVal = entry.hmAkhir;
+  const newVal = el.value;
+  handleHmBaruInput(entry.btId, entry.date, newVal,
+    ()=>{ editEntryField(entryId, 'hmAkhir', newVal); checkHmWarning(entryId); },
+    ()=>{ el.value = prevVal; checkHmWarning(entryId); }
+  );
 }
 function toggleSecondaryFlag(entryId){
   const idx = ENTRIES.findIndex(x=>x.id===entryId); if(idx<0) return;
@@ -406,22 +420,13 @@ function openBackfill(dateIso){
   expandedRowId = e.id;
   showScreen('rekap');
 }
-/* ================= REKAP: TOGGLE PRIBADI / PROGRAM KERJA =================
- * Tab bottom-nav "Rekap" sekarang punya 2 bagian: Rekap Pribadi (histori
- * ENTRIES milik Han sendiri, sudah ada dari dulu) dan Program Kerja (modul
- * baru, data terpisah total — lihat KONSEP-PROGRAM-KERJA.md). */
-let rekapMainTab = 'pribadi'; // 'pribadi' | 'program'
-function setRekapMainTab(tab){ rekapMainTab = tab; renderRekap(); }
+/* ================= REKAP (Rekap Pribadi) =================
+ * Tab bottom-nav "Rekap": histori ENTRIES milik Han sendiri.
+ * Program Kerja (modul terpisah, lihat KONSEP-PROGRAM-KERJA.md) kini
+ * punya tab tersendiri "Proker" — lihat program-kerja.js / renderProker(). */
 function renderRekap(){
   const host = document.getElementById('screen-rekap');
-  const topToggle = `
-    <div style="display:flex;gap:8px;margin-bottom:4px;">
-      <button class="pill-btn ${rekapMainTab==='pribadi'?'':'outline'}" style="flex:1;justify-content:center;" onclick="setRekapMainTab('pribadi')">Rekap Pribadi</button>
-      <button class="pill-btn ${rekapMainTab==='program'?'':'outline'}" style="flex:1;justify-content:center;" onclick="setRekapMainTab('program')">Program Kerja</button>
-    </div>`;
-  host.innerHTML = rekapMainTab==='pribadi'
-    ? topToggle + `<div style="height:8px;"></div>` + renderRekapPribadiHtml()
-    : renderProgramKerjaHtml(topToggle);
+  host.innerHTML = renderRekapPribadiHtml();
 }
 function renderRekapPribadiHtml(){
   const missing = missingDays();
@@ -541,7 +546,7 @@ function renderRekapPribadiHtml(){
             <div class="section-eyebrow" style="margin-top:8px;">Hour Meter &amp; BBM</div>
             <div class="grid2">
               <div><label class="flabel">HM Awal</label><input type="text" inputmode="numeric" id="ed-hmA-${e.id}" value="${escapeHtml(e.hmAwal)}" oninput="this.value=fmtHmLive(this.value)" onchange="editEntryField('${e.id}','hmAwal',this.value);checkHmWarning('${e.id}')"></div>
-              <div><label class="flabel">HM Akhir</label><input type="text" inputmode="numeric" id="ed-hmB-${e.id}" class="${hmBad(e)?'field-error':''}" value="${escapeHtml(e.hmAkhir)}" oninput="this.value=fmtHmLive(this.value)" onchange="editEntryField('${e.id}','hmAkhir',this.value);checkHmWarning('${e.id}')"></div>
+              <div><label class="flabel">HM Akhir</label><input type="text" inputmode="numeric" id="ed-hmB-${e.id}" class="${hmBad(e)?'field-error':''}" value="${escapeHtml(e.hmAkhir)}" oninput="this.value=fmtHmLive(this.value)" onchange="onHmAkhirChangeEdit('${e.id}', this)"></div>
               <div class="full" id="ed-hmWarning-${e.id}">${hmBad(e)?'<div class="field-sub" style="color:var(--danger);">'+ic('warning')+' HM Akhir lebih kecil dari HM Awal.</div>':''}</div>
               <div><label class="flabel">BBM (ml)</label><input type="text" inputmode="numeric" value="${escapeHtml(fmtThousandsLive(e.bbmLiter))}" oninput="this.value=fmtThousandsLive(this.value)" onchange="editEntryField('${e.id}','bbmLiter',stripDots(this.value))"></div>
               <div><label class="flabel">Jam Lembur</label><input type="text" value="${escapeHtml(e.lembur)}" onchange="editEntryField('${e.id}','lembur',this.value)"></div>
