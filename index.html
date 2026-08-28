@@ -5,7 +5,7 @@
 <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, viewport-fit=cover">
 <title>Log Hz</title>
 <link rel="manifest" href="manifest.json">
-<meta name="theme-color" content="#1E3B24">
+<meta name="theme-color" content="#2E4A7D">
 <script src="vendor/capacitor-core.js"></script>
 <script src="vendor/capacitor-community-sqlite.js"></script>
 <script src="db.js"></script>
@@ -35,6 +35,7 @@
   <div id="screens">
     <div class="screen active" id="screen-beranda"></div>
     <div class="screen" id="screen-hari"></div>
+    <div class="screen" id="screen-proker"></div>
     <div class="screen" id="screen-peta"></div>
     <div class="screen" id="screen-rekap"></div>
   </div>
@@ -47,6 +48,10 @@
     <button data-tab="hari" onclick="showScreen('hari')">
       <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="4" width="18" height="17" rx="2"/><path d="M3 9h18M8 3v3M16 3v3"/></svg>
       <span>Hari Ini</span>
+    </button>
+    <button data-tab="proker" onclick="showScreen('proker')">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="6" y="4" width="12" height="17" rx="2"/><rect x="9" y="2.5" width="6" height="3" rx="1"/><path d="M9 11h6M9 15h6"/></svg>
+      <span>Proker</span>
     </button>
     <button data-tab="peta" onclick="showScreen('peta')">
       <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M9 18l-6 3V6l6-3 6 3 6-3v15l-6 3-6-3z"/><path d="M9 3v15M15 6v15"/></svg>
@@ -78,7 +83,6 @@
   <div class="ditem" onclick="openKelolaJamLayanan()"><span class="ic"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="vertical-align:-4px;display:inline-block;"><path d="M6 3h12M6 21h12M7 3v4a5 5 0 005 5 5 5 0 005-5V3M7 21v-4a5 5 0 015-5 5 5 0 015 5v4"/></svg></span> Jam Otomatis per Layanan</div>
   <div class="dgroup">Servis</div>
   <div class="ditem" onclick="openServisModal()"><span class="ic"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="vertical-align:-4px;display:inline-block;"><path d="M14.7 6.3a4 4 0 00-5.4 5.4L3 18v3h3l6.3-6.3a4 4 0 005.4-5.4l-2.8 2.8-2-2 2.8-2.8z"/></svg></span> Riwayat &amp; Catat Servis</div>
-  <div class="ditem" onclick="openGantiHmModal()"><span class="ic"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="vertical-align:-4px;display:inline-block;"><path d="M4 12a8 8 0 0113.7-5.7L20 8"/><path d="M20 4v4h-4"/><path d="M20 12a8 8 0 01-13.7 5.7L4 16"/><path d="M4 20v-4h4"/></svg></span> Ganti HM Manual</div>
   <div class="dgroup">Cuaca</div>
   <div class="ditem" onclick="openWeatherExportSheet()"><span class="ic"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="vertical-align:-4px;display:inline-block;"><path d="M7 16a4 4 0 010-8 5 5 0 019.6-1.5A4.5 4.5 0 0117.5 16H7z"/><path d="M9 19l-1 2M13 19l-1 2M17 19l-1 2"/></svg></span> Cetak Laporan Cuaca Lengkap</div>
   <div class="dgroup">Cadangan Data</div>
