@@ -154,14 +154,19 @@ jobs:
           }
           EOF
       - name: Build APK (release, signed)
+        uses: nick-fields/retry@v3
         env:
           KEYSTORE_PASSWORD: ${{ secrets.KEYSTORE_PASSWORD }}
           KEY_ALIAS: ${{ secrets.KEY_ALIAS }}
           KEY_PASSWORD: ${{ secrets.KEY_PASSWORD }}
-        run: |
-          cd android
-          chmod +x gradlew
-          ./gradlew assembleRelease
+        with:
+          timeout_minutes: 10
+          max_attempts: 3
+          retry_wait_seconds: 30
+          command: |
+            cd android
+            chmod +x gradlew
+            ./gradlew assembleRelease
       - name: Upload APK
         uses: actions/upload-artifact@v4
         with:
