@@ -268,7 +268,7 @@ let BACKUP_META = LS.get('v2_backup_meta', {
  * BUKAN Android Client ID (Android Client ID dipakai Play Services di belakang layar
  * lewat kecocokan package name + SHA-1, tidak pernah ditulis di kode).
  */
-const GOOGLE_WEB_CLIENT_ID = '135627438016-0fuqqhhprqteobeuiqvcmq8448bvpb36.apps.googleusercontent.com';
+const GOOGLE_WEB_CLIENT_ID = '933433627637-pbr39bv7eo5ku7r8se7qgj7j8ckrnap6.apps.googleusercontent.com';
 const GOOGLE_DRIVE_SCOPE = 'https://www.googleapis.com/auth/drive.file';
 
 let _googleAuthInitialized = false;
