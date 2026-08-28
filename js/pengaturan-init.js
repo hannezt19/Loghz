@@ -475,6 +475,3 @@ async function bootApp(){
   checkAutoBackupBulanan();
 }
 bootApp();
-</script>
-</body>
-</html>
