@@ -6,6 +6,18 @@
 <title>Log Hz</title>
 <link rel="manifest" href="manifest.json">
 <meta name="theme-color" content="#2E4A7D">
+<script>
+  /* === DEBUG SEMENTARA: tangkap error & tampilkan sebagai alert ===
+     Ini untuk mencari penyebab bug (menu Cadangan Data / Cetak tidak
+     merespon). HAPUS blok ini setelah bug ketemu dan sudah diperbaiki. */
+  window.onerror = function(msg, url, line, col, error) {
+    alert('ERROR:\n' + msg + '\nFile: ' + (url||'').split('/').pop() + '\nBaris: ' + line + '\n\n' + (error && error.stack ? error.stack : ''));
+    return false;
+  };
+  window.addEventListener('unhandledrejection', function(e){
+    alert('PROMISE ERROR:\n' + (e.reason && e.reason.message ? e.reason.message : e.reason));
+  });
+</script>
 <script src="vendor/capacitor-core.js"></script>
 <script src="vendor/capacitor-community-sqlite.js"></script>
 <script src="db.js"></script>
