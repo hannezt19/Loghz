@@ -133,7 +133,17 @@ jobs:
           EOF
       - name: Siapkan keystore penandatanganan
         run: |
-          echo "${{ secrets.KEYSTORE_BASE64 }}" | base64 -d > android/app/release.keystore
+          echo "${{ secrets.KEYSTORE_BASE64 }}" | tr -d '[:space:]' | base64 -d > android/app/release.keystore
+      - name: Verifikasi keystore & password
+        env:
+          KEYSTORE_PASSWORD: ${{ secrets.KEYSTORE_PASSWORD }}
+          KEY_ALIAS: ${{ secrets.KEY_ALIAS }}
+          KEY_PASSWORD: ${{ secrets.KEY_PASSWORD }}
+        run: |
+          echo "Ukuran file keystore: $(stat -c%s android/app/release.keystore) bytes"
+          keytool -list -keystore android/app/release.keystore -storepass "$KEYSTORE_PASSWORD" -alias "$KEY_ALIAS" \
+            && echo "✅ KEYSTORE_PASSWORD dan KEY_ALIAS valid, bisa dibuka." \
+            || (echo "❌ GAGAL buka keystore. KEYSTORE_BASE64 atau KEYSTORE_PASSWORD salah/corrupt." && exit 1)
       - name: Tambah konfigurasi signing ke Gradle
         run: |
           cat >> android/app/build.gradle << 'EOF'
