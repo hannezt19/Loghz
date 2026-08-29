@@ -660,20 +660,30 @@ function pkBuildPivotPdf(dateList, driverNames, holidaySet){
     let y = marginTop;
     const tableW = dateColW + groupW*chunkDrivers.length;
     function drawHeader(){
-      doc.setDrawColor(190,190,190);
+      /* FIX (v1.0.34): sebelumnya latar biru diisi per-sel diselingi doc.text(),
+       * dan di build jsPDF yang dipakai app ini warna fill jadi tidak konsisten
+       * kalau diselingi text() sehingga sel sopir (nama/Unit/OT) gagal keisi
+       * biru -> teks putihnya jadi tak terlihat di atas kertas putih. Solusi:
+       * isi latar biru untuk SELURUH lebar baris header sekaligus (satu rect
+       * fill polos, tanpa ada text() di antaranya) dulu, baru sesudah itu
+       * gambar garis kotak & teks satu-satu di atasnya. Pola ini sama dengan
+       * yang dipakai baris TOTAL OT di bawah, yang sudah terbukti aman. */
       doc.setFillColor(78,127,224);
+      doc.rect(marginX, y, dateColW + groupW*chunkDrivers.length, headH1+headH2, 'F');
+
+      doc.setDrawColor(190,190,190);
       doc.setTextColor(255,255,255);
       doc.setFont(undefined,'bold');
-      doc.rect(marginX, y, dateColW, headH1+headH2, 'FD');
+      doc.rect(marginX, y, dateColW, headH1+headH2, 'D');
       doc.setFontSize(8);
       doc.text('Tanggal', marginX+dateColW/2, y+(headH1+headH2)/2+1.3, {align:'center'});
       let x = marginX+dateColW;
       chunkDrivers.forEach(nm=>{
-        doc.rect(x, y, groupW, headH1, 'FD');
+        doc.rect(x, y, groupW, headH1, 'D');
         doc.setFontSize(7.3);
         doc.text(nm, x+groupW/2, y+headH1/2+1.1, {align:'center', maxWidth:groupW-2});
-        doc.rect(x, y+headH1, unitColW, headH2, 'FD');
-        doc.rect(x+unitColW, y+headH1, otColW, headH2, 'FD');
+        doc.rect(x, y+headH1, unitColW, headH2, 'D');
+        doc.rect(x+unitColW, y+headH1, otColW, headH2, 'D');
         doc.setFontSize(7);
         doc.text('Unit', x+unitColW/2, y+headH1+headH2-1.7, {align:'center'});
         doc.text('OT', x+unitColW+otColW/2, y+headH1+headH2-1.7, {align:'center'});
