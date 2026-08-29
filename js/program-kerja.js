@@ -606,7 +606,7 @@ function pkCellUnitSingkatan(row){
   if(!row || !row.unitId) return '';
   if(isSystemUnitId(row.unitId)) return btLabel(row.unitId);
   const unitLabel = btLabel(row.unitId);
-  const sing = pkSingkatanLayanan(row.layanan);
+  const sing = pkSingkatanLayanan(row.layanan, row.tipe);
   return [unitLabel, sing].filter(Boolean).join(' ');
 }
 /* Ambil sel gabungan untuk 1 sopir di 1 tanggal dari daftar baris efektif
@@ -633,7 +633,7 @@ function pkBuildPivotPdf(dateList, driverNames, holidaySet){
   const pageW = doc.internal.pageSize.getWidth();
   const pageH = doc.internal.pageSize.getHeight();
   const marginX = 8, marginTop = 10, marginBottom = 8;
-  const dateColW = 24, unitColW = 22, otColW = 10;
+  const dateColW = 17, unitColW = 22, otColW = 10; // dateColW dipersempit (v1.0.33) - sisa ruang otomatis nambah jumlah sopir per halaman lewat perChunk di bawah
   const groupW = unitColW + otColW;
   const usableW = pageW - marginX*2 - dateColW;
   const perChunk = Math.max(1, Math.floor(usableW / groupW));

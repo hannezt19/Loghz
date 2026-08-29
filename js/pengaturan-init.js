@@ -456,8 +456,10 @@ async function bootApp(){
     PROGRAM_TANDA_LL = LS.get('v2_program_tanda_ll', []);
     PK_DRONE_TIPE_LIST = LS.get('v2_pk_dronetipe', ['ZPK','Prevatone']);
     PK_SHIFT_LIST = LS.get('v2_pk_shift', ['Pagi','Siang']);
+    LAYANAN_SINGKATAN = LS.get('v2_layanan_singkatan', {});
     migratePkDataIfNeeded(); // konversi baris Program lama (v1.0.26, tanggal tunggal) ke skema rentang v1.0.27
     migratePkJamLayananIfNeeded(); // konversi jam otomatis lama (per-Layanan) ke per-sub-tipe (Agustus 2026)
+    migrateLayananSingkatanIfNeeded(); // konversi Singkatan lama (per-Layanan) ke per-sub-tipe (v1.0.33)
     ensureSystemUnits();
     // Sebelumnya BACKUP_META/WEATHER/WEATHER_LOG TIDAK ikut disegarkan di sini,
     // jadi selalu memakai nilai default (dari `let` di atas, dieksekusi sebelum
@@ -469,7 +471,6 @@ async function bootApp(){
     });
     WEATHER = LS.get('v2_weather_cache', null);
     WEATHER_LOG = LS.get('v2_weather_log', []);
-    LAYANAN_SINGKATAN = LS.get('v2_layanan_singkatan', {});
   }catch(err){
     console.error('Gagal inisialisasi database:', err);
     alert('Gagal memuat database: ' + (err && err.message ? err.message : err) + '\n\nApp tetap dibuka, tapi data mungkin tidak lengkap. Coba tutup & buka ulang app.');

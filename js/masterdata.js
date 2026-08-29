@@ -113,29 +113,67 @@ function renderKelolaJamLayananModal(){
         return `
         <div style="display:flex;gap:8px;align-items:center;margin-top:10px;">
           <div style="flex:1;font-weight:700;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">${escapeHtml(j)}</div>
-          ${pkSingkatanInputHtml(j, jsSafe)}
         </div>
-        ${opsiTipe.map(t=>`
-        <div class="grid2" style="align-items:center;padding-left:12px;">
-          <div style="color:var(--on-surface-variant);">${escapeHtml(t)}</div>
-          <input type="text" inputmode="numeric" value="${pkJamOtomatis(j,t)}" onchange="setJamLayanan('${jsSafe}', '${escapeHtml(t).replace(/'/g,"\\'")}', this.value)">
-        </div>`).join('')}
+        ${opsiTipe.map(t=>{
+          const tSafe = escapeHtml(t).replace(/'/g,"\\'");
+          return `
+        <div style="display:flex;gap:8px;align-items:center;margin-top:6px;padding-left:12px;">
+          <div style="flex:1;color:var(--on-surface-variant);min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">${escapeHtml(t)}</div>
+          ${pkSingkatanInputHtml(j, jsSafe, t, tSafe)}
+          <input type="text" inputmode="numeric" style="width:56px;flex-shrink:0;" value="${pkJamOtomatis(j,t)}" onchange="setJamLayanan('${jsSafe}', '${tSafe}', this.value)">
+        </div>`;}).join('')}
       `;}).join('')}
   `);
 }
 /* Input Singkatan (maks. 6 karakter, dipaksa huruf besar) untuk 1 baris Jenis
- * Layanan di modal Jam Otomatis per Layanan — dipakai di kedua varian baris
- * (dengan/tanpa sub-tipe) supaya markupnya tidak dobel. */
-function pkSingkatanInputHtml(layanan, jsSafe){
-  return `<input type="text" maxlength="6" placeholder="Singkatan" value="${escapeHtml(pkSingkatanLayanan(layanan))}" style="width:78px;flex-shrink:0;text-align:center;text-transform:uppercase;" oninput="this.value=this.value.toUpperCase()" onchange="setSingkatanLayanan('${jsSafe}', this.value)">`;
+ * Layanan / sub-tipe di modal Jam Otomatis per Layanan — dipakai di kedua
+ * varian baris (dengan/tanpa sub-tipe) supaya markupnya tidak dobel.
+ * Sejak revisi Agustus 2026 (v1.0.33): untuk Layanan yang punya sub-tipe,
+ * Singkatan disimpan PER SUB-TIPE (bukan lagi 1 per Layanan induk) — supaya
+ * PDF Proker bisa bedakan mis. ZPK vs Prevatone, Pagi vs Siang, dst. */
+function pkSingkatanInputHtml(layanan, jsSafe, tipe, tipeSafe){
+  const tipeArg = tipe ? tipeSafe : '';
+  return `<input type="text" maxlength="6" placeholder="Singkatan" value="${escapeHtml(pkSingkatanLayanan(layanan, tipe||''))}" style="width:78px;flex-shrink:0;text-align:center;text-transform:uppercase;" oninput="this.value=this.value.toUpperCase()" onchange="setSingkatanLayanan('${jsSafe}', '${tipeArg}', this.value)">`;
 }
-function pkSingkatanLayanan(layanan){
-  return LAYANAN_SINGKATAN[layanan] || '';
+/* Kunci penyimpanan LAYANAN_SINGKATAN: Layanan TANPA sub-tipe tetap dikunci
+ * per nama Layanan saja (backward compatible, tidak perlu migrasi). Layanan
+ * DENGAN sub-tipe dikunci gabungan "Layanan::Tipe", mirror pola yang sudah
+ * dipakai PIKET_JAM_LAYANAN (lihat pkJamOtomatis di atas). */
+function pkSingkatanKey(layanan, tipe){
+  const hasTipe = !!pkTipeLabelFor(layanan);
+  return hasTipe ? (layanan+'::'+(tipe||'')) : layanan;
 }
-function setSingkatanLayanan(layanan, val){
+function pkSingkatanLayanan(layanan, tipe){
+  return LAYANAN_SINGKATAN[pkSingkatanKey(layanan, tipe)] || '';
+}
+function setSingkatanLayanan(layanan, tipe, val){
   const v = String(val||'').trim().toUpperCase().slice(0,6);
-  LAYANAN_SINGKATAN[layanan] = v;
+  LAYANAN_SINGKATAN[pkSingkatanKey(layanan, tipe)] = v;
   saveLayananSingkatan();
+}
+/* Migrasi (Agustus 2026, v1.0.33): LAYANAN_SINGKATAN lama cuma dikunci per
+ * Layanan (tanpa tipe). Untuk 4 Layanan yang sekarang punya sub-tipe, nilai
+ * Singkatan lama disalin jadi nilai AWAL ke tiap sub-tipenya (supaya tidak
+ * hilang) — user tinggal sesuaikan satu-satu di drawer kalau perlu beda.
+ * Key lama (tanpa tipe, untuk layanan yang kini punya sub-tipe) dihapus
+ * supaya tidak nyangkut. Dipanggil sekali tiap boot, aman berkali-kali
+ * (idempoten) — persis pola migratePkJamLayananIfNeeded() di atas. */
+function migrateLayananSingkatanIfNeeded(){
+  let changed = false;
+  const layananDenganTipe = JENIS_LAYANAN_LIST.filter(j=>pkTipeLabelFor(j));
+  layananDenganTipe.forEach(layanan=>{
+    const opsiTipe = pkTipeOptionsFor(layanan);
+    const legacy = LAYANAN_SINGKATAN[layanan];
+    if(legacy && opsiTipe.length>0){
+      opsiTipe.forEach(tipe=>{
+        const key = layanan+'::'+tipe;
+        if(!LAYANAN_SINGKATAN[key]){ LAYANAN_SINGKATAN[key] = legacy; changed = true; }
+      });
+      delete LAYANAN_SINGKATAN[layanan];
+      changed = true;
+    }
+  });
+  if(changed) saveLayananSingkatan();
 }
 function setJamLayanan(layanan, tipe, val){
   const num = parseFloat(val)||0;
