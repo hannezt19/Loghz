@@ -63,17 +63,20 @@ async function pulihkanDariDrive(){
   try{
     toast('Mencari backup di Google Drive...');
     const token = await getGoogleAccessToken(true);
-    let fileId = BACKUP_META.driveFileId;
-    if(!fileId){
-      const q = encodeURIComponent("name='"+BACKUP_FILENAME+"' and trashed=false");
-      const res = await fetch('https://www.googleapis.com/drive/v3/files?q='+q+'&fields=files(id,name,modifiedTime)&spaces=drive', {
-        headers:{ 'Authorization':'Bearer '+token }
-      });
-      const data = await res.json();
-      if(!res.ok) throw new Error('HTTP '+res.status);
-      if(!data.files || !data.files.length){ toast('Tidak ditemukan backup di Drive akun ini'); return; }
-      fileId = data.files[0].id;
-    }
+    // Cari folder "Log Hz Backup" by nama (bukan ID lokal) — kalau belum pernah ada
+    // folder ini sama sekali di akun Drive user, berarti memang belum pernah backup.
+    const folderId = await cariFolderBackupDriveSaja(token);
+    if(!folderId){ toast('Tidak ditemukan backup di Drive akun ini'); return; }
+    // Ambil file terbaru di dalam folder itu (bisa jadi bulan berjalan, atau bulan
+    // sebelumnya kalau belum sempat backup bulan ini) — diurutkan by modifiedTime.
+    const q = encodeURIComponent("'"+folderId+"' in parents and trashed=false");
+    const res = await fetch('https://www.googleapis.com/drive/v3/files?q='+q+'&orderBy=modifiedTime desc&pageSize=1&fields=files(id,name,modifiedTime)&spaces=drive', {
+      headers:{ 'Authorization':'Bearer '+token }
+    });
+    const data = await res.json();
+    if(!res.ok) throw new Error('HTTP '+res.status);
+    if(!data.files || !data.files.length){ toast('Tidak ditemukan backup di Drive akun ini'); return; }
+    const fileId = data.files[0].id;
     const fileRes = await fetch('https://www.googleapis.com/drive/v3/files/'+fileId+'?alt=media', {
       headers:{ 'Authorization':'Bearer '+token }
     });
@@ -81,8 +84,9 @@ async function pulihkanDariDrive(){
     const parsed = await fileRes.json();
     if(!parsed || typeof parsed.data !== 'object'){ toast('File backup di Drive tidak valid'); return; }
     BACKUP_META.driveFileId = fileId;
+    BACKUP_META.driveFolderId = folderId;
     saveBackupMeta();
-    tampilkanPreviewRestore(parsed, 'Google Drive');
+    tampilkanPreviewRestore(parsed, 'Google Drive — '+data.files[0].name);
   }catch(err){
     console.error('Gagal mengambil backup dari Drive:', err);
     toast('Gagal mengambil backup dari Drive');
@@ -465,6 +469,7 @@ async function bootApp(){
     });
     WEATHER = LS.get('v2_weather_cache', null);
     WEATHER_LOG = LS.get('v2_weather_log', []);
+    LAYANAN_SINGKATAN = LS.get('v2_layanan_singkatan', {});
   }catch(err){
     console.error('Gagal inisialisasi database:', err);
     alert('Gagal memuat database: ' + (err && err.message ? err.message : err) + '\n\nApp tetap dibuka, tapi data mungkin tidak lengkap. Coba tutup & buka ulang app.');

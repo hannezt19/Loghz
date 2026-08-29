@@ -76,6 +76,11 @@ let PROGRAM_RENCANA = LS.get('v2_program_rencana', []);     // [{id, tanggalMula
 let PROGRAM_AKTUAL = LS.get('v2_program_aktual', []);       // [{id, rencanaId, tanggal, unitId, sopir, isInti, layanan, tipe, overtimeJam, overtimeManual}]
 let PIKET_JAM_LAYANAN = LS.get('v2_piket_jam_layanan', []); // [{layanan, jam}]
 let PROGRAM_TANDA_LL = LS.get('v2_program_tanda_ll', []);   // [{tanggal, tandaLiburLembur}] — per tanggal, TERPISAH dari baris Program (baris Program kini bisa rentang tanggal)
+/* Singkatan per Jenis Layanan (maks. 6 karakter), diatur di modal "Jam Otomatis
+ * per Layanan" — dipakai untuk kolom Unit+Singkatan yang compact di PDF cetak
+ * Proker (v1.0.32). Map sederhana {layanan: singkatan}, BUKAN per sub-tipe,
+ * karena singkatan cukup mewakili nama Layanan itu sendiri (mis. "Putak"). */
+let LAYANAN_SINGKATAN = LS.get('v2_layanan_singkatan', {});
 /* Tipe/2 (kolom ke-2) khusus Program Kerja, per Jenis Layanan — SENGAJA
  * daftar terpisah dari TIPE_ANTAR_LIST/MUAT_TIPE_LIST/DRONE_JENIS_LIST/SHIFT_LIST
  * milik Hari Ini untuk Drone & Operator, karena nilainya beda kebutuhan
@@ -128,6 +133,7 @@ function migratePkDataIfNeeded(){
   if(changedLL) saveProgramTandaLL();
 }
 function savePiketJamLayanan(){ LS.set('v2_piket_jam_layanan', PIKET_JAM_LAYANAN); }
+function saveLayananSingkatan(){ LS.set('v2_layanan_singkatan', LAYANAN_SINGKATAN); }
 /* Label yang ditampilkan di tabel ringkas (Program/Aktual/Rekap/Export):
  * sub-layanan (Tipe/Jenis Drone/Shift) saja, TANPA prefix nama Layanan.
  * Fallback ke nama Layanan kalau Layanan itu tidak punya sub-tipe. */

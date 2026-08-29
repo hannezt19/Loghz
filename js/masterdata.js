@@ -97,26 +97,45 @@ function openKelolaJamLayanan(){
 function renderKelolaJamLayananModal(){
   openModal(`
     <div class="mhead"><h2>Jam Otomatis per Layanan</h2><button class="mclose" onclick="closeModal()">&times;</button></div>
-    <div class="field-sub" style="margin-bottom:10px;">Dipakai untuk mengisi Overtime otomatis di Program Kerja &middot; Aktual. Tetap bisa ditimpa manual per hari.</div>
+    <div class="field-sub" style="margin-bottom:10px;">Dipakai untuk mengisi Overtime otomatis di Program Kerja &middot; Aktual. Singkatan (maks. 6 karakter) dipakai di kolom Unit yang compact saat cetak PDF Proker. Tetap bisa ditimpa manual per hari.</div>
     ${JENIS_LAYANAN_LIST.length===0 ? '<div class="empty-note">Belum ada Jenis Layanan. Tambahkan dulu di Master Data &middot; Jenis Layanan.</div>' :
       JENIS_LAYANAN_LIST.map(j=>{
         const opsiTipe = pkTipeOptionsFor(j);
+        const jsSafe = escapeHtml(j).replace(/'/g,"\\'");
         if(opsiTipe.length===0){
           return `
-          <div class="grid2" style="align-items:center;">
-            <div style="font-weight:600;">${escapeHtml(j)}</div>
-            <input type="text" inputmode="numeric" value="${pkJamOtomatis(j)}" onchange="setJamLayanan('${escapeHtml(j).replace(/'/g,"\\'")}', '', this.value)">
+          <div style="display:flex;gap:8px;align-items:center;margin-top:8px;">
+            <div style="flex:1;font-weight:600;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">${escapeHtml(j)}</div>
+            ${pkSingkatanInputHtml(j, jsSafe)}
+            <input type="text" inputmode="numeric" style="width:56px;flex-shrink:0;" value="${pkJamOtomatis(j)}" onchange="setJamLayanan('${jsSafe}', '', this.value)">
           </div>`;
         }
         return `
-        <div style="font-weight:700;margin-top:10px;">${escapeHtml(j)}</div>
+        <div style="display:flex;gap:8px;align-items:center;margin-top:10px;">
+          <div style="flex:1;font-weight:700;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">${escapeHtml(j)}</div>
+          ${pkSingkatanInputHtml(j, jsSafe)}
+        </div>
         ${opsiTipe.map(t=>`
         <div class="grid2" style="align-items:center;padding-left:12px;">
           <div style="color:var(--on-surface-variant);">${escapeHtml(t)}</div>
-          <input type="text" inputmode="numeric" value="${pkJamOtomatis(j,t)}" onchange="setJamLayanan('${escapeHtml(j).replace(/'/g,"\\'")}', '${escapeHtml(t).replace(/'/g,"\\'")}', this.value)">
+          <input type="text" inputmode="numeric" value="${pkJamOtomatis(j,t)}" onchange="setJamLayanan('${jsSafe}', '${escapeHtml(t).replace(/'/g,"\\'")}', this.value)">
         </div>`).join('')}
       `;}).join('')}
   `);
+}
+/* Input Singkatan (maks. 6 karakter, dipaksa huruf besar) untuk 1 baris Jenis
+ * Layanan di modal Jam Otomatis per Layanan — dipakai di kedua varian baris
+ * (dengan/tanpa sub-tipe) supaya markupnya tidak dobel. */
+function pkSingkatanInputHtml(layanan, jsSafe){
+  return `<input type="text" maxlength="6" placeholder="Singkatan" value="${escapeHtml(pkSingkatanLayanan(layanan))}" style="width:78px;flex-shrink:0;text-align:center;text-transform:uppercase;" oninput="this.value=this.value.toUpperCase()" onchange="setSingkatanLayanan('${jsSafe}', this.value)">`;
+}
+function pkSingkatanLayanan(layanan){
+  return LAYANAN_SINGKATAN[layanan] || '';
+}
+function setSingkatanLayanan(layanan, val){
+  const v = String(val||'').trim().toUpperCase().slice(0,6);
+  LAYANAN_SINGKATAN[layanan] = v;
+  saveLayananSingkatan();
 }
 function setJamLayanan(layanan, tipe, val){
   const num = parseFloat(val)||0;

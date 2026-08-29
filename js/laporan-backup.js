@@ -341,15 +341,93 @@ async function getGoogleAccessToken(interactive){
 }
 
 /**
- * Upload/timpa file backup ke Drive. Model "ditimpa" — konsisten dengan backup Lokal:
- * kalau BACKUP_META.driveFileId sudah ada, pakai PATCH ke file yang sama (bukan bikin
- * file baru tiap backup). Kalau file itu ternyata sudah dihapus manual di Drive (404),
- * otomatis buat file baru dan simpan ID barunya.
+ * Nama folder Drive tempat semua file backup bulanan disimpan. Folder ini dibuat
+ * TAMPAK di root My Drive user (bukan App Data folder tersembunyi), supaya user
+ * bisa lihat/buka sendiri lewat aplikasi Google Drive biasa.
+ */
+const GOOGLE_DRIVE_FOLDER_NAME = 'Log Hz Backup';
+
+/** Nama file backup bulan berjalan, format LogHz_Backup_YYYY-MM.json (1 file per bulan). */
+function getDriveBackupFilename(date){
+  const d = date || new Date();
+  const yyyy = d.getFullYear();
+  const mm = String(d.getMonth() + 1).padStart(2, '0');
+  return 'LogHz_Backup_' + yyyy + '-' + mm + '.json';
+}
+
+/** Escape tanda kutip tunggal supaya aman dipakai di query pencarian Drive API. */
+function escapeDriveQueryValue(v){
+  return String(v).replace(/'/g, "\\'");
+}
+
+/**
+ * Cari folder "Log Hz Backup" di Drive (by name, lewat Drive API search — bukan ID
+ * yang disimpan lokal). Kalau sudah ada, pakai itu (supaya tidak ada folder duplikat).
+ * Kalau belum ada sama sekali, baru buat folder baru.
+ */
+async function cariFolderBackupDriveSaja(token){
+  const q = "name='" + escapeDriveQueryValue(GOOGLE_DRIVE_FOLDER_NAME) + "' and mimeType='application/vnd.google-apps.folder' and trashed=false";
+  const res = await fetch('https://www.googleapis.com/drive/v3/files?q=' + encodeURIComponent(q) + '&fields=files(id,name)&spaces=drive', {
+    headers: { 'Authorization': 'Bearer ' + token }
+  });
+  const data = await res.json();
+  if(!res.ok) throw new Error('Gagal mencari folder Drive: HTTP ' + res.status + ': ' + JSON.stringify(data));
+  if(data.files && data.files.length > 0) return data.files[0].id;
+  return null;
+}
+async function cariAtauBuatFolderBackupDrive(token){
+  const found = await cariFolderBackupDriveSaja(token);
+  if(found) return found; // folder sudah ada, pakai yang ini (tidak bikin duplikat)
+  const createRes = await fetch('https://www.googleapis.com/drive/v3/files?fields=id', {
+    method: 'POST',
+    headers: {
+      'Authorization': 'Bearer ' + token,
+      'Content-Type': 'application/json'
+    },
+    body: JSON.stringify({ name: GOOGLE_DRIVE_FOLDER_NAME, mimeType: 'application/vnd.google-apps.folder' })
+  });
+  const createData = await createRes.json();
+  if(!createRes.ok) throw new Error('Gagal membuat folder Drive: HTTP ' + createRes.status + ': ' + JSON.stringify(createData));
+  return createData.id;
+}
+
+/**
+ * Cari file backup bulan berjalan DI DALAM folder tertentu, by nama file persis
+ * (bukan file ID yang disimpan lokal) — supaya tetap akurat walau app di-reinstall
+ * atau data lokal (BACKUP_META) hilang.
+ */
+async function cariFileBackupBulanIni(token, folderId, filename){
+  const q = "name='" + escapeDriveQueryValue(filename) + "' and '" + folderId + "' in parents and trashed=false";
+  const res = await fetch('https://www.googleapis.com/drive/v3/files?q=' + encodeURIComponent(q) + '&fields=files(id,name)&spaces=drive', {
+    headers: { 'Authorization': 'Bearer ' + token }
+  });
+  const data = await res.json();
+  if(!res.ok) throw new Error('Gagal mencari file backup di Drive: HTTP ' + res.status + ': ' + JSON.stringify(data));
+  if(data.files && data.files.length > 0) return data.files[0].id;
+  return null;
+}
+
+/**
+ * Upload/timpa file backup bulan berjalan ke Drive, di dalam folder "Log Hz Backup".
+ * Logic (memperbaiki bug lama yang cuma andalkan driveFileId tersimpan lokal):
+ * 1. Cari/buat folder "Log Hz Backup" by NAMA (bukan ID lokal) — tidak bikin folder duplikat.
+ * 2. Di dalam folder itu, cari file bulan berjalan by NAMA FILE + FOLDER.
+ * 3. Ketemu -> PATCH (timpa) file itu. Tidak ketemu -> POST (buat baru) di folder itu.
  */
 async function uploadBackupToDrive(blob, interactive){
   const token = await getGoogleAccessToken(interactive);
+  const folderId = await cariAtauBuatFolderBackupDrive(token);
+  const filename = getDriveBackupFilename();
+  const existingFileId = await cariFileBackupBulanIni(token, folderId, filename);
+
   const text = await blob.text();
-  const metadata = { name: BACKUP_FILENAME, mimeType: 'application/json' };
+  const metadata = { name: filename, mimeType: 'application/json' };
+  const isUpdate = !!existingFileId;
+  if(!isUpdate){
+    // parents hanya boleh diisi saat CREATE; saat update lewat multipart, field ini diabaikan Drive API
+    metadata.parents = [folderId];
+  }
+
   const boundary = 'logbookhz_boundary_' + Date.now();
   const delimiter = '\r\n--' + boundary + '\r\n';
   const closeDelim = '\r\n--' + boundary + '--';
@@ -362,9 +440,8 @@ async function uploadBackupToDrive(blob, interactive){
     text +
     closeDelim;
 
-  const isUpdate = !!BACKUP_META.driveFileId;
   const url = isUpdate
-    ? 'https://www.googleapis.com/upload/drive/v3/files/' + BACKUP_META.driveFileId + '?uploadType=multipart&fields=id'
+    ? 'https://www.googleapis.com/upload/drive/v3/files/' + existingFileId + '?uploadType=multipart&fields=id'
     : 'https://www.googleapis.com/upload/drive/v3/files?uploadType=multipart&fields=id';
 
   const res = await fetch(url, {
@@ -378,13 +455,15 @@ async function uploadBackupToDrive(blob, interactive){
   const data = await res.json();
   if(!res.ok){
     if(res.status===404 && isUpdate){
-      // File lama sudah tidak ada (mis. dihapus manual di Drive) — buat baru
-      BACKUP_META.driveFileId = null;
+      // File yang barusan ketemu ternyata sudah hilang lagi (race condition langka) — coba ulang dari awal
       return uploadBackupToDrive(blob, interactive);
     }
     throw new Error('HTTP ' + res.status + ': ' + JSON.stringify(data));
   }
+  // driveFileId & driveFolderId cuma disimpan sebagai catatan/tampilan terakhir,
+  // BUKAN dipakai lagi sebagai acuan pencarian (acuan utama tetap nama file + folder di atas)
   BACKUP_META.driveFileId = data.id;
+  BACKUP_META.driveFolderId = folderId;
   return data.id;
 }
 
