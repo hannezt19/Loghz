@@ -1,126 +1,159 @@
-/* ================= CUACA HARI INI (Open-Meteo, gratis tanpa API key) =================
- * Koordinat TETAP (bukan GPS) — mewakili 2 wilayah kebun (Utara & Selatan).
- * Ganti angka di sini jika titik representatif berubah. */
+/* ================= CUACA HARI INI (BMKG - data resmi Indonesia, gratis tanpa API key) =================
+ * v1.0.34: pindah dari Open-Meteo ke BMKG (data.bmkg.go.id) supaya lebih akurat untuk
+ * wilayah Indonesia. BMKG TIDAK menerima koordinat lat/lon — lokasi ditentukan lewat
+ * KODE WILAYAH tingkat 4 (kelurahan/desa) sesuai Kepmendagri 100.1.1-6117/2022.
+ * Ganti kode di bawah ini jika titik representatif kebun berubah/pindah desa.
+ * Cara cari kode wilayah baru: https://www.emsifa.com/api-wilayah-indonesia/ (utk nama
+ * wilayah) lalu cocokkan ke https://data.bmkg.go.id/prakiraan-cuaca/ (utk format adm4).
+ * WAJIB (syarat BMKG): tetap tampilkan "Sumber: BMKG" di UI & laporan — lihat
+ * WEATHER_SOURCE_LABEL di bawah, dipakai di beranda-rekap.js & laporan-backup.js. */
 const WEATHER_POINTS = {
-  utara:   { label:'Wilayah Utara',   lat:-4.667307, lon:105.285845 },
-  selatan: { label:'Wilayah Selatan', lat:-4.745238, lon:105.289477 }
+  utara:   { label:'Wilayah Utara',   adm4:'18.02.13.2001' },
+  selatan: { label:'Wilayah Selatan', adm4:'18.02.13.2003' }
 };
-const WEATHER_RAIN_THRESHOLD = 50; // persen probabilitas hujan dianggap "berpotensi hujan"
-const WEATHER_MAX_AGE = 30*60*1000; // 30 menit
-const WEATHER_STRIP_HOURS = [6,9,12,15,18];
+const WEATHER_SOURCE_LABEL = 'BMKG';
+const WEATHER_MAX_AGE = 30*60*1000; // 30 menit (BMKG membatasi 60 request/menit/IP, jadi ini masih sangat aman)
 let WEATHER = LS.get('v2_weather_cache', null); // {ts, utara:{...}, selatan:{...}}
 let WEATHER_LOG = LS.get('v2_weather_log', []); // [{date, utara:{...}, selatan:{...}}]
 let weatherLoading = false;
 function saveWeatherLog(){ LS.set('v2_weather_log', WEATHER_LOG); }
-function weatherInfo(code){
-  const map = {
-    0:['Cerah','☀️'],1:['Cerah Berawan','🌤️'],2:['Berawan Sebagian','⛅'],3:['Mendung','☁️'],
-    45:['Berkabut','🌫️'],48:['Berkabut','🌫️'],
-    51:['Gerimis Ringan','🌦️'],53:['Gerimis','🌦️'],55:['Gerimis Lebat','🌦️'],
-    56:['Gerimis Beku','🌦️'],57:['Gerimis Beku','🌦️'],
-    61:['Hujan Ringan','🌧️'],63:['Hujan','🌧️'],65:['Hujan Lebat','🌧️'],
-    66:['Hujan Beku','🌧️'],67:['Hujan Beku','🌧️'],
-    71:['Salju Ringan','❄️'],73:['Salju','❄️'],75:['Salju Lebat','❄️'],77:['Butiran Salju','❄️'],
-    80:['Hujan Lokal Ringan','🌦️'],81:['Hujan Lokal','🌦️'],82:['Hujan Lokal Lebat','🌧️'],
-    85:['Hujan Salju Ringan','🌨️'],86:['Hujan Salju Lebat','🌨️'],
-    95:['Badai Petir','⛈️'],96:['Badai Petir + Es','⛈️'],99:['Badai Petir + Es','⛈️']
-  };
-  return map[code] || ['Tidak Diketahui','🌡️'];
+/* Kode cuaca BMKG (field "weather" di respons API) — BEDA dari kode WMO yang dipakai
+ * Open-Meteo dulu. Referensi resmi: https://data.bmkg.go.id/prakiraan-cuaca/
+ * Beberapa dataset BMKG lain (mis. CSV per-kecamatan) memakai varian +100 untuk kode
+ * yang sama (0/100, 1/101, dst) — normalizeBmkgCode() menangani keduanya sekaligus
+ * supaya kalau suatu saat endpoint berubah varian, mapping ini tidak ikut rusak. */
+const BMKG_WEATHER_MAP = {
+  0:['Cerah','☀️'], 1:['Cerah Berawan','🌤️'], 2:['Cerah Berawan','🌤️'],
+  3:['Berawan','☁️'], 4:['Berawan Tebal','☁️'],
+  5:['Udara Kabur','🌫️'], 10:['Asap','🌫️'], 45:['Kabut','🌫️'],
+  60:['Hujan Ringan','🌦️'], 61:['Hujan Sedang','🌧️'], 63:['Hujan Lebat','🌧️'],
+  80:['Hujan Lokal','🌧️'], 95:['Hujan Petir','⛈️'], 97:['Hujan Petir','⛈️']
+};
+function normalizeBmkgCode(code){
+  if(code===null || code===undefined || code==='') return null;
+  const n = Number(code);
+  if(isNaN(n)) return null;
+  return n>=100 ? n-100 : n;
 }
-/* Kategori kondisi cuaca untuk kolom Kondisi di cetak PDF (5 kategori, dipetakan dari
- * weathercode Open-Meteo yang sama dengan weatherInfo()) - dipakai bareng oleh
- * weatherCategoryLabel() untuk menampilkan teks singkat (bukan emoji/ikon). */
+function weatherInfo(code){
+  const n = normalizeBmkgCode(code);
+  return BMKG_WEATHER_MAP[n] || ['Tidak Diketahui','🌡️'];
+}
+/* Kategori kondisi cuaca untuk kolom Kondisi di cetak PDF (5 kategori) - dipakai bareng
+ * oleh weatherCategoryLabel() di peta.js untuk menampilkan teks singkat. */
 function weatherIconCategory(code){
-  if([0,1].includes(code)) return 'cerah';
-  if([2,3,45,48].includes(code)) return 'berawan';
-  if([51,53,55,56,57,61,71,73,75,77,80,85,86].includes(code)) return 'hujan_ringan';
-  if([63,65,66,67,82].includes(code)) return 'hujan_lebat';
-  if([95,96,99].includes(code)) return 'badai';
+  const n = normalizeBmkgCode(code);
+  if(n===0 || n===1 || n===2) return 'cerah';
+  if(n===3 || n===4 || n===5 || n===10 || n===45) return 'berawan';
+  if(n===60 || n===61) return 'hujan_ringan';
+  if(n===63 || n===80) return 'hujan_lebat';
+  if(n===95 || n===97) return 'badai';
   return 'berawan';
 }
 function jamLabel(h){ return String(h).padStart(2,'0')+'.00'; }
-/* Ambil & ringkas data 1 wilayah dari respons Open-Meteo (data harian ini saja) */
+/* Titik Embun (Dew Point) - rumus Magnus, dihitung manual karena BMKG tidak
+ * menyediakan field ini langsung (beda dari Open-Meteo dulu yang punya dew_point_2m). */
+function hitungTitikEmbun(tempC, humidity){
+  if(tempC===null || tempC===undefined || humidity===null || humidity===undefined || humidity<=0) return null;
+  const a=17.27, b=237.7;
+  const alpha = ((a*tempC)/(b+tempC)) + Math.log(humidity/100);
+  return (b*alpha)/(a-alpha);
+}
+/* Suhu Terasa (Apparent Temperature) - rumus Steadman/BOM, dihitung manual karena
+ * BMKG tidak menyediakan field ini langsung. windKmh dikonversi ke m/s di dalam rumus. */
+function hitungSuhuTerasa(tempC, humidity, windKmh){
+  if(tempC===null || tempC===undefined || humidity===null || humidity===undefined) return null;
+  const e = (humidity/100) * 6.105 * Math.exp((17.27*tempC)/(237.7+tempC));
+  const windMs = (windKmh||0)/3.6;
+  return tempC + 0.33*e - 0.70*windMs - 4.0;
+}
+/* Kode cuaca yang dianggap "hujan" (dipakai buat nentuin isRain & wakil/representative slot).
+ * Dicek pakai normalizeBmkgCode() supaya varian +100 ikut tercakup. */
+const BMKG_RAIN_CODES = [60,61,63,80,95,97];
+function isKodeHujan(code){
+  const n = normalizeBmkgCode(code);
+  return n!==null && BMKG_RAIN_CODES.includes(n);
+}
+/* Ambil & ringkas data 1 wilayah dari respons BMKG (data.cuaca = array 3 hari,
+ * tiap hari berisi beberapa slot per-3-jam). Hanya slot HARI INI yang dipakai,
+ * sisanya (H+1, H+2) diabaikan supaya perilaku sama seperti sebelumnya. */
 function ringkasCuacaWilayah(data){
-  const hourly = data.hourly || {};
-  const times = hourly.time || [];
+  const allSlots = [].concat.apply([], data.cuaca || []);
   const todayStr = todayIso();
-  const idxToday = times.map((t,i)=>({t,i})).filter(x=>x.t.startsWith(todayStr));
-  let bestIdx = -1, bestProb = -1;
-  idxToday.forEach(x=>{
-    const p = hourly.precipitation_probability ? hourly.precipitation_probability[x.i] : 0;
-    if(p > bestProb){ bestProb = p; bestIdx = x.i; }
-  });
-  const isRain = bestProb >= WEATHER_RAIN_THRESHOLD;
-  let repHour=null, repTemp=null, repCode=null, repMm=null;
-  if(bestIdx>-1){
-    repHour = parseInt(times[bestIdx].slice(11,13),10);
-    repTemp = hourly.temperature_2m ? hourly.temperature_2m[bestIdx] : null;
-    repCode = hourly.weathercode ? hourly.weathercode[bestIdx] : null;
-    repMm = hourly.precipitation ? hourly.precipitation[bestIdx] : null;
-  }
-  if(!isRain && idxToday.length){
-    // wakil "terik": jam dengan suhu tertinggi hari ini
-    let hotIdx = idxToday[0].i;
-    idxToday.forEach(x=>{ if((hourly.temperature_2m[x.i]||0) > (hourly.temperature_2m[hotIdx]||0)) hotIdx = x.i; });
-    repHour = parseInt(times[hotIdx].slice(11,13),10);
-    repTemp = hourly.temperature_2m ? hourly.temperature_2m[hotIdx] : null;
-    repCode = hourly.weathercode ? hourly.weathercode[hotIdx] : null;
-    repMm = 0;
-  }
-  const strip = WEATHER_STRIP_HOURS.map(h=>{
-    let match = idxToday.find(x=>parseInt(times[x.i].slice(11,13),10)===h);
-    if(!match) return { hour:h, code:null };
-    return { hour:h, code: hourly.weathercode ? hourly.weathercode[match.i] : null };
-  });
-  /* Rincian tiap jam hari ini (dipakai layar Detail Cuaca) */
-  const hours = idxToday.map(x=>{
-    const i = x.i;
+  const slotsToday = allSlots.map(raw=>{
+    const dt = raw.local_datetime || raw.datetime || '';
     return {
-      hour: parseInt(times[i].slice(11,13),10),
-      temp: hourly.temperature_2m ? hourly.temperature_2m[i] : null,
-      feels: hourly.apparent_temperature ? hourly.apparent_temperature[i] : null,
-      code: hourly.weathercode ? hourly.weathercode[i] : null,
-      precipProb: hourly.precipitation_probability ? hourly.precipitation_probability[i] : null,
-      precipMm: hourly.precipitation ? hourly.precipitation[i] : null,
-      humidity: hourly.relative_humidity_2m ? hourly.relative_humidity_2m[i] : null,
-      dewPoint: hourly.dew_point_2m ? hourly.dew_point_2m[i] : null,
-      wind: hourly.wind_speed_10m ? hourly.wind_speed_10m[i] : null,
-      windDir: hourly.wind_direction_10m ? hourly.wind_direction_10m[i] : null,
-      gust: hourly.wind_gusts_10m ? hourly.wind_gusts_10m[i] : null,
-      cloud: hourly.cloud_cover ? hourly.cloud_cover[i] : null,
-      visibility: hourly.visibility ? hourly.visibility[i] : null
+      dateStr: dt.slice(0,10),
+      hour: parseInt(dt.slice(11,13),10),
+      code: raw.weather,
+      t: (raw.t!==undefined && raw.t!==null) ? raw.t : null,
+      hu: (raw.hu!==undefined && raw.hu!==null) ? raw.hu : null,
+      ws: (raw.ws!==undefined && raw.ws!==null) ? raw.ws : null, // km/jam
+      windDir: (raw.wd_deg!==undefined && raw.wd_deg!==null) ? raw.wd_deg : null,
+      cloud: (raw.tcc!==undefined && raw.tcc!==null) ? raw.tcc : null,
+      precipMm: (raw.tp!==undefined && raw.tp!==null) ? raw.tp : null, // curah hujan per slot 3 jam
+      visibility: (raw.vs!==undefined && raw.vs!==null) ? raw.vs : null // meter
     };
-  });
-  /* Ringkasan harian tambahan (kelembapan rata-rata & angin kencang tertinggi hari ini) */
-  const humidityVals = idxToday.map(x=>hourly.relative_humidity_2m?hourly.relative_humidity_2m[x.i]:null).filter(v=>v!==null&&v!==undefined);
-  const humidityAvg = humidityVals.length ? humidityVals.reduce((a,b)=>a+b,0)/humidityVals.length : null;
-  const gustVals = idxToday.map(x=>hourly.wind_gusts_10m?hourly.wind_gusts_10m[x.i]:null).filter(v=>v!==null&&v!==undefined);
-  const windMaxGust = gustVals.length ? Math.max(...gustVals) : null;
-  /* Angin rata-rata harian: kecepatan dirata-rata biasa; arah dirata-rata pakai
-   * komponen vektor (sin/cos) supaya tidak salah (mis. rata-rata 350° & 10° harus ~0°,
-   * bukan 180°), dibobot pakai kecepatan tiap jam supaya jam angin kencang lebih dominan. */
-  const windValsToday = idxToday.map(x=>({
-    spd: hourly.wind_speed_10m ? hourly.wind_speed_10m[x.i] : null,
-    dir: hourly.wind_direction_10m ? hourly.wind_direction_10m[x.i] : null
-  })).filter(v=>v.spd!==null && v.spd!==undefined);
-  const windAvg = windValsToday.length ? windValsToday.reduce((a,b)=>a+b.spd,0)/windValsToday.length : null;
+  }).filter(s=>s.dateStr===todayStr && !isNaN(s.hour)).sort((a,b)=>a.hour-b.hour);
+
+  // Wakil (representative) slot hari ini: kalau ada hujan, ambil slot hujan dengan
+  // curah tertinggi; kalau tidak ada hujan sama sekali, ambil slot dengan suhu tertinggi.
+  const rainSlots = slotsToday.filter(s=>isKodeHujan(s.code));
+  const isRain = rainSlots.length > 0;
+  let rep = null;
+  if(isRain){
+    rep = rainSlots.reduce((best,s)=> (s.precipMm||0) > (best.precipMm||0) ? s : best, rainSlots[0]);
+  } else if(slotsToday.length){
+    rep = slotsToday.reduce((best,s)=> (s.t!==null && s.t > (best.t===null?-999:best.t)) ? s : best, slotsToday[0]);
+  }
+
+  const tVals = slotsToday.map(s=>s.t).filter(v=>v!==null);
+  const tmax = tVals.length ? Math.max(...tVals) : null;
+  const tmin = tVals.length ? Math.min(...tVals) : null;
+
+  const huVals = slotsToday.map(s=>s.hu).filter(v=>v!==null);
+  const humidityAvg = huVals.length ? huVals.reduce((a,b)=>a+b,0)/huVals.length : null;
+
+  const wsVals = slotsToday.map(s=>s.ws).filter(v=>v!==null);
+  const windAvg = wsVals.length ? wsVals.reduce((a,b)=>a+b,0)/wsVals.length : null;
+  const windMaxSpeed = wsVals.length ? Math.max(...wsVals) : null; // pengganti "gust" (BMKG tidak punya data hembusan puncak, ini kecepatan tertinggi tercatat)
+
+  /* Angin rata-rata harian: arah dirata-rata pakai komponen vektor (sin/cos) supaya
+   * tidak salah (mis. rata-rata 350° & 10° harus ~0°, bukan 180°), dibobot kecepatan. */
   let windDirAvg = null;
-  const windDirVals = windValsToday.filter(v=>v.dir!==null && v.dir!==undefined);
-  if(windDirVals.length){
+  const windDirData = slotsToday.filter(s=>s.windDir!==null && s.ws!==null);
+  if(windDirData.length){
     let sx=0, sy=0;
-    windDirVals.forEach(v=>{ const rad=v.dir*Math.PI/180; const w=Math.max(v.spd,0.1); sx += Math.cos(rad)*w; sy += Math.sin(rad)*w; });
+    windDirData.forEach(s=>{ const rad=s.windDir*Math.PI/180; const w=Math.max(s.ws,0.1); sx += Math.cos(rad)*w; sy += Math.sin(rad)*w; });
     let deg = Math.atan2(sy,sx)*180/Math.PI;
     if(deg<0) deg += 360;
     windDirAvg = deg;
   }
+
+  const precipSum = slotsToday.reduce((sum,s)=>sum+(s.precipMm||0), 0);
+
+  /* Rincian tiap slot hari ini (dipakai layar Detail Cuaca). Suhu Terasa & Titik Embun
+   * dihitung manual (lihat komentar fungsinya) karena BMKG tidak menyediakan langsung. */
+  const hours = slotsToday.map(s=>({
+    hour: s.hour,
+    temp: s.t,
+    feels: hitungSuhuTerasa(s.t, s.hu, s.ws),
+    code: s.code,
+    precipMm: s.precipMm,
+    humidity: s.hu,
+    dewPoint: hitungTitikEmbun(s.t, s.hu),
+    wind: s.ws,
+    windDir: s.windDir,
+    cloud: s.cloud,
+    visibility: s.visibility
+  }));
+
   return {
-    tmax: data.daily && data.daily.temperature_2m_max ? data.daily.temperature_2m_max[0] : null,
-    tmin: data.daily && data.daily.temperature_2m_min ? data.daily.temperature_2m_min[0] : null,
-    isRain, rainProb: bestProb<0?0:bestProb, rainHour: repHour, rainMm: repMm||0,
-    repTemp, repCode, strip,
-    uvIndexMax: data.daily && data.daily.uv_index_max ? data.daily.uv_index_max[0] : null,
-    precipSum: data.daily && data.daily.precipitation_sum ? data.daily.precipitation_sum[0] : null,
-    humidityAvg, windMaxGust, windAvg, windDirAvg,
+    tmax, tmin,
+    isRain, rainHour: rep ? rep.hour : null, rainMm: rep ? (rep.precipMm||0) : 0,
+    rainKategori: rep ? weatherInfo(rep.code)[0] : '-',
+    repTemp: rep ? rep.t : null, repCode: rep ? rep.code : null,
+    precipSum, humidityAvg, windMaxSpeed, windAvg, windDirAvg,
     hours
   };
 }
@@ -148,12 +181,11 @@ function hitungIndeksPanas(tempC, humidity){
   return (HI-32)*5/9;
 }
 async function fetchCuacaWilayah(point){
-  const url = `https://api.open-meteo.com/v1/forecast?latitude=${point.lat}&longitude=${point.lon}`+
-    `&hourly=temperature_2m,apparent_temperature,relative_humidity_2m,dew_point_2m,precipitation_probability,precipitation,weathercode,wind_speed_10m,wind_direction_10m,wind_gusts_10m,cloud_cover,visibility`+
-    `&daily=temperature_2m_max,temperature_2m_min,uv_index_max,precipitation_sum&timezone=auto&forecast_days=1`;
+  const url = `https://api.bmkg.go.id/publik/prakiraan-cuaca?adm4=${point.adm4}`;
   const resp = await fetch(url);
   if(!resp.ok) throw new Error('HTTP '+resp.status);
   const data = await resp.json();
+  if(!data || !Array.isArray(data.cuaca)) throw new Error('Format data BMKG tidak dikenali (cek kode wilayah adm4)');
   return ringkasCuacaWilayah(data);
 }
 function simpanWeatherLogHariIni(){
@@ -228,24 +260,24 @@ function renderWeatherDetailHtml(){
     <div style="font-size:13px;font-weight:700;margin-bottom:6px;">Jam ${jamLabel(h.hour)} &middot; ${escapeHtml(info[0])}</div>
     <table style="width:100%;font-size:13px;border-collapse:collapse;">
       ${baris('Suhu', (h.temp!==null?Math.round(h.temp):'-')+'&deg;')}
-      ${baris('Suhu terasa', (h.feels!==null?Math.round(h.feels):'-')+'&deg;')}
+      ${baris('Suhu terasa*', (h.feels!==null?Math.round(h.feels):'-')+'&deg;')}
       ${heatIdx!==null?baris('Indeks panas', Math.round(heatIdx)+'&deg;'):''}
-      ${baris('Probabilitas hujan', Math.round(h.precipProb||0)+'%')}
-      ${baris('Curah hujan', (h.precipMm||0).toFixed(1)+' mm')}
+      ${baris('Curah hujan (per 3 jam)', (h.precipMm||0).toFixed(1)+' mm')}
       ${baris('Angin', Math.round(h.wind||0)+' km/j')}
       ${baris('Arah angin', formatArahAngin(h.windDir))}
-      ${baris('Angin kencang', Math.round(h.gust||0)+' km/j')}
       ${baris('Kelembapan', Math.round(h.humidity||0)+'%')}
-      ${baris('Titik embun', (h.dewPoint!==null?Math.round(h.dewPoint):'-')+'&deg;')}
+      ${baris('Titik embun*', (h.dewPoint!==null?Math.round(h.dewPoint):'-')+'&deg;')}
       ${baris('Tutupan awan', Math.round(h.cloud||0)+'%')}
       ${baris('Jarak pandang', (h.visibility!==null?(h.visibility/1000).toFixed(1):'-')+' km')}
     </table>
+    <div style="font-size:10px;color:var(--on-surface-variant);margin-top:4px;">*dihitung dari suhu &amp; kelembapan, bukan data langsung BMKG</div>
     <div style="display:flex;justify-content:space-between;font-size:12px;color:var(--on-surface-variant);margin-top:14px;">
       <span>Suhu maks/min hari ini: ${w.tmax!==null?Math.round(w.tmax):'-'}&deg;/${w.tmin!==null?Math.round(w.tmin):'-'}&deg;</span>
-      <span>UV maks: ${w.uvIndexMax!==null&&w.uvIndexMax!==undefined?w.uvIndexMax.toFixed(1):'-'}</span>
+      <span>Curah hujan hari ini: ${w.precipSum!==null&&w.precipSum!==undefined?w.precipSum.toFixed(1):'0.0'} mm</span>
     </div>
     <div class="section-eyebrow" style="margin-top:16px;">Tren 7 Hari &middot; Curah Hujan</div>
     ${renderTrenMingguanCuaca(region)}
+    <div style="text-align:center;font-size:10px;color:var(--on-surface-variant);margin-top:10px;">Sumber: ${WEATHER_SOURCE_LABEL}</div>
   `;
 }
 function renderTrenMingguanCuaca(region){

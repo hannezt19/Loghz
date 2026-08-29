@@ -11,7 +11,7 @@ function openWeatherExportSheet(){
       <label class="flabel">Dari tanggal</label><input type="date" id="wexp-dateFrom">
       <label class="flabel">Sampai tanggal</label><input type="date" id="wexp-dateTo">
     </div>
-    <div class="field-sub" style="margin:10px 0;">Ringkasan harian kedua wilayah (kolom Utara/Selatan berdampingan): kondisi (ikon), suhu, jam &amp; probabilitas potensi hujan, curah hujan, kelembapan, UV maks, angin (kecepatan &amp; arah). Excel menambahkan total hujan harian &amp; angin kencang, ditambah sheet kedua "Detail Per Jam" untuk semua jam tiap hari.</div>
+    <div class="field-sub" style="margin:10px 0;">Ringkasan harian kedua wilayah (kolom Utara/Selatan berdampingan): kondisi (ikon), suhu, jam potensi hujan &amp; kategorinya, curah hujan, kelembapan, angin (kecepatan &amp; arah). Excel menambahkan total hujan harian &amp; angin maks, ditambah sheet kedua "Detail Per Jam" untuk semua jam tiap hari. Sumber data: BMKG.</div>
     <div style="display:flex;gap:10px;margin-top:14px;">
       <button class="btn-block" style="flex:1;" onclick="doWeatherExport('pdf')">${ic('document')} PDF</button>
       <button class="btn-block outline" style="flex:1;" onclick="doWeatherExport('xlsx')">${ic('barchart')} Excel</button>
@@ -25,28 +25,33 @@ function updateWExpModeUI(){
 /* Definisi kelompok kolom Laporan Cuaca Lengkap - dipakai bareng oleh PDF & Excel
  * supaya label header di atas kolom bisa digabung/rata-tengah membentang di atas
  * 2 sub-kolom U (Utara) / S (Selatan), bukan diulang panjang per wilayah.
- * Kelembapan & UV Maks dimasukkan di sini (bukan di XLSX_EXTRA) supaya ikut
- * tercetak di PDF juga, bukan cuma Excel. */
+ * Kelembapan dimasukkan di sini (bukan di XLSX_EXTRA) supaya ikut tercetak di
+ * PDF juga, bukan cuma Excel.
+ * v1.0.34 (migrasi ke BMKG): kolom "Probabilitas" (%) diganti "Kategori Hujan"
+ * (teks, mis. Hujan Ringan/Hujan Lebat) karena BMKG tidak menyediakan data
+ * probabilitas hujan (bukan model ensemble). Kolom "UV Maks" dihapus karena
+ * BMKG tidak punya data indeks UV sama sekali. */
 const WEATHER_EXPORT_GROUPS = [
   { key:'tanggal', label:'Tanggal', sub:null },
   { key:'kondisi', label:'Kondisi', sub:['U','S'] },
   { key:'suhu', label:'Suhu', sub:['U','S'] },
   { key:'jam', label:'Jam Potensi Hujan', sub:['U','S'] },
-  { key:'prob', label:'Probabilitas', sub:['U','S'] },
+  { key:'kategori', label:'Kategori Hujan', sub:['U','S'] },
   { key:'hujan', label:'Curah Hujan (mm)', sub:['U','S'] },
   { key:'kelembapan', label:'Kelembapan (%)', sub:['U','S'] },
-  { key:'uv', label:'UV Maks', sub:['U','S'] },
   { key:'angin', label:'Angin (km/j)', sub:['U','S'] },
   { key:'arahangin', label:'Arah Angin', sub:['U','S'] }
 ];
-/* Khusus PDF: kolom Tanggal dipersingkat (26.8.26) supaya ada ruang untuk 2 kolom
- * baru (Kelembapan, UV Maks) tanpa bikin tabel landscape kelewat sempit. Excel
- * tetap pakai tanggal lengkap (WEATHER_EXPORT_GROUPS asli, tidak diubah). */
+/* Khusus PDF: kolom Tanggal dipersingkat (26.8.26) supaya ada ruang untuk kolom
+ * Kelembapan tanpa bikin tabel landscape kelewat sempit. Excel tetap pakai tanggal
+ * lengkap (WEATHER_EXPORT_GROUPS asli, tidak diubah). */
 const WEATHER_EXPORT_GROUPS_PDF = WEATHER_EXPORT_GROUPS.map(g=> g.key==='tanggal' ? {...g, key:'tanggal_pdf'} : g);
-/* Kolom tambahan khusus Excel (tidak dipakai di PDF supaya tabel PDF tetap muat dicetak) */
+/* Kolom tambahan khusus Excel (tidak dipakai di PDF supaya tabel PDF tetap muat dicetak).
+ * "Angin Maks" = kecepatan angin tertinggi yang tercatat hari itu (BUKAN hembusan/gust —
+ * BMKG tidak menyediakan data gust, beda dari Open-Meteo yang dipakai sebelumnya). */
 const WEATHER_EXPORT_GROUPS_XLSX_EXTRA = [
   { key:'totalhujan', label:'Total Hujan Harian (mm)', sub:['U','S'] },
-  { key:'anginkencang', label:'Angin Kencang Maks (km/j)', sub:['U','S'] }
+  { key:'anginmaks', label:'Angin Maks (km/j)', sub:['U','S'] }
 ];
 function weatherFlatKeys(groups){
   const keys = [];
@@ -71,9 +76,8 @@ function getWeatherExportRows(){
   const suhuFmt = (x)=>(x.tmin!==null&&x.tmin!==undefined?Math.round(x.tmin):'-')+'-'+(x.tmax!==null&&x.tmax!==undefined?Math.round(x.tmax):'-')+'\u00b0';
   const anginFmt = (x)=>(x.windAvg!==null&&x.windAvg!==undefined)?Math.round(x.windAvg)+' km/j':'-';
   const kelembapanFmt = (x)=>(x.humidityAvg!==null&&x.humidityAvg!==undefined)?Math.round(x.humidityAvg)+'%':'-';
-  const uvFmt = (x)=>(x.uvIndexMax!==null&&x.uvIndexMax!==undefined)?x.uvIndexMax.toFixed(1):'-';
   const totalHujanHarianVal = (x)=>(x.precipSum!==null&&x.precipSum!==undefined)?x.precipSum:(x.rainMm||0);
-  const anginKencangFmt = (x)=>(x.windMaxGust!==null&&x.windMaxGust!==undefined)?Math.round(x.windMaxGust)+' km/j':'-';
+  const anginMaksFmt = (x)=>(x.windMaxSpeed!==null&&x.windMaxSpeed!==undefined)?Math.round(x.windMaxSpeed)+' km/j':'-';
   const rows = logs.map(w=>{
     const u = w.utara||{}, s = w.selatan||{};
     return {
@@ -81,14 +85,13 @@ function getWeatherExportRows(){
       kondisi_u: weatherInfo(u.repCode)[1], kondisi_s: weatherInfo(s.repCode)[1],
       suhu_u: suhuFmt(u), suhu_s: suhuFmt(s),
       jam_u: u.isRain? jamLabel(u.rainHour):'-', jam_s: s.isRain? jamLabel(s.rainHour):'-',
-      prob_u: (u.rainProb!==undefined?Math.round(u.rainProb):0)+'%', prob_s: (s.rainProb!==undefined?Math.round(s.rainProb):0)+'%',
+      kategori_u: u.isRain? (u.rainKategori||'-') : 'Tidak hujan', kategori_s: s.isRain? (s.rainKategori||'-') : 'Tidak hujan',
       hujan_u: (u.rainMm||0).toFixed(1), hujan_s: (s.rainMm||0).toFixed(1),
       angin_u: anginFmt(u), angin_s: anginFmt(s),
       arahangin_u: formatArahAngin(u.windDirAvg), arahangin_s: formatArahAngin(s.windDirAvg),
       kelembapan_u: kelembapanFmt(u), kelembapan_s: kelembapanFmt(s),
-      uv_u: uvFmt(u), uv_s: uvFmt(s),
       totalhujan_u: totalHujanHarianVal(u).toFixed(1), totalhujan_s: totalHujanHarianVal(s).toFixed(1),
-      anginkencang_u: anginKencangFmt(u), anginkencang_s: anginKencangFmt(s),
+      anginmaks_u: anginMaksFmt(u), anginmaks_s: anginMaksFmt(s),
       _utaraIsRain: !!u.isRain, _selatanIsRain: !!s.isRain,
       _utaraKategori: weatherIconCategory(u.repCode), _selatanKategori: weatherIconCategory(s.repCode)
     };
@@ -135,13 +138,11 @@ function buildWeatherHourlyRows(logs){
           h.temp!==null&&h.temp!==undefined?Math.round(h.temp):'',
           h.feels!==null&&h.feels!==undefined?Math.round(h.feels):'',
           heatIdx!==null?Math.round(heatIdx):'',
-          h.precipProb!==null&&h.precipProb!==undefined?Math.round(h.precipProb):'',
           h.precipMm!==null&&h.precipMm!==undefined?h.precipMm.toFixed(1):'',
           h.humidity!==null&&h.humidity!==undefined?Math.round(h.humidity):'',
           h.dewPoint!==null&&h.dewPoint!==undefined?Math.round(h.dewPoint):'',
           h.wind!==null&&h.wind!==undefined?Math.round(h.wind):'',
           formatArahAngin(h.windDir),
-          h.gust!==null&&h.gust!==undefined?Math.round(h.gust):'',
           h.cloud!==null&&h.cloud!==undefined?Math.round(h.cloud):'',
           h.visibility!==null&&h.visibility!==undefined?(h.visibility/1000).toFixed(1):''
         ]);
@@ -185,10 +186,11 @@ async function doWeatherExport(fmt){
     const wb = XLSX.utils.book_new();
     XLSX.utils.book_append_sheet(wb, ws, 'Cuaca');
     /* Sheet 2 "Detail Per Jam": rincian tiap jam, tiap wilayah, tiap hari pada periode terpilih. */
-    const jamHeader = ['Tanggal','Wilayah','Jam','Kondisi','Suhu (\u00b0C)','Suhu Terasa (\u00b0C)','Indeks Panas (\u00b0C)','Probabilitas Hujan (%)','Curah Hujan (mm)','Kelembapan (%)','Titik Embun (\u00b0C)','Angin (km/j)','Arah Angin','Angin Kencang (km/j)','Tutupan Awan (%)','Jarak Pandang (km)'];
+    const jamHeader = ['Tanggal','Wilayah','Jam','Kondisi','Suhu (\u00b0C)','Suhu Terasa* (\u00b0C)','Indeks Panas (\u00b0C)','Curah Hujan (mm)','Kelembapan (%)','Titik Embun* (\u00b0C)','Angin (km/j)','Arah Angin','Tutupan Awan (%)','Jarak Pandang (km)'];
+    const jamCatatan = ['*Suhu Terasa & Titik Embun dihitung dari suhu & kelembapan, bukan data langsung BMKG. Sumber data lain: BMKG.'];
     const jamRows = buildWeatherHourlyRows(logs);
     const sheetJamData = jamRows.length
-      ? [jamHeader, ...jamRows]
+      ? [jamHeader, ...jamRows, [], jamCatatan]
       : [jamHeader, ['Tidak ada data per jam pada periode ini (data lama sebelum fitur ini aktif tidak menyimpan rincian per jam)']];
     const wsJam = XLSX.utils.aoa_to_sheet(sheetJamData);
     wsJam['!cols'] = jamHeader.map(()=>({wch: 13}));

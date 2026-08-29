@@ -209,8 +209,8 @@ function renderBeranda(){
         const bgTop = w.isRain ? 'background:rgba(179,38,30,0.12);' : '';
         const border = w.isRain ? 'border-color:#F0C4BE;' : '';
         const warnColor = w.isRain ? '#B3261E' : 'var(--success)';
-        const warnText = w.isRain ? `${weatherInfo(w.repCode)[1]} Potensi hujan ${jamLabel(w.rainHour)}` : 'Tidak ada potensi hujan';
-        const subText = w.isRain ? `Probabilitas ${Math.round(w.rainProb)}% &middot; ${w.rainMm.toFixed(1)} mm` : `Probabilitas maks ${Math.round(w.rainProb)}%`;
+        const warnText = w.isRain ? `${weatherInfo(w.repCode)[1]} ${w.rainKategori} sekitar ${jamLabel(w.rainHour)}` : 'Tidak ada potensi hujan';
+        const subText = w.isRain ? `Curah hujan ${w.rainMm.toFixed(1)} mm (per 3 jam)` : `Curah hujan hari ini ${(w.precipSum||0).toFixed(1)} mm`;
         return `<div class="card" style="flex:1;padding:0;overflow:hidden;min-width:0;${border}">
           <div style="padding:14px 14px 10px;${bgTop}">
             <div style="font-size:11px;font-weight:700;color:${w.isRain?'#7A2618':'var(--on-surface-variant)'};text-transform:uppercase;letter-spacing:.05em;">${label}</div>
@@ -232,7 +232,7 @@ function renderBeranda(){
         </div>`;
       }).join('')}
     </div>
-    <div style="text-align:right;font-size:10px;color:var(--on-surface-variant);margin:2px 2px 8px;">${WEATHER?`Diperbarui ${new Date(WEATHER.ts).toLocaleTimeString('id-ID',{hour:'2-digit',minute:'2-digit'})}`:''} &middot; sumber Open-Meteo</div>
+    <div style="text-align:right;font-size:10px;color:var(--on-surface-variant);margin:2px 2px 8px;">${WEATHER?`Diperbarui ${new Date(WEATHER.ts).toLocaleTimeString('id-ID',{hour:'2-digit',minute:'2-digit'})}`:''} &middot; sumber ${WEATHER_SOURCE_LABEL}</div>
 
     <div class="section-eyebrow">Progres Servis</div>
     <div style="display:flex;gap:10px;align-items:stretch;">
