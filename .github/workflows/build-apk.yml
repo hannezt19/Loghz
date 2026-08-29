@@ -26,14 +26,12 @@ jobs:
       - name: Buat identitas proyek (package.json)
         run: npm init -y
 
-      - name: Izinkan konflik peer-dependency npm (perlu untuk plugin Google Auth)
+      - name: Izinkan konflik peer-dependency npm
         run: echo "legacy-peer-deps=true" > .npmrc
 
       - name: Pasang Capacitor
         run: npm install @capacitor/core@latest-7 @capacitor/cli@latest-7 @capacitor/android@latest-7 @capacitor/filesystem@latest-7 @capacitor/share@latest-7 @capacitor/app@latest-7 @capacitor-community/sqlite@^7.0.0
 
-      - name: Pasang plugin Google Sign-In (untuk fitur Cloud/Google Drive)
-        run: npm install @codetrix-studio/capacitor-google-auth
       - name: Siapkan library Excel (SheetJS)
         run: |
           npm install xlsx --no-save
@@ -117,6 +115,11 @@ jobs:
             sed -i 's#<manifest xmlns:android="http://schemas.android.com/apk/res/android">#<manifest xmlns:android="http://schemas.android.com/apk/res/android">\n    <uses-permission android:name="android.permission.READ_EXTERNAL_STORAGE" />\n    <uses-permission android:name="android.permission.WRITE_EXTERNAL_STORAGE" />#' "$MANIFEST"
           fi
           sed -i 's#<application#<application android:requestLegacyExternalStorage="true"#' "$MANIFEST"
+      - name: Tambah intent-filter deep link untuk login Dropbox
+        run: |
+          MANIFEST="android/app/src/main/AndroidManifest.xml"
+          sed -i 's#</intent-filter>#</intent-filter>\n        <intent-filter>\n            <action android:name="android.intent.action.VIEW" />\n            <category android:name="android.intent.category.DEFAULT" />\n            <category android:name="android.intent.category.BROWSABLE" />\n            <data android:scheme="com.hz.loghz" />\n        </intent-filter>#' "$MANIFEST"
+          grep -A5 'scheme="com.hz.loghz"' "$MANIFEST"
       - name: Perbaiki konflik versi Kotlin
         run: |
           cat >> android/build.gradle << 'EOF'
