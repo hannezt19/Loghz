@@ -4,13 +4,13 @@
  * kembali (←) memanggil openPengaturanScreen() lagi. Pola ini konsisten dengan
  * flow tampilkanPreviewRestore/jalankanRestore yang sudah ada sebelumnya.
  */
-function labelMetode(m){ return m==='cloud' ? 'Google Drive' : 'Lokal (HP)'; }
+function labelMetode(m){ return m==='cloud' ? 'Dropbox' : 'Lokal (HP)'; }
 function metodeDefaultBackup(){ return BACKUP_META.autoMethod || 'lokal'; }
 
 function openPengaturanScreen(){
   closeDrawer();
   const tgl = BACKUP_META.lastBackupAt ? new Date(BACKUP_META.lastBackupAt).toLocaleDateString('id-ID',{day:'numeric',month:'long',year:'numeric'}) : '-';
-  const email = BACKUP_META.googleEmail;
+  const akunLabel = BACKUP_META.dropboxAccountName;
   const jadwalLabel = BACKUP_META.scheduleMode==='tanggal'
     ? ('Tgl '+(BACKUP_META.scheduleDate||5))
     : ((BACKUP_META.scheduleInterval||BACKUP_AUTO_DAYS)+' hari');
@@ -22,10 +22,10 @@ function openPengaturanScreen(){
       <div class="field-sub" style="margin-top:4px;">${new Date(BACKUP_META.lastBackupError.at).toLocaleString('id-ID',{day:'numeric',month:'long',year:'numeric',hour:'2-digit',minute:'2-digit'})} — coba tap Backup di bawah untuk backup manual.</div>
     </div>
     ` : ''}
-    ${(!BACKUP_META.lastBackupError && BACKUP_META.lastDriveError) ? `
+    ${(!BACKUP_META.lastBackupError && BACKUP_META.lastCloudError) ? `
     <div class="card" style="background:#FFF4E5;border:1px solid #FFDDA8;margin-bottom:12px;">
-      <div style="font-weight:700;color:#8A5A00;">${ic('warning')} Upload ke Google Drive terakhir gagal</div>
-      <div class="field-sub" style="margin-top:4px;">${new Date(BACKUP_META.lastDriveError.at).toLocaleString('id-ID',{day:'numeric',month:'long',year:'numeric',hour:'2-digit',minute:'2-digit'})} — data tetap tersimpan di HP. Kemungkinan sesi akun Google terputus, coba buka tab Akun untuk sambungkan ulang.</div>
+      <div style="font-weight:700;color:#8A5A00;">${ic('warning')} Upload ke Dropbox terakhir gagal</div>
+      <div class="field-sub" style="margin-top:4px;">${new Date(BACKUP_META.lastCloudError.at).toLocaleString('id-ID',{day:'numeric',month:'long',year:'numeric',hour:'2-digit',minute:'2-digit'})} — data tetap tersimpan di HP. Kemungkinan sesi akun Dropbox terputus, coba buka tab Akun untuk sambungkan ulang.</div>
     </div>
     ` : ''}
     <div class="dgroup" style="padding-left:0;">Cadangan Data</div>
@@ -34,14 +34,14 @@ function openPengaturanScreen(){
     <div class="pgt-row" onclick="openPengaturanRiwayat()"><span class="pgt-l">Riwayat</span><span class="pgt-r">${tgl}<span class="pgt-chev">›</span></span></div>
     <div class="pgt-row" onclick="openPengaturanJadwal()"><span class="pgt-l">Jadwal</span><span class="pgt-r">${jadwalLabel}<span class="pgt-chev">›</span></span></div>
     <div class="dgroup" style="padding-left:0;">Akun</div>
-    <div class="pgt-row" style="border-bottom:none;" onclick="openPengaturanAkun()"><span class="pgt-l">Akun</span><span class="pgt-r">${email?escapeHtml(email):'Belum tersambung'}<span class="pgt-chev">›</span></span></div>
+    <div class="pgt-row" style="border-bottom:none;" onclick="openPengaturanAkun()"><span class="pgt-l">Akun</span><span class="pgt-r">${akunLabel?escapeHtml(akunLabel):'Belum tersambung'}<span class="pgt-chev">›</span></span></div>
   `);
 }
 
 /* --- Backup: tap langsung eksekusi pakai metode default (diatur di tab Jadwal), tanpa dialog --- */
 async function jalankanBackupCepat(){
   await buatBackupSekarang(metodeDefaultBackup(), false);
-  openPengaturanScreen(); // refresh supaya status Akun (googleEmail) & tanggal Riwayat langsung ke-update
+  openPengaturanScreen(); // refresh supaya status Akun (dropboxAccountName) & tanggal Riwayat langsung ke-update
 }
 
 /* --- Restore --- */
@@ -49,9 +49,9 @@ function openPengaturanRestore(){
   openModal(`
     <div class="mhead"><button class="mclose" onclick="openPengaturanScreen()" style="margin-right:4px;">←</button><h2 style="display:inline;">Restore</h2><button class="mclose" onclick="closeModal()">&times;</button></div>
     <div class="card">
-      <div style="font-weight:800;font-size:13.5px;">Dari Google Drive</div>
+      <div style="font-weight:800;font-size:13.5px;">Dari Dropbox</div>
       <div class="field-sub" style="margin:4px 0 10px;">Ambil backup terakhir dari akun yang tersambung. Cocok dipakai saat pindah / install ulang di HP baru.</div>
-      <button class="btn-block outline" onclick="pulihkanDariDrive()">${ic('sync')} Pulihkan dari Drive</button>
+      <button class="btn-block outline" onclick="pulihkanDariDropbox()">${ic('sync')} Pulihkan dari Dropbox</button>
     </div>
     <div class="card">
       <div style="font-weight:800;font-size:13.5px;">Dari file di HP</div>
@@ -63,39 +63,37 @@ function openPengaturanRestore(){
 function triggerRestoreFile(){
   document.getElementById('restoreFileInput').click();
 }
-/* Cari & ambil file backup dari Drive akun yang login, lalu masuk ke alur preview/konfirmasi
- * yang sama seperti restore dari file lokal (tampilkanPreviewRestore -> jalankanRestore). */
-async function pulihkanDariDrive(){
+/* Cari & ambil file backup terbaru dari App folder Dropbox akun yang login, lalu masuk
+ * ke alur preview/konfirmasi yang sama seperti restore dari file lokal
+ * (tampilkanPreviewRestore -> jalankanRestore). */
+async function pulihkanDariDropbox(){
   try{
-    toast('Mencari backup di Google Drive...');
-    const token = await getGoogleAccessToken(true);
-    // Cari folder "Log Hz Backup" by nama (bukan ID lokal) — kalau belum pernah ada
-    // folder ini sama sekali di akun Drive user, berarti memang belum pernah backup.
-    const folderId = await cariFolderBackupDriveSaja(token);
-    if(!folderId){ toast('Tidak ditemukan backup di Drive akun ini'); return; }
-    // Ambil file terbaru di dalam folder itu (bisa jadi bulan berjalan, atau bulan
-    // sebelumnya kalau belum sempat backup bulan ini) — diurutkan by modifiedTime.
-    const q = encodeURIComponent("'"+folderId+"' in parents and trashed=false");
-    const res = await fetch('https://www.googleapis.com/drive/v3/files?q='+q+'&orderBy=modifiedTime desc&pageSize=1&fields=files(id,name,modifiedTime)&spaces=drive', {
-      headers:{ 'Authorization':'Bearer '+token }
+    toast('Mencari backup di Dropbox...');
+    const token = await getDropboxAccessToken(true);
+    const listRes = await fetch('https://api.dropboxapi.com/2/files/list_folder', {
+      method:'POST',
+      headers:{ 'Authorization':'Bearer '+token, 'Content-Type':'application/json' },
+      body: JSON.stringify({ path:'' })
     });
-    const data = await res.json();
-    if(!res.ok) throw new Error('HTTP '+res.status);
-    if(!data.files || !data.files.length){ toast('Tidak ditemukan backup di Drive akun ini'); return; }
-    const fileId = data.files[0].id;
-    const fileRes = await fetch('https://www.googleapis.com/drive/v3/files/'+fileId+'?alt=media', {
-      headers:{ 'Authorization':'Bearer '+token }
+    const listData = await listRes.json();
+    if(!listRes.ok) throw new Error('HTTP '+listRes.status);
+    const files = (listData.entries||[]).filter(f => f['.tag']==='file' && /^LogHz_Backup_.*\.json$/i.test(f.name));
+    if(!files.length){ toast('Tidak ditemukan backup di Dropbox akun ini'); return; }
+    files.sort((a,b) => new Date(b.server_modified) - new Date(a.server_modified));
+    const target = files[0];
+    const dlRes = await fetch('https://content.dropboxapi.com/2/files/download', {
+      method:'POST',
+      headers:{ 'Authorization':'Bearer '+token, 'Dropbox-API-Arg': JSON.stringify({ path: target.path_lower }) }
     });
-    if(!fileRes.ok) throw new Error('HTTP '+fileRes.status);
-    const parsed = await fileRes.json();
-    if(!parsed || typeof parsed.data !== 'object'){ toast('File backup di Drive tidak valid'); return; }
-    BACKUP_META.driveFileId = fileId;
-    BACKUP_META.driveFolderId = folderId;
+    if(!dlRes.ok) throw new Error('HTTP '+dlRes.status);
+    const parsed = await dlRes.json();
+    if(!parsed || typeof parsed.data !== 'object'){ toast('File backup di Dropbox tidak valid'); return; }
+    BACKUP_META.dropboxLastPath = target.path_lower;
     saveBackupMeta();
-    tampilkanPreviewRestore(parsed, 'Google Drive — '+data.files[0].name);
+    tampilkanPreviewRestore(parsed, 'Dropbox — '+target.name);
   }catch(err){
-    console.error('Gagal mengambil backup dari Drive:', err);
-    toast('Gagal mengambil backup dari Drive');
+    console.error('Gagal mengambil backup dari Dropbox:', err);
+    toast('Gagal mengambil backup dari Dropbox');
   }
 }
 
@@ -108,10 +106,10 @@ function openPengaturanRiwayat(){
       <div class="card card-flat">
         <div class="field-sub">Backup terakhir</div>
         <div style="font-weight:800;font-size:15px;margin-top:2px;">${tgl}</div>
-        <div class="field-sub" style="margin-top:4px;">Metode: ${labelMetode(BACKUP_META.lastMethod)} &middot; ${BACKUP_META.uploadedToCloud?'Sudah di Drive':'Belum di-upload ke Drive'}</div>
+        <div class="field-sub" style="margin-top:4px;">Metode: ${labelMetode(BACKUP_META.lastMethod)} &middot; ${BACKUP_META.uploadedToCloud?'Sudah di Dropbox':'Belum di-upload ke Dropbox'}</div>
       </div>
       <button class="btn-block outline" onclick="bagikanUlangBackup()">${ic('download')} Bagikan / Unduh Ulang File Ini</button>
-      <button class="btn-block outline" style="margin-top:8px;" onclick="uploadUlangKeDriveManual()">${ic('sync')} Upload ke Google Drive</button>
+      <button class="btn-block outline" style="margin-top:8px;" onclick="uploadUlangKeDropboxManual()">${ic('sync')} Upload ke Dropbox</button>
     ` : `
       <div class="field-sub">Belum ada backup yang pernah dibuat di HP ini.</div>
     `}
@@ -160,7 +158,7 @@ function openPengaturanJadwal(){
     <div class="dgroup" style="padding-left:0;">Metode Otomatis &amp; Manual</div>
     <select id="sel-metode" style="margin-bottom:6px;">
       <option value="lokal" ${metode==='lokal'?'selected':''}>Lokal (HP)</option>
-      <option value="cloud" ${metode==='cloud'?'selected':''}>Google Drive</option>
+      <option value="cloud" ${metode==='cloud'?'selected':''}>Dropbox</option>
     </select>
     <div class="field-sub" style="margin-bottom:10px;">Dipakai untuk backup otomatis maupun tombol "Backup" cepat.</div>
     <div id="jadwal-konfirm-area"></div>
@@ -204,28 +202,32 @@ async function simpanJadwal(mode, interval, tanggal, metode){
 /* --- Akun: putus akun butuh konfirmasi ganda (ketik nama app) supaya tidak kepencet tidak sengaja --- */
 const PENGATURAN_KONFIRM_KATA = 'Log Hz';
 async function openPengaturanAkun(){
-  const email = BACKUP_META.googleEmail;
-  // Kalau akun sebenarnya sudah tersambung (pernah backup ke Drive) tapi email
-  // belum sempat tercatat, coba ambil senyap pakai token yang sudah ada —
-  // tanpa munculkan popup login — lalu tampilkan ulang layar ini.
-  if(!email && BACKUP_META.driveFileId){
-    try{
-      const token = await getGoogleAccessToken(false);
-      await pastikanEmailGoogleTersimpan(token);
-    }catch(e){ /* memang belum tersambung, biarkan tampil "Belum tersambung" */ }
-  }
-  const emailTerkini = BACKUP_META.googleEmail;
+  const sudahTersambung = !!BACKUP_META.dropboxRefreshToken;
+  const akunLabel = BACKUP_META.dropboxAccountName;
   openModal(`
     <div class="mhead"><button class="mclose" onclick="openPengaturanScreen()" style="margin-right:4px;">←</button><h2 style="display:inline;">Akun</h2><button class="mclose" onclick="closeModal()">&times;</button></div>
-    ${emailTerkini ? `
-      <div class="card card-flat"><div class="field-sub">Tersambung sebagai</div><div style="font-weight:800;font-size:15px;margin-top:2px;">${escapeHtml(emailTerkini)}</div></div>
+    ${sudahTersambung ? `
+      <div class="card card-flat"><div class="field-sub">Tersambung sebagai</div><div style="font-weight:800;font-size:15px;margin-top:2px;">${escapeHtml(akunLabel||'Dropbox')}</div></div>
       <div class="field-sub" style="margin:14px 0 6px;">Ketik <b>${PENGATURAN_KONFIRM_KATA}</b> untuk memutuskan akun ini.</div>
       <input type="text" id="inp-konfirm-putus" placeholder="${PENGATURAN_KONFIRM_KATA}" style="text-align:center;" oninput="cekKonfirmasiPutus()">
       <button class="btn-block" id="btn-putus-akun" style="background:#B3261E;opacity:.4;" disabled onclick="konfirmasiPutuskanAkun()">Putuskan Akun</button>
     ` : `
-      <div class="field-sub">Belum tersambung — akan diminta login saat pertama kali backup/restore pakai Google Drive.</div>
+      <div class="field-sub" style="margin-bottom:12px;">Belum tersambung ke Dropbox.</div>
+      <button class="btn-block outline" onclick="sambungkanDropboxDariAkun()">${ic('sync')} Sambungkan ke Dropbox</button>
     `}
   `);
+}
+/* Tombol koneksi manual di layar Akun — beda dari dulu (Google bisa langsung minta
+ * login di tengah proses backup/restore), Dropbox login lewat browser sistem butuh
+ * app "berpindah keluar-masuk", jadi lebih jelas kalau user mulai dari sini dulu. */
+async function sambungkanDropboxDariAkun(){
+  try{
+    toast('Membuka Dropbox untuk login...');
+    await mulaiSambungkanDropbox();
+  }catch(err){
+    console.error('Gagal sambungkan Dropbox:', err);
+    toast('Gagal sambungkan Dropbox: ' + (err && err.message ? err.message : err));
+  }
 }
 function cekKonfirmasiPutus(){
   const val = (document.getElementById('inp-konfirm-putus').value||'').trim();
@@ -235,8 +237,8 @@ function cekKonfirmasiPutus(){
   btn.style.opacity = ok ? '1' : '.4';
 }
 async function konfirmasiPutuskanAkun(){
-  await putuskanAkunGoogle();
-  toast('Akun Google diputuskan dari app ini');
+  await putuskanAkunDropbox();
+  toast('Akun Dropbox diputuskan dari app ini');
   openPengaturanScreen();
 }
 

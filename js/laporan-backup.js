@@ -278,238 +278,218 @@ let BACKUP_META = LS.get('v2_backup_meta', {
   jadwalPernahDibuka:false
 });
 
-/* ================= GOOGLE DRIVE (Tahap 2) =================
- * Dipanggil langsung lewat Capacitor.Plugins.GoogleAuth (bridge native), TANPA vendor
- * paket JS npm-nya — cukup plugin native ter-install via build-apk.yml + `cap sync`.
- * PENTING: clientId di bawah WAJIB tipe "Web application" dari Google Cloud Console,
- * BUKAN Android Client ID (Android Client ID dipakai Play Services di belakang layar
- * lewat kecocokan package name + SHA-1, tidak pernah ditulis di kode).
+/* ================= DROPBOX (Tahap 2, migrasi dari Google Drive) =================
+ * Login pakai OAuth 2.0 + PKCE (tanpa client secret, aman dipakai di app publik/mobile).
+ * Alurnya: buka browser sistem (bukan WebView app) ke halaman login Dropbox lewat
+ * window.open(url,'_system') -> user login & approve -> Dropbox redirect balik ke app
+ * lewat skema URL custom (com.hz.loghz://oauth2redirect) -> plugin Capacitor App
+ * menangkap ini lewat event 'appUrlOpen' -> kode ditukar jadi token lewat fetch biasa.
+ * Tidak perlu plugin native tambahan (beda dari GoogleAuth dulu) — cukup @capacitor/app
+ * yang memang sudah dipasang, plus 1 baris intent-filter di AndroidManifest (lihat
+ * build-apk.yml) supaya Android tahu skema URL ini harus dibuka balik ke app ini.
+ *
+ * Akses dibatasi ke "App folder" (folder khusus app ini di Dropbox user, dibuat otomatis
+ * oleh Dropbox sendiri saat App key di bawah didaftarkan dengan tipe akses "App folder"
+ * di Dropbox App Console) — jadi app ini tidak pernah bisa melihat/mengubah file lain
+ * di Dropbox user, mirip prinsipnya dengan scope drive.file yang dipakai Google dulu.
  */
-const GOOGLE_WEB_CLIENT_ID = '933433627637-pbr39bv7eo5ku7r8se7qgj7j8ckrnap6.apps.googleusercontent.com';
-const GOOGLE_DRIVE_SCOPE = 'https://www.googleapis.com/auth/drive.file';
+const DROPBOX_APP_KEY = 'kldfi6lxkxoy0l0';
+const DROPBOX_REDIRECT_URI = 'com.hz.loghz://oauth2redirect';
 
-let _googleAuthInitialized = false;
-
-async function ensureGoogleAuthInit(){
-  if(_googleAuthInitialized) return;
-  if(!window.Capacitor || !window.Capacitor.Plugins || !window.Capacitor.Plugins.GoogleAuth){
-    throw new Error('Plugin GoogleAuth tidak terdeteksi di APK ini (perlu build ulang dengan plugin terpasang)');
-  }
-  await window.Capacitor.Plugins.GoogleAuth.initialize({
-    clientId: GOOGLE_WEB_CLIENT_ID,
-    scopes: [GOOGLE_DRIVE_SCOPE],
-    forceCodeForRefreshToken: false
-  });
-  _googleAuthInitialized = true;
+/** String acak untuk PKCE code_verifier (43-128 karakter sesuai spesifikasi Dropbox/OAuth). */
+function dropboxRandomString(len){
+  const chars = 'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789-._~';
+  const arr = new Uint8Array(len);
+  crypto.getRandomValues(arr);
+  let out = '';
+  for(let i=0;i<len;i++) out += chars[arr[i] % chars.length];
+  return out;
+}
+/** code_challenge = base64url(SHA-256(code_verifier)), sesuai metode S256. */
+async function dropboxCodeChallenge(verifier){
+  const enc = new TextEncoder().encode(verifier);
+  const digest = await crypto.subtle.digest('SHA-256', enc);
+  let bin = '';
+  new Uint8Array(digest).forEach(b => bin += String.fromCharCode(b));
+  return btoa(bin).replace(/\+/g,'-').replace(/\//g,'_').replace(/=+$/,'');
 }
 
-/**
- * Ambil access token siap pakai untuk panggil Drive API.
- * - Coba `refresh()` dulu (SENYAP, tanpa UI) — ini pakai akun Google yang tersimpan
- *   di level Android (Play Services), bukan di memori app, jadi tetap jalan walau
- *   app baru dibuka lagi / dipakai dari auto-backup di background.
- * - Kalau gagal (belum pernah login sama sekali / akses dicabut) dan interactive=true,
- *   baru munculkan UI signIn(). Kalau interactive=false (dipanggil dari auto-backup
- *   senyap), langsung lempar error supaya pemanggil bisa fallback ke Lokal.
- */
-/**
- * Kalau BACKUP_META.googleEmail belum ada (mis. token didapat lewat refresh()
- * senyap tanpa pernah lewat signIn() interaktif), ambil email dari endpoint
- * userinfo Google pakai token yang sudah ada — sekali saja, lalu simpan.
- */
-async function pastikanEmailGoogleTersimpan(token){
-  if(BACKUP_META.googleEmail || !token) return;
+/* Promise yang "menggantung" selagi menunggu user login di browser & kembali ke app
+ * lewat deep link — diselesaikan (resolve/reject) oleh listener appUrlOpen di bawah. */
+let _dropboxAuthPending = null;
+
+/** Mulai proses sambungkan akun Dropbox: buka browser sistem ke halaman login Dropbox. */
+async function mulaiSambungkanDropbox(){
+  if(!DROPBOX_APP_KEY || DROPBOX_APP_KEY.indexOf('GANTI_DENGAN') === 0){
+    throw new Error('DROPBOX_APP_KEY belum diisi di kode (js/laporan-backup.js)');
+  }
+  const verifier = dropboxRandomString(64);
+  const challenge = await dropboxCodeChallenge(verifier);
+  LS.set('dbx_pkce_verifier', verifier);
+  const authUrl = 'https://www.dropbox.com/oauth2/authorize'
+    + '?client_id=' + encodeURIComponent(DROPBOX_APP_KEY)
+    + '&response_type=code'
+    + '&redirect_uri=' + encodeURIComponent(DROPBOX_REDIRECT_URI)
+    + '&code_challenge=' + encodeURIComponent(challenge)
+    + '&code_challenge_method=S256'
+    + '&token_access_type=offline';
+  return new Promise((resolve, reject) => {
+    _dropboxAuthPending = { resolve, reject };
+    window.open(authUrl, '_system');
+  });
+}
+
+/** Ambil info akun (untuk ditampilkan di layar Akun) — kegagalan di sini tidak fatal. */
+async function pastikanNamaAkunDropboxTersimpan(accessToken){
   try{
-    const res = await fetch('https://www.googleapis.com/oauth2/v3/userinfo', {
-      headers: { 'Authorization': 'Bearer ' + token }
+    const res = await fetch('https://api.dropboxapi.com/2/users/get_current_account', {
+      method: 'POST',
+      headers: { 'Authorization': 'Bearer ' + accessToken }
     });
     if(res.ok){
       const info = await res.json();
-      if(info && info.email){
-        BACKUP_META.googleEmail = info.email;
-        await saveBackupMeta();
-      }
+      BACKUP_META.dropboxAccountName = info.email || (info.name && info.name.display_name) || 'Tersambung';
+      await saveBackupMeta();
     }
-  }catch(e){ console.warn('Gagal ambil email akun Google:', e); }
-}
-async function getGoogleAccessToken(interactive){
-  await ensureGoogleAuthInit();
-  try{
-    const r = await window.Capacitor.Plugins.GoogleAuth.refresh();
-    if(r && r.accessToken){
-      await pastikanEmailGoogleTersimpan(r.accessToken);
-      return r.accessToken;
-    }
-  }catch(e){
-    // belum pernah login di HP ini, atau sesi kedaluwarsa — lanjut ke signIn kalau boleh interaktif
-  }
-  if(!interactive){
-    throw new Error('Belum tersambung ke akun Google (perlu login manual dulu)');
-  }
-  const result = await window.Capacitor.Plugins.GoogleAuth.signIn();
-  if(result && result.email){
-    BACKUP_META.googleEmail = result.email;
-    await saveBackupMeta();
-  }
-  const token = result && result.authentication && result.authentication.accessToken;
-  if(!token) throw new Error('Tidak dapat access token dari login');
-  await pastikanEmailGoogleTersimpan(token); // jaga-jaga kalau result.email kosong tapi token valid
-  return token;
+  }catch(e){ console.warn('Gagal ambil info akun Dropbox:', e); }
 }
 
 /**
- * Nama folder Drive tempat semua file backup bulanan disimpan. Folder ini dibuat
- * TAMPAK di root My Drive user (bukan App Data folder tersembunyi), supaya user
- * bisa lihat/buka sendiri lewat aplikasi Google Drive biasa.
+ * Dipasang sekali saat app dibuka (lihat setupDropboxDeepLink() di bawah). Menangkap
+ * balikan dari browser setelah user login/approve di Dropbox, menukar kode otorisasi
+ * jadi refresh token (disimpan) + access token (dipakai sekali untuk ambil nama akun).
  */
-const GOOGLE_DRIVE_FOLDER_NAME = 'Log Hz Backup';
+function setupDropboxDeepLink(){
+  if(!(window.Capacitor && window.Capacitor.Plugins && window.Capacitor.Plugins.App)) return;
+  const { App } = window.Capacitor.Plugins;
+  App.addListener('appUrlOpen', async (data) => {
+    const url = data && data.url;
+    if(!url || url.indexOf(DROPBOX_REDIRECT_URI) !== 0) return;
+    try{
+      const params = new URLSearchParams(url.split('?')[1] || '');
+      if(params.get('error')) throw new Error(params.get('error_description') || params.get('error'));
+      const code = params.get('code');
+      if(!code) throw new Error('Tidak dapat kode otorisasi dari Dropbox');
+      const verifier = LS.get('dbx_pkce_verifier', null);
+      if(!verifier) throw new Error('Sesi login Dropbox kedaluwarsa, coba sambungkan lagi');
+      const body = new URLSearchParams({
+        code, grant_type: 'authorization_code',
+        client_id: DROPBOX_APP_KEY,
+        redirect_uri: DROPBOX_REDIRECT_URI,
+        code_verifier: verifier
+      });
+      const res = await fetch('https://api.dropboxapi.com/oauth2/token', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+        body: body.toString()
+      });
+      const tok = await res.json();
+      if(!res.ok) throw new Error(tok.error_description || tok.error || ('HTTP ' + res.status));
+      BACKUP_META.dropboxRefreshToken = tok.refresh_token;
+      await saveBackupMeta();
+      if(tok.access_token) await pastikanNamaAkunDropboxTersimpan(tok.access_token);
+      if(_dropboxAuthPending){ _dropboxAuthPending.resolve(true); _dropboxAuthPending = null; }
+      if(document.getElementById('modalSheet') && typeof openPengaturanAkun === 'function') openPengaturanAkun();
+      toast('Berhasil tersambung ke Dropbox');
+    }catch(err){
+      console.error('Gagal proses login Dropbox:', err);
+      if(_dropboxAuthPending){ _dropboxAuthPending.reject(err); _dropboxAuthPending = null; }
+      toast('Gagal sambungkan Dropbox: ' + (err && err.message ? err.message : err));
+    }
+  });
+}
+setupDropboxDeepLink();
 
-/** Nama file backup bulan berjalan, format LogHz_Backup_YYYY-MM.json (1 file per bulan). */
-function getDriveBackupFilename(date){
+/**
+ * Ambil access token siap pakai untuk panggil Dropbox API.
+ * - Kalau sudah punya refresh token tersimpan, tukar jadi access token baru (senyap,
+ *   tanpa UI) — refresh token Dropbox pada dasarnya tidak kedaluwarsa selama tidak
+ *   dicabut user, beda dari sesi token Google yang dulu terbatas.
+ * - Kalau belum tersambung sama sekali dan interactive=true, baru buka alur login
+ *   (browser). Kalau interactive=false (auto-backup senyap), langsung lempar error
+ *   supaya pemanggil bisa fallback ke Lokal.
+ */
+async function getDropboxAccessToken(interactive){
+  const refreshToken = BACKUP_META.dropboxRefreshToken;
+  if(refreshToken){
+    const body = new URLSearchParams({
+      grant_type: 'refresh_token',
+      refresh_token: refreshToken,
+      client_id: DROPBOX_APP_KEY
+    });
+    const res = await fetch('https://api.dropboxapi.com/oauth2/token', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+      body: body.toString()
+    });
+    const data = await res.json();
+    if(res.ok && data.access_token) return data.access_token;
+    console.warn('Refresh token Dropbox ditolak, kemungkinan sudah dicabut:', data);
+    BACKUP_META.dropboxRefreshToken = null;
+    await saveBackupMeta();
+  }
+  if(!interactive) throw new Error('Belum tersambung ke akun Dropbox (perlu sambungkan dulu)');
+  await mulaiSambungkanDropbox();
+  if(!BACKUP_META.dropboxRefreshToken) throw new Error('Login Dropbox belum selesai');
+  return getDropboxAccessToken(false);
+}
+
+/** Path file backup bulan berjalan di dalam App folder Dropbox, format /LogHz_Backup_YYYY-MM.json. */
+function getDropboxBackupFilename(date){
   const d = date || new Date();
   const yyyy = d.getFullYear();
   const mm = String(d.getMonth() + 1).padStart(2, '0');
-  return 'LogHz_Backup_' + yyyy + '-' + mm + '.json';
+  return '/LogHz_Backup_' + yyyy + '-' + mm + '.json';
 }
 
-/** Escape tanda kutip tunggal supaya aman dipakai di query pencarian Drive API. */
-function escapeDriveQueryValue(v){
-  return String(v).replace(/'/g, "\\'");
-}
-
-/**
- * Cari folder "Log Hz Backup" di Drive (by name, lewat Drive API search — bukan ID
- * yang disimpan lokal). Kalau sudah ada, pakai itu (supaya tidak ada folder duplikat).
- * Kalau belum ada sama sekali, baru buat folder baru.
- */
-async function cariFolderBackupDriveSaja(token){
-  const q = "name='" + escapeDriveQueryValue(GOOGLE_DRIVE_FOLDER_NAME) + "' and mimeType='application/vnd.google-apps.folder' and trashed=false";
-  const res = await fetch('https://www.googleapis.com/drive/v3/files?q=' + encodeURIComponent(q) + '&fields=files(id,name)&spaces=drive', {
-    headers: { 'Authorization': 'Bearer ' + token }
-  });
-  const data = await res.json();
-  if(!res.ok) throw new Error('Gagal mencari folder Drive: HTTP ' + res.status + ': ' + JSON.stringify(data));
-  if(data.files && data.files.length > 0) return data.files[0].id;
-  return null;
-}
-async function cariAtauBuatFolderBackupDrive(token){
-  const found = await cariFolderBackupDriveSaja(token);
-  if(found) return found; // folder sudah ada, pakai yang ini (tidak bikin duplikat)
-  const createRes = await fetch('https://www.googleapis.com/drive/v3/files?fields=id', {
+/** Upload/timpa file backup bulan berjalan ke Dropbox (path langsung, tidak perlu cari folder/ID). */
+async function uploadBackupToDropbox(blob, interactive){
+  const token = await getDropboxAccessToken(interactive);
+  const path = getDropboxBackupFilename();
+  const text = await blob.text();
+  const res = await fetch('https://content.dropboxapi.com/2/files/upload', {
     method: 'POST',
     headers: {
       'Authorization': 'Bearer ' + token,
-      'Content-Type': 'application/json'
+      'Content-Type': 'application/octet-stream',
+      'Dropbox-API-Arg': JSON.stringify({ path, mode: 'overwrite', mute: true })
     },
-    body: JSON.stringify({ name: GOOGLE_DRIVE_FOLDER_NAME, mimeType: 'application/vnd.google-apps.folder' })
-  });
-  const createData = await createRes.json();
-  if(!createRes.ok) throw new Error('Gagal membuat folder Drive: HTTP ' + createRes.status + ': ' + JSON.stringify(createData));
-  return createData.id;
-}
-
-/**
- * Cari file backup bulan berjalan DI DALAM folder tertentu, by nama file persis
- * (bukan file ID yang disimpan lokal) — supaya tetap akurat walau app di-reinstall
- * atau data lokal (BACKUP_META) hilang.
- */
-async function cariFileBackupBulanIni(token, folderId, filename){
-  const q = "name='" + escapeDriveQueryValue(filename) + "' and '" + folderId + "' in parents and trashed=false";
-  const res = await fetch('https://www.googleapis.com/drive/v3/files?q=' + encodeURIComponent(q) + '&fields=files(id,name)&spaces=drive', {
-    headers: { 'Authorization': 'Bearer ' + token }
+    body: text
   });
   const data = await res.json();
-  if(!res.ok) throw new Error('Gagal mencari file backup di Drive: HTTP ' + res.status + ': ' + JSON.stringify(data));
-  if(data.files && data.files.length > 0) return data.files[0].id;
-  return null;
-}
-
-/**
- * Upload/timpa file backup bulan berjalan ke Drive, di dalam folder "Log Hz Backup".
- * Logic (memperbaiki bug lama yang cuma andalkan driveFileId tersimpan lokal):
- * 1. Cari/buat folder "Log Hz Backup" by NAMA (bukan ID lokal) — tidak bikin folder duplikat.
- * 2. Di dalam folder itu, cari file bulan berjalan by NAMA FILE + FOLDER.
- * 3. Ketemu -> PATCH (timpa) file itu. Tidak ketemu -> POST (buat baru) di folder itu.
- */
-async function uploadBackupToDrive(blob, interactive){
-  const token = await getGoogleAccessToken(interactive);
-  const folderId = await cariAtauBuatFolderBackupDrive(token);
-  const filename = getDriveBackupFilename();
-  const existingFileId = await cariFileBackupBulanIni(token, folderId, filename);
-
-  const text = await blob.text();
-  const metadata = { name: filename, mimeType: 'application/json' };
-  const isUpdate = !!existingFileId;
-  if(!isUpdate){
-    // parents hanya boleh diisi saat CREATE; saat update lewat multipart, field ini diabaikan Drive API
-    metadata.parents = [folderId];
-  }
-
-  const boundary = 'logbookhz_boundary_' + Date.now();
-  const delimiter = '\r\n--' + boundary + '\r\n';
-  const closeDelim = '\r\n--' + boundary + '--';
-  const body =
-    delimiter +
-    'Content-Type: application/json; charset=UTF-8\r\n\r\n' +
-    JSON.stringify(metadata) +
-    delimiter +
-    'Content-Type: application/json\r\n\r\n' +
-    text +
-    closeDelim;
-
-  const url = isUpdate
-    ? 'https://www.googleapis.com/upload/drive/v3/files/' + existingFileId + '?uploadType=multipart&fields=id'
-    : 'https://www.googleapis.com/upload/drive/v3/files?uploadType=multipart&fields=id';
-
-  const res = await fetch(url, {
-    method: isUpdate ? 'PATCH' : 'POST',
-    headers: {
-      'Authorization': 'Bearer ' + token,
-      'Content-Type': 'multipart/related; boundary="' + boundary + '"'
-    },
-    body: body
-  });
-  const data = await res.json();
-  if(!res.ok){
-    if(res.status===404 && isUpdate){
-      // File yang barusan ketemu ternyata sudah hilang lagi (race condition langka) — coba ulang dari awal
-      return uploadBackupToDrive(blob, interactive);
-    }
-    throw new Error('HTTP ' + res.status + ': ' + JSON.stringify(data));
-  }
-  // driveFileId & driveFolderId cuma disimpan sebagai catatan/tampilan terakhir,
-  // BUKAN dipakai lagi sebagai acuan pencarian (acuan utama tetap nama file + folder di atas)
-  BACKUP_META.driveFileId = data.id;
-  BACKUP_META.driveFolderId = folderId;
-  return data.id;
+  if(!res.ok) throw new Error('HTTP ' + res.status + ': ' + JSON.stringify(data));
+  BACKUP_META.dropboxLastPath = path;
+  return path;
 }
 
 /** Upload ulang manual dari file backup lokal yang sudah ada — dipanggil dari Riwayat Backup. */
-async function uploadUlangKeDriveManual(){
+async function uploadUlangKeDropboxManual(){
   try{
     const base64 = await bacaBackupFilePersisten();
     if(!base64){ toast('Tidak ada file backup lokal untuk diupload'); return; }
-    toast('Mengunggah ke Google Drive...');
+    toast('Mengunggah ke Dropbox...');
     const blob = await (await fetch('data:application/json;base64,'+base64)).blob();
-    await uploadBackupToDrive(blob, true);
+    await uploadBackupToDropbox(blob, true);
     BACKUP_META.uploadedToCloud = true;
     await saveBackupMeta();
-    toast('Berhasil diupload ke Google Drive');
+    toast('Berhasil diupload ke Dropbox');
     openPengaturanRiwayat();
   }catch(err){
-    console.error('Upload manual ke Drive gagal:', err);
-    toast('Gagal upload ke Drive');
+    console.error('Upload manual ke Dropbox gagal:', err);
+    toast('Gagal upload ke Dropbox');
   }
 }
 
 /* Aksi murni putus akun — pemanggilnya (UI konfirmasi) yang mengurus render ulang & toast. */
-async function putuskanAkunGoogle(){
+async function putuskanAkunDropbox(){
   try{
-    await ensureGoogleAuthInit();
-    await window.Capacitor.Plugins.GoogleAuth.signOut();
-  }catch(e){ console.warn('signOut GoogleAuth:', e); }
-  BACKUP_META.googleEmail = null;
-  BACKUP_META.driveFileId = null;
+    const token = await getDropboxAccessToken(false);
+    await fetch('https://api.dropboxapi.com/2/auth/token/revoke', {
+      method: 'POST', headers: { 'Authorization': 'Bearer ' + token }
+    });
+  }catch(e){ /* tidak masalah kalau gagal cabut di sisi Dropbox, tetap putuskan lokal di bawah */ }
+  BACKUP_META.dropboxRefreshToken = null;
+  BACKUP_META.dropboxAccountName = null;
   await saveBackupMeta();
 }
 async function saveBackupMeta(){ return LS.set('v2_backup_meta', BACKUP_META); }
@@ -560,18 +540,18 @@ async function buatBackupSekarang(method, silent){
     let uploadedToCloud = false;
     if(method==='cloud'){
       try{
-        await uploadBackupToDrive(blob, !silent); // interaktif kalau bukan auto-backup senyap
+        await uploadBackupToDropbox(blob, !silent); // interaktif kalau bukan auto-backup senyap
         uploadedToCloud = true;
-        BACKUP_META.lastDriveError = null; // upload kali ini sukses, hapus jejak error lama
+        BACKUP_META.lastCloudError = null; // upload kali ini sukses, hapus jejak error lama
       }catch(err){
-        console.error('Gagal upload ke Drive, tetap simpan Lokal:', err);
-        if(!silent) toast('Gagal upload ke Drive — backup tetap tersimpan di HP');
+        console.error('Gagal upload ke Dropbox, tetap simpan Lokal:', err);
+        if(!silent) toast('Gagal upload ke Dropbox — backup tetap tersimpan di HP');
         // FIX: sebelumnya error ini ditelan diam-diam kalau silent=true (auto-backup),
-        // jadi kalau sesi Google putus, app akan terus "gagal diam-diam" ke Drive tiap
+        // jadi kalau sesi akun cloud putus, app akan terus "gagal diam-diam" tiap
         // bulan tanpa Anda pernah tahu. Sekarang jejaknya disimpan supaya tampil sebagai
         // peringatan di layar Pengaturan, walau backup keseluruhan tetap dianggap sukses
         // (karena Lokal berhasil).
-        BACKUP_META.lastDriveError = { at: new Date().toISOString(), msg: (err && err.message) || String(err) };
+        BACKUP_META.lastCloudError = { at: new Date().toISOString(), msg: (err && err.message) || String(err) };
       }
     }
 
@@ -585,11 +565,11 @@ async function buatBackupSekarang(method, silent){
     BACKUP_META.uploadedToCloud = uploadedToCloud;
     BACKUP_META.lastBackupError = null; // backup kali ini sukses, hapus jejak error lama
     await saveBackupMeta();
-    const labelMetode = uploadedToCloud ? 'Google Drive' : 'Lokal';
+    const labelMetode = uploadedToCloud ? 'Dropbox' : 'Lokal';
     const gagalCloud = method==='cloud' && !uploadedToCloud;
     toast(silent
-      ? (gagalCloud ? 'Backup otomatis tersimpan di HP — upload ke Drive gagal' : ('Backup otomatis bulanan berhasil dibuat ('+labelMetode+')'))
-      : (gagalCloud ? 'Backup tersimpan di HP — upload ke Drive gagal' : 'Backup berhasil dibuat ('+labelMetode+')'));
+      ? (gagalCloud ? 'Backup otomatis tersimpan di HP — upload ke Dropbox gagal' : ('Backup otomatis bulanan berhasil dibuat ('+labelMetode+')'))
+      : (gagalCloud ? 'Backup tersimpan di HP — upload ke Dropbox gagal' : 'Backup berhasil dibuat ('+labelMetode+')'));
   }catch(err){
     console.error('Gagal membuat backup:', err);
     toast('Gagal membuat backup');
