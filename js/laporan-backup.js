@@ -93,7 +93,7 @@ function getWeatherExportRows(){
       totalhujan_u: totalHujanHarianVal(u).toFixed(1), totalhujan_s: totalHujanHarianVal(s).toFixed(1),
       anginmaks_u: anginMaksFmt(u), anginmaks_s: anginMaksFmt(s),
       _utaraIsRain: !!u.isRain, _selatanIsRain: !!s.isRain,
-      _utaraKategori: weatherIconCategory(u.repCode), _selatanKategori: weatherIconCategory(s.repCode)
+      _utaraKategori: weatherIconCategory(u.repCode, u.repDesc), _selatanKategori: weatherIconCategory(s.repCode, s.repDesc)
     };
   });
   const totalRainUtara = logs.reduce((sum,w)=>sum+((w.utara&&w.utara.rainMm)||0),0);
@@ -134,7 +134,7 @@ function buildWeatherHourlyRows(logs){
         const heatIdx = hitungIndeksPanas(h.temp, h.humidity);
         rows.push([
           fmtLabel(w.date), label, jamLabel(h.hour),
-          weatherInfo(h.code)[0],
+          weatherInfo(h.code, h.desc)[0],
           h.temp!==null&&h.temp!==undefined?Math.round(h.temp):'',
           h.feels!==null&&h.feels!==undefined?Math.round(h.feels):'',
           heatIdx!==null?Math.round(heatIdx):'',

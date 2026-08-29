@@ -205,7 +205,7 @@ function renderBeranda(){
             ${!weatherLoading?`<button class="pill-btn sm outline" onclick="fetchWeatherIfNeeded(true)">Muat Cuaca</button>`:''}
           </div>`;
         }
-        const info = weatherInfo(w.repCode);
+        const info = weatherInfo(w.repCode, w.repDesc);
         const bgTop = w.isRain ? 'background:rgba(179,38,30,0.12);' : '';
         const border = w.isRain ? 'border-color:#F0C4BE;' : '';
         const warnColor = w.isRain ? '#B3261E' : 'var(--success)';
@@ -217,8 +217,9 @@ function renderBeranda(){
             <div style="display:flex;align-items:center;gap:8px;margin-top:6px;">
               <div style="font-size:26px;line-height:1;flex-shrink:0;">${info[1]}</div>
               <div style="min-width:0;">
-                <div style="font-weight:800;font-size:14px;">${w.tmin!==null?Math.round(w.tmin):'-'}&deg;-${w.tmax!==null?Math.round(w.tmax):'-'}&deg;</div>
+                <div style="font-weight:800;font-size:14px;">${w.repTemp!==null?Math.round(w.repTemp):'-'}&deg;<span style="font-weight:600;font-size:10px;color:var(--on-surface-variant);"> &middot; pukul ${w.rainHour!==null?jamLabel(w.rainHour):'-'}</span></div>
                 <div style="font-size:11px;color:var(--on-surface-variant);">${escapeHtml(info[0])}</div>
+                <div style="font-size:10px;color:var(--on-surface-variant);margin-top:1px;">Min/Maks hari ini: ${w.tmin!==null?Math.round(w.tmin):'-'}&deg;/${w.tmax!==null?Math.round(w.tmax):'-'}&deg;</div>
               </div>
             </div>
             <div style="margin-top:8px;">

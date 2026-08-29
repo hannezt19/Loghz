@@ -35,19 +35,32 @@ function normalizeBmkgCode(code){
   if(isNaN(n)) return null;
   return n>=100 ? n-100 : n;
 }
-function weatherInfo(code){
+function weatherInfo(code, descFallback){
   const n = normalizeBmkgCode(code);
-  return BMKG_WEATHER_MAP[n] || ['Tidak Diketahui','🌡️'];
+  const found = BMKG_WEATHER_MAP[n];
+  if(found) return found;
+  // Kode tidak dikenali (BMKG kadang pakai kode di luar dokumentasi publik) -
+  // pakai teks asli dari BMKG (weather_desc) kalau tersedia, jangan tampilkan "Tidak Diketahui".
+  return [descFallback || 'Tidak Diketahui', '🌡️'];
 }
 /* Kategori kondisi cuaca untuk kolom Kondisi di cetak PDF (5 kategori) - dipakai bareng
- * oleh weatherCategoryLabel() di peta.js untuk menampilkan teks singkat. */
-function weatherIconCategory(code){
+ * oleh weatherCategoryLabel() di peta.js untuk menampilkan teks singkat.
+ * descFallback: teks weather_desc asli dari BMKG, dipakai untuk menebak kategori kalau
+ * kode angkanya tidak dikenali (lihat komentar weatherInfo() di atas). */
+function weatherIconCategory(code, descFallback){
   const n = normalizeBmkgCode(code);
   if(n===0 || n===1 || n===2) return 'cerah';
   if(n===3 || n===4 || n===5 || n===10 || n===45) return 'berawan';
   if(n===60 || n===61) return 'hujan_ringan';
   if(n===63 || n===80) return 'hujan_lebat';
   if(n===95 || n===97) return 'badai';
+  if(descFallback){
+    const d = descFallback.toLowerCase();
+    if(d.includes('petir')) return 'badai';
+    if(d.includes('lebat')) return 'hujan_lebat';
+    if(d.includes('hujan')) return 'hujan_ringan';
+    if(d.includes('cerah') && !d.includes('berawan')) return 'cerah';
+  }
   return 'berawan';
 }
 function jamLabel(h){ return String(h).padStart(2,'0')+'.00'; }
@@ -86,6 +99,7 @@ function ringkasCuacaWilayah(data){
       dateStr: dt.slice(0,10),
       hour: parseInt(dt.slice(11,13),10),
       code: raw.weather,
+      desc: raw.weather_desc || raw.weather_desc_en || null,
       t: (raw.t!==undefined && raw.t!==null) ? raw.t : null,
       hu: (raw.hu!==undefined && raw.hu!==null) ? raw.hu : null,
       ws: (raw.ws!==undefined && raw.ws!==null) ? raw.ws : null, // km/jam
@@ -106,6 +120,7 @@ function ringkasCuacaWilayah(data){
   } else if(slotsToday.length){
     rep = slotsToday.reduce((best,s)=> (s.t!==null && s.t > (best.t===null?-999:best.t)) ? s : best, slotsToday[0]);
   }
+  const repDesc = rep ? (rep.desc || weatherInfo(rep.code)[0]) : '-';
 
   const tVals = slotsToday.map(s=>s.t).filter(v=>v!==null);
   const tmax = tVals.length ? Math.max(...tVals) : null;
@@ -139,6 +154,7 @@ function ringkasCuacaWilayah(data){
     temp: s.t,
     feels: hitungSuhuTerasa(s.t, s.hu, s.ws),
     code: s.code,
+    desc: s.desc,
     precipMm: s.precipMm,
     humidity: s.hu,
     dewPoint: hitungTitikEmbun(s.t, s.hu),
@@ -151,8 +167,8 @@ function ringkasCuacaWilayah(data){
   return {
     tmax, tmin,
     isRain, rainHour: rep ? rep.hour : null, rainMm: rep ? (rep.precipMm||0) : 0,
-    rainKategori: rep ? weatherInfo(rep.code)[0] : '-',
-    repTemp: rep ? rep.t : null, repCode: rep ? rep.code : null,
+    rainKategori: rep ? (rep.desc || weatherInfo(rep.code)[0]) : '-',
+    repTemp: rep ? rep.t : null, repCode: rep ? rep.code : null, repDesc,
     precipSum, humidityAvg, windMaxSpeed, windAvg, windDirAvg,
     hours
   };
@@ -243,7 +259,7 @@ function renderWeatherDetailHtml(){
   const w = WEATHER[region];
   const label = WEATHER_POINTS[region].label;
   const h = w.hours[idx];
-  const info = weatherInfo(h.code);
+  const info = weatherInfo(h.code, h.desc);
   const heatIdx = hitungIndeksPanas(h.temp, h.humidity);
   const stripHtml = w.hours.map((hh,i)=>{
     const active = i===idx;
