@@ -93,7 +93,8 @@ function getWeatherExportRows(){
       totalhujan_u: totalHujanHarianVal(u).toFixed(1), totalhujan_s: totalHujanHarianVal(s).toFixed(1),
       anginmaks_u: anginMaksFmt(u), anginmaks_s: anginMaksFmt(s),
       _utaraIsRain: !!u.isRain, _selatanIsRain: !!s.isRain,
-      _utaraKategori: weatherIconCategory(u.repCode, u.repDesc), _selatanKategori: weatherIconCategory(s.repCode, s.repDesc)
+      _utaraKategori: weatherIconCategory(u.repCode, u.repDesc), _selatanKategori: weatherIconCategory(s.repCode, s.repDesc),
+      _dateIso: w.date /* dipakai untuk highlight Minggu/libur nasional di PDF & penanda di Excel */
     };
   });
   const totalRainUtara = logs.reduce((sum,w)=>sum+((w.utara&&w.utara.rainMm)||0),0);
@@ -155,6 +156,10 @@ async function doWeatherExport(fmt){
   const {rows, logs, totalRainUtara, totalRainSelatan, totalCurahHarianUtara, totalCurahHarianSelatan} = getWeatherExportRows();
   if(rows.length===0){ toast('Tidak ada data cuaca pada periode ini'); return; }
   const totals = {totalRainUtara, totalRainSelatan, totalCurahHarianUtara, totalCurahHarianSelatan};
+  /* Libur nasional/Minggu untuk rentang tanggal laporan ini — dipakai bareng oleh
+   * highlight PDF & penanda "(Libur)" di Excel. */
+  const isoDatesW = rows.map(r=>r._dateIso).filter(Boolean).sort();
+  const holidaySetW = isoDatesW.length ? await getHolidaySetForRange(isoDatesW[0], isoDatesW[isoDatesW.length-1]) : new Set();
   if(fmt==='xlsx'){
     if(!window.XLSX){ toast('Library Excel belum siap'); return; }
     /* Sheet 1 "Cuaca": ringkasan harian lengkap (kolom dasar + kolom tambahan khusus Excel).
@@ -178,7 +183,12 @@ async function doWeatherExport(fmt){
         col += g.sub.length;
       }
     });
-    const bodyAoa = rows.map(r=>flatKeysXlsx.map(k=>r[k]));
+    /* Community edition SheetJS tidak bisa menulis warna latar sel di .xlsx — jadi
+     * highlight hijau PDF disederhanakan jadi penanda teks "(Libur)" di kolom Tanggal. */
+    const bodyAoa = rows.map(r=>flatKeysXlsx.map(k=>{
+      if(k==='tanggal' && r._dateIso && isHolidayHighlightDate(r._dateIso, holidaySetW)) return r[k]+' (Libur)';
+      return r[k];
+    }));
     const sheetData = [headRow1, headRow2, ...bodyAoa, totalRowXlsx];
     const ws = XLSX.utils.aoa_to_sheet(sheetData);
     ws['!merges'] = merges;
@@ -239,10 +249,15 @@ async function doWeatherExport(fmt){
       footStyles:{fillColor:[240,230,210], textColor:[30,20,0], fontStyle:'bold'}, theme:'grid',
       columnStyles: { tanggal_pdf:{halign:'left'}, kondisi_u:{cellWidth:13}, kondisi_s:{cellWidth:13} },
       willDrawCell: function(data){
-        if(data.section==='body' && (data.column.dataKey==='kondisi_u' || data.column.dataKey==='kondisi_s')){
+        if(data.section==='body'){
           const raw = data.row.raw || {};
-          const kategori = data.column.dataKey==='kondisi_u' ? raw._utaraKategori : raw._selatanKategori;
-          data.cell.text = [weatherCategoryLabel(kategori)];
+          if(raw._dateIso && isHolidayHighlightDate(raw._dateIso, holidaySetW)){
+            data.cell.styles.fillColor = [211,242,211];
+          }
+          if(data.column.dataKey==='kondisi_u' || data.column.dataKey==='kondisi_s'){
+            const kategori = data.column.dataKey==='kondisi_u' ? raw._utaraKategori : raw._selatanKategori;
+            data.cell.text = [weatherCategoryLabel(kategori)];
+          }
         }
       }
     });
@@ -547,9 +562,16 @@ async function buatBackupSekarang(method, silent){
       try{
         await uploadBackupToDrive(blob, !silent); // interaktif kalau bukan auto-backup senyap
         uploadedToCloud = true;
+        BACKUP_META.lastDriveError = null; // upload kali ini sukses, hapus jejak error lama
       }catch(err){
         console.error('Gagal upload ke Drive, tetap simpan Lokal:', err);
         if(!silent) toast('Gagal upload ke Drive — backup tetap tersimpan di HP');
+        // FIX: sebelumnya error ini ditelan diam-diam kalau silent=true (auto-backup),
+        // jadi kalau sesi Google putus, app akan terus "gagal diam-diam" ke Drive tiap
+        // bulan tanpa Anda pernah tahu. Sekarang jejaknya disimpan supaya tampil sebagai
+        // peringatan di layar Pengaturan, walau backup keseluruhan tetap dianggap sukses
+        // (karena Lokal berhasil).
+        BACKUP_META.lastDriveError = { at: new Date().toISOString(), msg: (err && err.message) || String(err) };
       }
     }
 
@@ -564,7 +586,10 @@ async function buatBackupSekarang(method, silent){
     BACKUP_META.lastBackupError = null; // backup kali ini sukses, hapus jejak error lama
     await saveBackupMeta();
     const labelMetode = uploadedToCloud ? 'Google Drive' : 'Lokal';
-    toast(silent ? ('Backup otomatis bulanan berhasil dibuat ('+labelMetode+')') : 'Backup berhasil dibuat ('+labelMetode+')');
+    const gagalCloud = method==='cloud' && !uploadedToCloud;
+    toast(silent
+      ? (gagalCloud ? 'Backup otomatis tersimpan di HP — upload ke Drive gagal' : ('Backup otomatis bulanan berhasil dibuat ('+labelMetode+')'))
+      : (gagalCloud ? 'Backup tersimpan di HP — upload ke Drive gagal' : 'Backup berhasil dibuat ('+labelMetode+')'));
   }catch(err){
     console.error('Gagal membuat backup:', err);
     toast('Gagal membuat backup');

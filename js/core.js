@@ -191,3 +191,77 @@ function saveMuatTipeList(){ LS.set('v2_muattipe', MUAT_TIPE_LIST); }
 function saveDroneJenisList(){ LS.set('v2_dronejenis', DRONE_JENIS_LIST); }
 function saveShiftList(){ LS.set('v2_shift', SHIFT_LIST); }
 
+/* ================= SUMBER DATA LIBUR NASIONAL (v2 — multi-sumber + fallback) =================
+ * Dipakai BERSAMA oleh semua fitur cetak (Rekap Operasional, Laporan Cuaca, Program Kerja)
+ * supaya highlight Minggu/libur nasional konsisten di semua PDF & Excel, bukan cuma satu fitur.
+ * Cache per tahun disimpan lewat LS (key v2_holiday_cache_<tahun>) — kalau semua sumber gagal,
+ * cetak tetap jalan pakai cache terakhir alih-alih gagal total.
+ * Urutan sumber (berhenti begitu satu sumber sukses & tidak kosong):
+ *  1. APIHariLibur_V2 (jsdelivr CDN, guangrei) — satu file berisi seluruh tahun berjalan,
+ *     membedakan cuti bersama (holiday:true) dari sekadar perayaan (holiday:false).
+ *  2. api-hari-libur.vercel.app (andifahruddinakas) — per tahun, sumber lama aplikasi ini.
+ *  3. date.nager.at — API publik global, sangat stabil, tapi HANYA libur nasional resmi
+ *     (tidak ada cuti bersama), dipakai sebagai jaring pengaman terakhir sebelum cache. */
+const HOLIDAY_CDN_APIHARILIBUR = 'https://cdn.jsdelivr.net/gh/guangrei/APIHariLibur_V2/calendar.min.json';
+async function fetchHolidayFromApiHariLiburV2(year){
+  const resp = await fetch(HOLIDAY_CDN_APIHARILIBUR);
+  if(!resp.ok) throw new Error('HTTP '+resp.status);
+  const json = await resp.json();
+  const prefix = String(year)+'-';
+  return Object.keys(json)
+    .filter(k=>k.startsWith(prefix) && json[k] && json[k].holiday===true)
+    .sort();
+}
+async function fetchHolidayFromVercelApi(year){
+  const resp = await fetch('https://api-hari-libur.vercel.app/api?year='+year);
+  if(!resp.ok) throw new Error('HTTP '+resp.status);
+  const json = await resp.json();
+  const dates = Array.isArray(json && json.data) ? json.data.map(x=>x.date).filter(Boolean) : [];
+  if(dates.length===0) throw new Error('Data kosong');
+  return dates;
+}
+async function fetchHolidayFromNager(year){
+  const resp = await fetch('https://date.nager.at/api/v3/PublicHolidays/'+year+'/ID');
+  if(!resp.ok) throw new Error('HTTP '+resp.status);
+  const json = await resp.json();
+  const dates = Array.isArray(json) ? json.map(x=>x.date).filter(Boolean) : [];
+  if(dates.length===0) throw new Error('Data kosong');
+  return dates;
+}
+async function fetchHolidayYear(year){
+  const cacheKey = 'v2_holiday_cache_'+year;
+  const cached = LS.get(cacheKey, null);
+  const sources = [fetchHolidayFromApiHariLiburV2, fetchHolidayFromVercelApi, fetchHolidayFromNager];
+  for(const src of sources){
+    try{
+      const dates = await src(year);
+      if(dates && dates.length>0){
+        LS.set(cacheKey, {fetchedAt:Date.now(), dates});
+        return dates;
+      }
+    }catch(e){
+      console.warn('Sumber libur nasional gagal ('+(src.name||'?')+') untuk '+year+':', e && e.message ? e.message : e);
+    }
+  }
+  console.warn('Semua sumber libur nasional gagal untuk '+year+', pakai cache terakhir bila ada.');
+  return (cached && Array.isArray(cached.dates)) ? cached.dates : [];
+}
+async function getHolidaySetForRange(mulai, sampai){
+  const yStart = parseInt(mulai.slice(0,4),10);
+  const yEnd = parseInt(sampai.slice(0,4),10);
+  const set = new Set();
+  for(let y=yStart; y<=yEnd; y++){
+    const dates = await fetchHolidayYear(y);
+    dates.forEach(d=>set.add(d));
+  }
+  return set;
+}
+/* Baris disorot hijau kalau Minggu ATAU libur nasional/cuti bersama — Sabtu SENGAJA
+ * selalu normal/putih (sesuai permintaan Han), walau kebetulan ada cuti bersama yang
+ * jatuh di hari Sabtu. Dipakai bareng oleh semua fitur cetak. */
+function isHolidayHighlightDate(dateIso, holidaySet){
+  const day = new Date(dateIso+'T00:00:00').getDay();
+  if(day===6) return false;
+  return day===0 || holidaySet.has(dateIso);
+}
+

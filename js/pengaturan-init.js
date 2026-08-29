@@ -22,6 +22,12 @@ function openPengaturanScreen(){
       <div class="field-sub" style="margin-top:4px;">${new Date(BACKUP_META.lastBackupError.at).toLocaleString('id-ID',{day:'numeric',month:'long',year:'numeric',hour:'2-digit',minute:'2-digit'})} — coba tap Backup di bawah untuk backup manual.</div>
     </div>
     ` : ''}
+    ${(!BACKUP_META.lastBackupError && BACKUP_META.lastDriveError) ? `
+    <div class="card" style="background:#FFF4E5;border:1px solid #FFDDA8;margin-bottom:12px;">
+      <div style="font-weight:700;color:#8A5A00;">${ic('warning')} Upload ke Google Drive terakhir gagal</div>
+      <div class="field-sub" style="margin-top:4px;">${new Date(BACKUP_META.lastDriveError.at).toLocaleString('id-ID',{day:'numeric',month:'long',year:'numeric',hour:'2-digit',minute:'2-digit'})} — data tetap tersimpan di HP. Kemungkinan sesi akun Google terputus, coba buka tab Akun untuk sambungkan ulang.</div>
+    </div>
+    ` : ''}
     <div class="dgroup" style="padding-left:0;">Cadangan Data</div>
     <div class="pgt-row" onclick="jalankanBackupCepat()"><span class="pgt-l">Backup</span><span class="pgt-r">${labelMetode(metodeDefaultBackup())}</span></div>
     <div class="pgt-row" onclick="openPengaturanRestore()"><span class="pgt-l">Restore</span><span class="pgt-r">-<span class="pgt-chev">›</span></span></div>

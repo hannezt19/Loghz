@@ -550,50 +550,19 @@ function pkExportRowsFiltered(dateList, selectedSet){
   dateList.forEach(d=>{ rows = rows.concat(pkEffectiveRowsForDate(d).filter(r=>selectedSet.has(r.sopir))); });
   rows.sort((a,b)=>a.tanggal.localeCompare(b.tanggal));
   const data = rows.map(r=>({
-    'Tanggal': fmtLabel(r.tanggal), 'No Unit': btLabel(r.unitId), 'Sopir': r.sopir||'-', 'Layanan': pkSubLayananLabel(r.layanan, r.tipe), 'Overtime (jam)': (parseFloat(r.overtimeJam)||0).toFixed(1)
+    'Tanggal': fmtLabel(r.tanggal), 'No Unit': btLabel(r.unitId), 'Sopir': r.sopir||'-', 'Layanan': pkSubLayananLabel(r.layanan, r.tipe), 'Overtime (jam)': (parseFloat(r.overtimeJam)||0).toFixed(1),
+    _tanggalIso: r.tanggal /* dipakai untuk penanda "(Libur)" di Excel — bukan kolom cetak */
   }));
   for(let i=data.length-1;i>0;i--){ if(rows[i].tanggal===rows[i-1].tanggal) data[i]['Tanggal']=''; }
   return data;
 }
 
-/* ================= SUMBER DATA LIBUR NASIONAL (cache per tahun) =================
- * API gratis tanpa key: https://api-hari-libur.vercel.app/api?year=YYYY. Hasil
- * fetch disimpan per tahun (key v2_holiday_cache_<tahun>) supaya kalau API
- * sedang down, cetak PDF tetap jalan pakai cache terakhir alih-alih gagal
- * total. Response: {status,code,data:[{date,description}],message}. */
-async function pkFetchHolidayYear(year){
-  const cacheKey = 'v2_holiday_cache_'+year;
-  const cached = LS.get(cacheKey, null);
-  try{
-    const resp = await fetch('https://api-hari-libur.vercel.app/api?year='+year);
-    if(!resp.ok) throw new Error('HTTP '+resp.status);
-    const json = await resp.json();
-    const dates = Array.isArray(json && json.data) ? json.data.map(x=>x.date).filter(Boolean) : [];
-    LS.set(cacheKey, {fetchedAt:Date.now(), dates});
-    return dates;
-  }catch(e){
-    console.warn('Gagal ambil data libur nasional '+year+', pakai cache terakhir:', e && e.message ? e.message : e);
-    return (cached && Array.isArray(cached.dates)) ? cached.dates : [];
-  }
-}
-async function pkGetHolidaySetForRange(mulai, sampai){
-  const yStart = parseInt(mulai.slice(0,4),10);
-  const yEnd = parseInt(sampai.slice(0,4),10);
-  const set = new Set();
-  for(let y=yStart; y<=yEnd; y++){
-    const dates = await pkFetchHolidayYear(y);
-    dates.forEach(d=>set.add(d));
-  }
-  return set;
-}
-/* Baris disorot hijau kalau Minggu ATAU libur nasional — Sabtu SENGAJA selalu
- * normal/putih (sesuai permintaan Han), walau kebetulan ada cuti bersama yang
- * jatuh di hari Sabtu. */
-function pkIsHighlightDate(dateIso, holidaySet){
-  const day = new Date(dateIso+'T00:00:00').getDay();
-  if(day===6) return false;
-  return day===0 || holidaySet.has(dateIso);
-}
+/* Sumber & cache libur nasional (fetchHolidayYear, getHolidaySetForRange) sekarang
+ * dipusatkan di js/core.js (multi-sumber + fallback) supaya dipakai bareng oleh
+ * SEMUA fitur cetak, bukan cuma Program Kerja. pkGetHolidaySetForRange & pkIsHighlightDate
+ * dipertahankan sebagai alias tipis ke fungsi bersama, supaya kode di bawah tidak perlu diubah. */
+const pkGetHolidaySetForRange = getHolidaySetForRange;
+const pkIsHighlightDate = isHolidayHighlightDate;
 /* Label tanggal ringkas untuk kolom Tanggal PDF: "Sen 26/8" */
 function pkTanggalPdfLabel(iso){
   const d = new Date(iso+'T00:00:00');
@@ -754,7 +723,14 @@ async function doPkExport(fmt){
     const data = pkExportRowsFiltered(dateList, pkPrintFilter.selected);
     if(data.length===0){ toast('Tidak ada data pada filter ini'); return; }
     const headers = ['Tanggal','No Unit','Sopir','Layanan','Overtime (jam)'];
-    const sheetData = [headers, ...data.map(r=>headers.map(h=>r[h]))];
+    /* Excel Program Kerja sebelumnya TIDAK punya highlight sama sekali (cuma PDF-nya).
+     * Community edition SheetJS tidak bisa menulis warna latar sel di .xlsx, jadi
+     * dipakai penanda teks "(Libur)" di kolom Tanggal, sama seperti export Excel lain. */
+    const holidaySetXlsx = await pkGetHolidaySetForRange(pkPrintFilter.mulai, pkPrintFilter.sampai);
+    const sheetData = [headers, ...data.map(r=>headers.map(h=>{
+      if(h==='Tanggal' && r['Tanggal'] && r._tanggalIso && pkIsHighlightDate(r._tanggalIso, holidaySetXlsx)) return r['Tanggal']+' (Libur)';
+      return r[h];
+    }))];
     const ws = XLSX.utils.aoa_to_sheet(sheetData);
     ws['!cols'] = headers.map(h=>({wch: Math.max(h.length,14)}));
     const wb = XLSX.utils.book_new();

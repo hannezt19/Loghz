@@ -393,7 +393,8 @@ function getExportRows(){
       'Absen Berangkat': e.absenBerangkat||'-', 'Absen Pulang': e.absenPulang||'-', 'Istirahat': e.istirahat?'':'Lembur',
       'HM Awal': e.hmAwal||'-', 'HM Akhir': e.hmAkhir||'-', 'HM Terpakai': hmTerpakai, 'BBM (L)': fmtLiterID((parseFloat(e.bbmLiter)||0)/1000), 'Lembur (j)': e.lembur||'0', 'Lembur Final': computeLemburFinal(e).toFixed(1),
       'BU/TU': cuacaCellText(wlog && wlog.utara), 'BS/TS': cuacaCellText(wlog && wlog.selatan),
-      'Catatan': e.catatan||''
+      'Catatan': e.catatan||'',
+      _dateIso: e.date /* dipakai untuk highlight Minggu/libur nasional di PDF & penanda di Excel — bukan kolom cetak */
     };
   });
   const totalHm = rows.reduce((s,e)=>{ const a=parseFloat(e.hmAwal), b=parseFloat(e.hmAkhir); return s+((!isNaN(a)&&!isNaN(b)&&b>=a)?(b-a):0); },0);
@@ -449,6 +450,10 @@ async function doExport(fmt){
   const {headers, rows, totalHm, totalLembur, totalLemburFinal, totalBbm, totalRainUtara, totalRainSelatan} = getExportRows();
   if(headers.length===0){ toast('Pilih minimal satu kolom dulu'); return; }
   if(rows.length===0){ toast('Tidak ada data pada periode ini'); return; }
+  /* Ambil data libur nasional/Minggu untuk rentang tanggal yang tercakup di rows ini —
+   * dipakai sama-sama oleh highlight PDF & penanda "(Libur)" di Excel. */
+  const isoDates = rows.map(r=>r._dateIso).filter(Boolean).sort();
+  const holidaySet = isoDates.length ? await getHolidaySetForRange(isoDates[0], isoDates[isoDates.length-1]) : new Set();
   const totalRow = headers.map((h,i)=>{
     if(i===0) return 'TOTAL';
     if(h==='HM Terpakai') return totalHm.toFixed(1);
@@ -461,7 +466,15 @@ async function doExport(fmt){
   });
   if(fmt==='xlsx'){
     if(!window.XLSX){ toast('Library Excel belum siap'); return; }
-    const sheetData = [headers, ...rows.map(r=>headers.map(h=>r[h])), totalRow];
+    /* Community edition SheetJS (dipakai app ini) tidak bisa menulis warna latar sel
+     * di .xlsx — jadi highlight hijau PDF disederhanakan jadi penanda teks "(Libur)"
+     * di kolom Tanggal untuk versi Excel. */
+    const rowsForXlsx = rows.map(r=>{
+      if(!headers.includes('Tanggal') || !r['Tanggal'] || !r._dateIso) return r;
+      if(!isHolidayHighlightDate(r._dateIso, holidaySet)) return r;
+      return Object.assign({}, r, {'Tanggal': r['Tanggal']+' (Libur)'});
+    });
+    const sheetData = [headers, ...rowsForXlsx.map(r=>headers.map(h=>r[h])), totalRow];
     const ws = XLSX.utils.aoa_to_sheet(sheetData);
     ws['!cols'] = headers.map(h=>({wch: Math.max(h.length,12)}));
     const wb = XLSX.utils.book_new();
@@ -490,7 +503,15 @@ async function doExport(fmt){
       body: rows,
       foot: [totalRow],
       startY: 31, styles:{fontSize:8, cellPadding:2}, headStyles:{fillColor:[76,140,60]},
-      footStyles:{fillColor:[240,230,210], textColor:[30,20,0], fontStyle:'bold'}, theme:'grid'
+      footStyles:{fillColor:[240,230,210], textColor:[30,20,0], fontStyle:'bold'}, theme:'grid',
+      didParseCell: function(data){
+        if(data.section==='body'){
+          const raw = data.row.raw || {};
+          if(raw._dateIso && isHolidayHighlightDate(raw._dateIso, holidaySet)){
+            data.cell.styles.fillColor = [211,242,211];
+          }
+        }
+      }
     });
   }
   const pdfBlob = doc.output('blob');
