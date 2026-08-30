@@ -245,6 +245,8 @@ function renderBeranda(){
           </div>`;
         }
         const info = weatherInfo(w.repCode, w.repDesc);
+        const curSlot = currentWeatherSlot(w.hours);
+        const curInfo = curSlot ? weatherInfo(curSlot.code, curSlot.desc) : info;
         const bgTop = w.isRain ? 'background:rgba(179,38,30,0.12);' : '';
         const border = w.isRain ? 'border-color:#F0C4BE;' : '';
         const warnColor = w.isRain ? '#B3261E' : 'var(--success)';
@@ -254,10 +256,10 @@ function renderBeranda(){
           <div style="padding:14px 14px 10px;${bgTop}">
             <div style="font-size:11px;font-weight:700;color:${w.isRain?'#7A2618':'var(--on-surface-variant)'};text-transform:uppercase;letter-spacing:.05em;">${label}</div>
             <div style="display:flex;align-items:center;gap:8px;margin-top:6px;">
-              <div style="font-size:26px;line-height:1;flex-shrink:0;">${info[1]}</div>
+              <div style="font-size:26px;line-height:1;flex-shrink:0;">${curInfo[1]}</div>
               <div style="min-width:0;">
-                <div style="font-weight:800;font-size:14px;">${w.repTemp!==null?Math.round(w.repTemp):'-'}&deg;<span style="font-weight:600;font-size:10px;color:var(--on-surface-variant);"> &middot; pukul ${w.rainHour!==null?jamLabel(w.rainHour):'-'}</span></div>
-                <div style="font-size:11px;color:var(--on-surface-variant);">${escapeHtml(info[0])}</div>
+                <div style="font-weight:800;font-size:14px;">${curSlot&&curSlot.temp!==null?Math.round(curSlot.temp):'-'}&deg;<span style="font-weight:600;font-size:10px;color:var(--on-surface-variant);"> &middot; pukul ${curSlot?jamLabel(curSlot.hour):'-'}</span></div>
+                <div style="font-size:11px;color:var(--on-surface-variant);">${escapeHtml(curInfo[0])}</div>
                 <div style="font-size:10px;color:var(--on-surface-variant);margin-top:1px;">Min/Maks hari ini: ${w.tmin!==null?Math.round(w.tmin):'-'}&deg;/${w.tmax!==null?Math.round(w.tmax):'-'}&deg;</div>
               </div>
             </div>

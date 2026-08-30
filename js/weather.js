@@ -64,6 +64,16 @@ function weatherIconCategory(code, descFallback){
   return 'berawan';
 }
 function jamLabel(h){ return String(h).padStart(2,'0')+'.00'; }
+/* Cari slot data (dari w.hours) yang jamnya PALING DEKAT dengan jam sekarang
+ * (real-time, dihitung ulang tiap kali dipanggil — BUKAN disimpan di cache).
+ * Dipakai supaya ikon & suhu utama di kartu Cuaca Hari Ini selalu mengikuti
+ * jam berjalan, terpisah dari "rep" (slot terpanas/hujan terderas) yang
+ * dipakai untuk baris peringatan di bawahnya. */
+function currentWeatherSlot(hours){
+  if(!hours || !hours.length) return null;
+  const nowHour = new Date().getHours();
+  return hours.reduce((best,s)=> Math.abs(s.hour-nowHour) < Math.abs(best.hour-nowHour) ? s : best, hours[0]);
+}
 /* Titik Embun (Dew Point) - rumus Magnus, dihitung manual karena BMKG tidak
  * menyediakan field ini langsung (beda dari Open-Meteo dulu yang punya dew_point_2m). */
 function hitungTitikEmbun(tempC, humidity){
@@ -237,6 +247,10 @@ function renderBerandaIfActive(){
   const host = document.getElementById('screen-beranda');
   if(host && host.classList.contains('active')) renderBeranda();
 }
+/* Render ulang berkala (bukan fetch ulang data BMKG) supaya slot jam yang
+ * ditampilkan di kartu Cuaca Hari Ini otomatis maju mengikuti jam berjalan
+ * selama aplikasi dibiarkan terbuka, tidak "berhenti" di jam saat dibuka. */
+setInterval(renderBerandaIfActive, 5*60*1000);
 
 /* ================= DETAIL CUACA PER JAM ================= */
 let weatherDetailState = null; // {region, idx}
