@@ -659,7 +659,7 @@ function lastHmResetForBt(btId){
   const list = HM_RESETS.filter(r=>r.btId===btId).sort((a,b)=>b.date.localeCompare(a.date));
   return list[0] || null;
 }
-function currentHmForBt(btId){
+function latestHmRecordForBt(btId){
   const reset = lastHmResetForBt(btId);
   const fromEntries = ENTRIES
     .filter(e=>e.btId===btId && e.hmAkhir!=='' && e.hmAkhir!=null && !isNaN(parseFloat(e.hmAkhir)) && (!reset || e.date>=reset.date))
@@ -670,7 +670,11 @@ function currentHmForBt(btId){
   const valid = fromEntries.concat(fromSusulan);
   if(valid.length===0) return null;
   valid.sort((a,b)=>a.date.localeCompare(b.date) || (a.id>b.id?1:-1));
-  return valid[valid.length-1].hm;
+  return valid[valid.length-1]; // {date, id, hm}
+}
+function currentHmForBt(btId){
+  const rec = latestHmRecordForBt(btId);
+  return rec ? rec.hm : null;
 }
 function getTimelineIsiBBM(btId){
   const reset = lastHmResetForBt(btId);
@@ -774,7 +778,20 @@ function handleHmBaruInput(btId, tanggal, rawVal, commitFn, revertFn){
     commitFn();
     return;
   }
-  const current = currentHmForBt(btId);
+  const latestRec = latestHmRecordForBt(btId);
+  /* Deteksi HM Baru HANYA relevan kalau tanggal yang diinput MELEBIHI tanggal
+   * data terakhir tersimpan (berarti kelanjutan wajar ke depan). Kalau
+   * tanggal yang diinput SAMA DENGAN atau SEBELUM tanggal terakhir (data
+   * BBM Susulan yang mengisi tanggal terlewat), HM lebih rendah di situ
+   * WAJAR karena posisi kronologisnya memang lebih awal — jangan tampilkan
+   * konfirmasi apa pun. */
+  const tglInput = tanggal || todayIso();
+  const isTanggalTerlewat = latestRec!==null && tglInput <= latestRec.date;
+  if(isTanggalTerlewat){
+    commitFn();
+    return;
+  }
+  const current = latestRec ? latestRec.hm : null;
   /* Trigger konfirmasi HANYA kalau ini penurunan nyata dari HM terakhir
    * tercatat (indikasi meter diganti/direset), ATAU ini entri pertama yang
    * pernah ada untuk unit ini dan langsung sangat rendah. Value kecil yang
@@ -786,7 +803,7 @@ function handleHmBaruInput(btId, tanggal, rawVal, commitFn, revertFn){
     commitFn();
     return;
   }
-  window._hmBaruPending = {btId, tanggal: tanggal||todayIso(), val, commitFn, revertFn};
+  window._hmBaruPending = {btId, tanggal: tglInput, val, commitFn, revertFn};
   openModal(renderHmBaruConfirmHtml());
 }
 function renderHmBaruConfirmHtml(){
