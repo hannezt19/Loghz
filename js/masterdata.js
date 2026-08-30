@@ -743,7 +743,19 @@ function hmServiceStatus(btId){
  */
 function handleHmBaruInput(btId, tanggal, rawVal, commitFn, revertFn){
   const val = parseFloat(rawVal);
-  if(rawVal===''||rawVal==null||isNaN(val)||!btId||val>=HM_BARU_AMBANG){
+  if(rawVal===''||rawVal==null||isNaN(val)||!btId){
+    commitFn();
+    return;
+  }
+  const current = currentHmForBt(btId);
+  /* Trigger konfirmasi HANYA kalau ini penurunan nyata dari HM terakhir
+   * tercatat (indikasi meter diganti/direset), ATAU ini entri pertama yang
+   * pernah ada untuk unit ini dan langsung sangat rendah. Value kecil yang
+   * MASIH NAIK dari HM terakhir (mis. lanjutan wajar setelah meter baru
+   * dipasang) tidak lagi memicu popup berulang. */
+  const isPenurunan = current!==null && val < current;
+  const isEntriPertamaRendah = current===null && val < HM_BARU_AMBANG;
+  if(!isPenurunan && !isEntriPertamaRendah){
     commitFn();
     return;
   }
