@@ -138,8 +138,9 @@ function openPencapaianServisScreen(){
   const units = unitsForSelect().filter(u=>!u.isSystem);
   const rows = units.map(u=>{
     const svc = hmServiceStatus(u.id);
-    const info = svcStatusInfo(svc);
-    return {u, svc, ...info};
+    const interval = serviceIntervalForBt(u.id);
+    const info = svcStatusInfo(svc, interval);
+    return {u, svc, interval, ...info};
   }).sort((a,b)=>{
     if(a.svc.sisa===null && b.svc.sisa===null) return 0;
     if(a.svc.sisa===null) return 1;
@@ -148,7 +149,7 @@ function openPencapaianServisScreen(){
   });
   openModal(`
     <div class="mhead"><h2>Pencapaian Servis</h2><button class="mclose" onclick="closeModal()">&times;</button></div>
-    <div class="field-sub" style="margin-bottom:10px;">Progres tiap unit menuju ambang batas servis (${SETTINGS.serviceInterval} jam)</div>
+    <div class="field-sub" style="margin-bottom:10px;">Progres tiap unit menuju ambang batas servis masing-masing</div>
     ${rows.length===0 ? '<div class="empty-note">Belum ada unit terdaftar.</div>' : rows.map(row=>`
       <div class="card card-flat" style="margin-bottom:10px;cursor:pointer;" onclick="openServisModalForUnit('${row.u.id}')">
         <div style="display:flex;justify-content:space-between;align-items:center;">
@@ -162,7 +163,7 @@ function openPencapaianServisScreen(){
           </div>
           <div style="display:flex;justify-content:space-between;margin-top:6px;">
             <span style="font-size:12px;font-weight:700;color:${row.statusColor};">${row.statusText}</span>
-            <span class="field-sub">${row.svc.sisa.toFixed(1)} / ${SETTINGS.serviceInterval} jam</span>
+            <span class="field-sub">${row.svc.sisa.toFixed(1)} / ${row.interval} jam</span>
           </div>
         `}
       </div>
@@ -213,7 +214,8 @@ function renderBeranda(){
 
   let statusColor = 'var(--success)', statusText = 'Kondisi normal';
   let svcPct = 0;
-  ({statusColor, statusText, svcPct} = svcStatusInfo(svc));
+  const svcInterval = serviceIntervalForBt(bt);
+  ({statusColor, statusText, svcPct} = svcStatusInfo(svc, svcInterval));
 
   host.innerHTML = `
     <div class="card" style="background:var(--primary);color:#fff;border:none;">
@@ -290,7 +292,7 @@ function renderBeranda(){
           </div>
           <div style="text-align:center;">
             <div style="font-weight:700;color:${statusColor};">${statusText}</div>
-            <div class="field-sub" style="margin-top:2px;">${svc.sisa.toFixed(1)} / ${SETTINGS.serviceInterval} jam</div>
+            <div class="field-sub" style="margin-top:2px;">${svc.sisa.toFixed(1)} / ${svcInterval} jam</div>
           </div>
         `}
       </div>

@@ -734,14 +734,29 @@ function hmServiceStatus(btId){
 /* Sumber tunggal untuk warna/teks status & persentase progres servis, dipakai
  * baik oleh kartu beranda maupun laman "Pencapaian Servis" supaya keduanya
  * selalu konsisten. */
-function svcStatusInfo(svc){
+function svcStatusInfo(svc, interval){
+  interval = interval || SETTINGS.serviceInterval || 240;
   let statusColor = 'var(--success)', statusText = 'Kondisi normal';
-  const svcPct = svc.sisa!==null ? Math.min(100, svc.sisa/SETTINGS.serviceInterval*100) : 0;
+  const svcPct = svc.sisa!==null ? Math.min(100, svc.sisa/interval*100) : 0;
   if(svc.sisa!==null){
     if(svcPct > 95){ statusColor='var(--maroon)'; statusText='Segera servis!'; }
     else if(svcPct >= 80){ statusColor='#E08900'; statusText='Mendekati servis'; }
   }
   return {statusColor, statusText, svcPct};
+}
+/* Ambang batas servis per unit (poin: ganti HM meter di 1 unit tidak boleh
+ * ikut mengubah ambang batas unit lain). SETTINGS.serviceInterval tetap jadi
+ * nilai default untuk unit yang belum pernah diatur khusus;
+ * SETTINGS.serviceIntervalByUnit menyimpan override per btId. */
+function serviceIntervalForBt(btId){
+  if(!SETTINGS.serviceIntervalByUnit) SETTINGS.serviceIntervalByUnit = {};
+  const v = SETTINGS.serviceIntervalByUnit[btId];
+  return (v!=null && !isNaN(v)) ? v : (SETTINGS.serviceInterval || 240);
+}
+function setServiceIntervalForBt(btId, val){
+  if(!SETTINGS.serviceIntervalByUnit) SETTINGS.serviceIntervalByUnit = {};
+  SETTINGS.serviceIntervalByUnit[btId] = parseFloat(val) || 240;
+  saveSettings();
 }
 
 /**
@@ -991,6 +1006,8 @@ let expandedServisId = null;
 function renderServisModal(){
   const bt = _servisModalBt || USER.mainBt;
   const svc = bt ? hmServiceStatus(bt) : null;
+  const interval = bt ? serviceIntervalForBt(bt) : 240;
+  const info = svc ? svcStatusInfo(svc, interval) : null;
   const list = SERVIS.filter(s=>s.btId===bt).sort((a,b)=>b.date.localeCompare(a.date));
   const d = window._svcDraft || (resetSvcDraft('berkala'), window._svcDraft);
   const backBtn = _servisModalBackTo==='pencapaian' ? `<button class="mclose" onclick="openPencapaianServisScreen()" style="margin-right:4px;">←</button>` : '';
@@ -998,13 +1015,13 @@ function renderServisModal(){
     <div class="mhead">${backBtn}<h2 style="display:inline;">Servis${_servisModalBackTo==='pencapaian'&&bt?' &middot; '+escapeHtml(btLabel(bt)):''}</h2><button class="mclose" onclick="closeModal()">&times;</button></div>
     ${!bt ? '<div class="empty-note">Set unit default dulu di Pengaturan Akun.</div>' : `
     <div class="card card-flat">
-      <label class="flabel">Ambang Batas Servis (jam)</label>
-      <input type="number" id="svcInterval" value="${SETTINGS.serviceInterval}" onchange="SETTINGS.serviceInterval=parseFloat(this.value)||240;saveSettings();renderServisModal();">
+      <label class="flabel">Ambang Batas Servis (jam) &middot; khusus ${escapeHtml(btLabel(bt))}</label>
+      <input type="number" id="svcInterval" value="${interval}" onchange="setServiceIntervalForBt('${bt}', this.value);renderServisModal();">
       ${svc.sisa===null ? `<div class="field-sub">${svc.baseHm===null?'Belum ada catatan servis.':'Belum ada data HM saat ini.'}</div>` : `
-        <div class="field-sub">Terpakai sejak servis terakhir: <b>${svc.sisa.toFixed(1)} jam</b> dari ${SETTINGS.serviceInterval} jam</div>
+        <div class="field-sub">Terpakai sejak servis terakhir: <b>${svc.sisa.toFixed(1)} jam</b> dari ${interval} jam</div>
         <div style="position:relative;background:var(--outline-variant);border-radius:100px;height:10px;margin-top:6px;overflow:hidden;">
           <div style="position:absolute;inset:0;background:linear-gradient(90deg, var(--success) 0%, var(--success) 80%, #E08900 80%, #E08900 95%, var(--maroon) 95%, var(--maroon) 100%);"></div>
-          <div style="position:absolute;top:0;bottom:0;right:0;left:${Math.min(100, svc.sisa/SETTINGS.serviceInterval*100)}%;background:var(--outline-variant);"></div>
+          <div style="position:absolute;top:0;bottom:0;right:0;left:${Math.min(100, info.svcPct)}%;background:var(--outline-variant);"></div>
         </div>
       `}
     </div>
