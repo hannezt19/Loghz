@@ -129,6 +129,46 @@ function openLiterJamDetailModal(){
     `).join('')}
   `);
 }
+/* Laman "Pencapaian Servis" (poin: progres servis untuk semua unit) — dibuka
+ * dari tap kartu Progres Servis di beranda, menggantikan pintasan langsung ke
+ * modal Servis unit utama. Menampilkan bar progres tiap unit terdaftar,
+ * diurutkan dari yang paling mendekati/lewat jadwal servis di atas. Tap salah
+ * satu unit membuka riwayat & catat servis untuk unit tersebut. */
+function openPencapaianServisScreen(){
+  const units = unitsForSelect().filter(u=>!u.isSystem);
+  const rows = units.map(u=>{
+    const svc = hmServiceStatus(u.id);
+    const info = svcStatusInfo(svc);
+    return {u, svc, ...info};
+  }).sort((a,b)=>{
+    if(a.svc.sisa===null && b.svc.sisa===null) return 0;
+    if(a.svc.sisa===null) return 1;
+    if(b.svc.sisa===null) return -1;
+    return b.svcPct-a.svcPct;
+  });
+  openModal(`
+    <div class="mhead"><h2>Pencapaian Servis</h2><button class="mclose" onclick="closeModal()">&times;</button></div>
+    <div class="field-sub" style="margin-bottom:10px;">Progres tiap unit menuju ambang batas servis (${SETTINGS.serviceInterval} jam)</div>
+    ${rows.length===0 ? '<div class="empty-note">Belum ada unit terdaftar.</div>' : rows.map(row=>`
+      <div class="card card-flat" style="margin-bottom:10px;cursor:pointer;" onclick="openServisModalForUnit('${row.u.id}')">
+        <div style="display:flex;justify-content:space-between;align-items:center;">
+          <div style="font-weight:700;">${escapeHtml(row.u.kode)}${row.u.id===USER.mainBt?' <span style="background:var(--primary);color:#fff;font-size:9px;padding:2px 6px;border-radius:6px;">UTAMA</span>':''}</div>
+          <span style="color:var(--on-surface-variant);font-size:15px;opacity:.5;">&rsaquo;</span>
+        </div>
+        ${row.svc.sisa===null ? `<div class="field-sub" style="margin-top:4px;">${row.svc.baseHm===null?'Belum ada catatan servis.':'Belum ada data HM saat ini.'}</div>` : `
+          <div style="position:relative;background:var(--outline-variant);border-radius:100px;height:10px;margin-top:8px;overflow:hidden;">
+            <div style="position:absolute;inset:0;background:linear-gradient(90deg, var(--success) 0%, var(--success) 80%, #E08900 80%, #E08900 95%, var(--maroon) 95%, var(--maroon) 100%);"></div>
+            <div style="position:absolute;top:0;bottom:0;right:0;left:${Math.min(100, row.svcPct)}%;background:var(--outline-variant);"></div>
+          </div>
+          <div style="display:flex;justify-content:space-between;margin-top:6px;">
+            <span style="font-size:12px;font-weight:700;color:${row.statusColor};">${row.statusText}</span>
+            <span class="field-sub">${row.svc.sisa.toFixed(1)} / ${SETTINGS.serviceInterval} jam</span>
+          </div>
+        `}
+      </div>
+    `).join('')}
+  `);
+}
 function renderBeranda(){
   const host = document.getElementById('screen-beranda');
   if(!USER.mainBt || UNITS.length===0){
@@ -172,11 +212,8 @@ function renderBeranda(){
   const recent = ENTRIES.slice().sort((a,b)=>b.date.localeCompare(a.date)).slice(0,10);
 
   let statusColor = 'var(--success)', statusText = 'Kondisi normal';
-  let svcPct = svc.sisa!==null ? Math.min(100, svc.sisa/SETTINGS.serviceInterval*100) : 0;
-  if(svc.sisa!==null){
-    if(svcPct > 95){ statusColor='var(--maroon)'; statusText='Segera servis!'; }
-    else if(svcPct >= 80){ statusColor='#E08900'; statusText='Mendekati servis'; }
-  }
+  let svcPct = 0;
+  ({statusColor, statusText, svcPct} = svcStatusInfo(svc));
 
   host.innerHTML = `
     <div class="card" style="background:var(--primary);color:#fff;border:none;">
@@ -237,7 +274,7 @@ function renderBeranda(){
 
     <div class="section-eyebrow">Progres Servis</div>
     <div style="display:flex;gap:10px;align-items:stretch;">
-      <div class="card" style="flex:1.3;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:8px;position:relative;cursor:pointer;" onclick="openServisModal()">
+      <div class="card" style="flex:1.3;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:8px;position:relative;cursor:pointer;" onclick="openPencapaianServisScreen()">
         <span style="position:absolute;top:10px;right:10px;color:var(--on-surface-variant);font-size:15px;opacity:.5;">&rsaquo;</span>
         ${svc.sisa===null ? `<div class="empty-note">${svc.baseHm===null?'Belum ada catatan servis.':'Belum ada data HM saat ini.'}</div>` : `
           <div style="position:relative;width:92px;height:92px;flex-shrink:0;">

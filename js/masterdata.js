@@ -731,6 +731,18 @@ function hmServiceStatus(btId){
   sisa += Math.max(0, current - segStart);
   return {last, current, baseHm, sisa};
 }
+/* Sumber tunggal untuk warna/teks status & persentase progres servis, dipakai
+ * baik oleh kartu beranda maupun laman "Pencapaian Servis" supaya keduanya
+ * selalu konsisten. */
+function svcStatusInfo(svc){
+  let statusColor = 'var(--success)', statusText = 'Kondisi normal';
+  const svcPct = svc.sisa!==null ? Math.min(100, svc.sisa/SETTINGS.serviceInterval*100) : 0;
+  if(svc.sisa!==null){
+    if(svcPct > 95){ statusColor='var(--maroon)'; statusText='Segera servis!'; }
+    else if(svcPct >= 80){ statusColor='#E08900'; statusText='Mendekati servis'; }
+  }
+  return {statusColor, statusText, svcPct};
+}
 
 /**
  * Dipanggil dari SEMUA titik input HM Akhir (entri harian utama, unit tambahan,
@@ -805,8 +817,21 @@ function fmtFullDate(iso){
   const d = new Date(iso+'T00:00:00');
   return d.getDate()+' '+bulanFull[d.getMonth()]+' '+d.getFullYear();
 }
+let _servisModalBt = null;
+let _servisModalBackTo = null; // 'pencapaian' kalau dibuka dari laman Pencapaian Servis
 function openServisModal(){
   closeDrawer();
+  _servisModalBt = USER.mainBt;
+  _servisModalBackTo = null;
+  resetSvcDraft('berkala');
+  renderServisModal();
+}
+/* Dipanggil dari laman "Pencapaian Servis" (poin: progres servis semua unit) —
+ * membuka form Servis yang sama tapi untuk unit yang dipilih di laman itu,
+ * dan tombol kembali (←) balik ke laman Pencapaian, bukan menutup modal. */
+function openServisModalForUnit(btId){
+  _servisModalBt = btId;
+  _servisModalBackTo = 'pencapaian';
   resetSvcDraft('berkala');
   renderServisModal();
 }
@@ -964,12 +989,13 @@ async function exportServisCasePdf(id){
 }
 let expandedServisId = null;
 function renderServisModal(){
-  const bt = USER.mainBt;
+  const bt = _servisModalBt || USER.mainBt;
   const svc = bt ? hmServiceStatus(bt) : null;
   const list = SERVIS.filter(s=>s.btId===bt).sort((a,b)=>b.date.localeCompare(a.date));
   const d = window._svcDraft || (resetSvcDraft('berkala'), window._svcDraft);
+  const backBtn = _servisModalBackTo==='pencapaian' ? `<button class="mclose" onclick="openPencapaianServisScreen()" style="margin-right:4px;">←</button>` : '';
   openModal(`
-    <div class="mhead"><h2>Servis</h2><button class="mclose" onclick="closeModal()">&times;</button></div>
+    <div class="mhead">${backBtn}<h2 style="display:inline;">Servis${_servisModalBackTo==='pencapaian'&&bt?' &middot; '+escapeHtml(btLabel(bt)):''}</h2><button class="mclose" onclick="closeModal()">&times;</button></div>
     ${!bt ? '<div class="empty-note">Set unit default dulu di Pengaturan Akun.</div>' : `
     <div class="card card-flat">
       <label class="flabel">Ambang Batas Servis (jam)</label>
@@ -1011,13 +1037,14 @@ function setSvcType(t){
 }
 function addServis(){
   const d = window._svcDraft;
+  const bt = _servisModalBt || USER.mainBt;
   if(window._svcType!=='lainnya'){
     if(!d.hm || isNaN(parseFloat(d.hm))){ toast('Isi HM saat servis dengan angka'); return; }
-    SERVIS.push({id:uid(), btId:USER.mainBt, date:d.date, hm:parseFloat(d.hm).toFixed(1), note:d.note||'', type:'berkala',
+    SERVIS.push({id:uid(), btId:bt, date:d.date, hm:parseFloat(d.hm).toFixed(1), note:d.note||'', type:'berkala',
       filterSolar:!!d.filterSolar, filterUdara:!!d.filterUdara, filterOli:!!d.filterOli});
   } else {
     if(!d.jenisKerusakan && !d.tglDilaporkan && !d.tglSelesai){ toast('Isi minimal Jenis Kerusakan atau salah satu tanggal'); return; }
-    SERVIS.push({id:uid(), btId:USER.mainBt, type:'lainnya',
+    SERVIS.push({id:uid(), btId:bt, type:'lainnya',
       date: d.tglSelesai || d.tglDilaporkan || todayIso(),
       jenisKerusakan:d.jenisKerusakan||'', gejala:d.gejala||'', namaPart:d.namaPart||'',
       tglDilaporkan:d.tglDilaporkan||'', tglDicek:d.tglDicek||'', mekanikCek:d.mekanikCek||'',
