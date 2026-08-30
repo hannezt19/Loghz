@@ -77,7 +77,7 @@ function renderKelolaUnitModal(){
   openModal(`
     <div class="mhead"><h2>Kelola No Unit</h2><button class="mclose" onclick="closeModal()">&times;</button></div>
     <div style="display:flex;gap:8px;margin-bottom:12px;">
-      <input type="text" id="newUnitKode" placeholder="mis. BT.14" style="margin-bottom:0;">
+      <input type="text" id="newUnitKode" placeholder="mis. BT.14" style="margin-bottom:0;text-transform:uppercase;" oninput="this.value=this.value.toUpperCase();">
       <button class="pill-btn" onclick="addUnit()">+ Tambah</button>
     </div>
     <div class="card card-flat">
@@ -91,7 +91,7 @@ function renderKelolaUnitModal(){
   `);
 }
 function addUnit(){
-  const val = document.getElementById('newUnitKode').value.trim();
+  const val = document.getElementById('newUnitKode').value.trim().toUpperCase();
   if(!val){ toast('Isi nomor unit dulu'); return; }
   if(UNITS.some(u=>u.kode.toLowerCase()===val.toLowerCase())){ toast('Unit ini sudah ada'); return; }
   // Sisipkan sebelum unit sistem (Libur/Standby) supaya unit sistem selalu tetap di posisi paling akhir penyimpanan

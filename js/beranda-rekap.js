@@ -272,7 +272,10 @@ function renderBeranda(){
         </div>`;
       }).join('')}
     </div>
-    <div style="text-align:right;font-size:10px;color:var(--on-surface-variant);margin:2px 2px 8px;">${WEATHER?`Diperbarui ${new Date(WEATHER.ts).toLocaleTimeString('id-ID',{hour:'2-digit',minute:'2-digit'})}`:''} &middot; sumber ${WEATHER_SOURCE_LABEL}</div>
+    <div style="display:flex;justify-content:flex-end;align-items:center;gap:6px;font-size:10px;color:var(--on-surface-variant);margin:2px 2px 8px;">
+      <span>${WEATHER?`Diperbarui ${new Date(WEATHER.ts).toLocaleTimeString('id-ID',{hour:'2-digit',minute:'2-digit'})}`:''} &middot; sumber ${WEATHER_SOURCE_LABEL}</span>
+      ${!weatherLoading?`<button class="icon-btn" style="width:22px;height:22px;" title="Refresh cuaca" onclick="fetchWeatherIfNeeded(true)">${ic('sync',14)}</button>`:''}
+    </div>
 
     <div class="section-eyebrow">Progres Servis</div>
     <div style="display:flex;gap:10px;align-items:stretch;">

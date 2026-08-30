@@ -4,6 +4,12 @@
 function uid(){ return 'id'+Date.now().toString(36)+Math.random().toString(36).slice(2,8); }
 function todayIso(){ const d=new Date(); return d.getFullYear()+'-'+String(d.getMonth()+1).padStart(2,'0')+'-'+String(d.getDate()).padStart(2,'0'); }
 function escapeHtml(s){ return String(s==null?'':s).replace(/[&<>"']/g, c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c])); }
+/* Rapikan nama sopir non-inti (input manual/bebas ketik) supaya "daud",
+ * "DAUD", dan "Daud" semua konsisten jadi "Daud" — huruf awal tiap kata
+ * kapital, sisanya kecil. Dipakai saat input DAN untuk migrasi data lama. */
+function toTitleCaseNama(s){
+  return String(s==null?'':s).trim().replace(/\s+/g,' ').toLowerCase().replace(/(^|\s)\S/g, c=>c.toUpperCase());
+}
 const ICON_PATHS = {
   trash: '<path d="M4 7h16M9 7V4h6v3M6 7l1 13a2 2 0 002 2h6a2 2 0 002-2l1-13"/><path d="M10 11v6M14 11v6"/>',
   warning: '<path d="M12 3 2 21h20L12 3z"/><path d="M12 10v5M12 18h.01"/>',
@@ -131,6 +137,27 @@ function migratePkDataIfNeeded(){
   });
   if(changed) saveProgramRencana();
   if(changedLL) saveProgramTandaLL();
+}
+/* Migrasi: rapikan kapitalisasi nama sopir non-inti pada data LAMA yang sudah
+ * kadung tersimpan beda kapital (mis. "daud" & "Daud" tercatat sebagai 2 nama
+ * berbeda). Menyamakan semuanya ke Title Case lewat toTitleCaseNama() supaya
+ * otomatis tergabung. Idempotent (aman dijalankan tiap boot). */
+function migrateSopirCasingIfNeeded(){
+  let changedR = false, changedA = false;
+  PROGRAM_RENCANA.forEach(r=>{
+    if(!r.isInti && r.sopir){
+      const rapi = toTitleCaseNama(r.sopir);
+      if(rapi!==r.sopir){ r.sopir = rapi; changedR = true; }
+    }
+  });
+  PROGRAM_AKTUAL.forEach(a=>{
+    if(!a.isInti && a.sopir){
+      const rapi = toTitleCaseNama(a.sopir);
+      if(rapi!==a.sopir){ a.sopir = rapi; changedA = true; }
+    }
+  });
+  if(changedR) saveProgramRencana();
+  if(changedA) saveProgramAktual();
 }
 function savePiketJamLayanan(){ LS.set('v2_piket_jam_layanan', PIKET_JAM_LAYANAN); }
 function saveLayananSingkatan(){ LS.set('v2_layanan_singkatan', LAYANAN_SINGKATAN); }

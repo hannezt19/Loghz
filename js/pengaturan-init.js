@@ -468,6 +468,7 @@ async function bootApp(){
     migratePkDataIfNeeded(); // konversi baris Program lama (v1.0.26, tanggal tunggal) ke skema rentang v1.0.27
     migratePkJamLayananIfNeeded(); // konversi jam otomatis lama (per-Layanan) ke per-sub-tipe (Agustus 2026)
     migrateLayananSingkatanIfNeeded(); // konversi Singkatan lama (per-Layanan) ke per-sub-tipe (v1.0.33)
+    migrateSopirCasingIfNeeded(); // rapikan kapitalisasi nama sopir non-inti lama (v1.0.38)
     ensureSystemUnits();
     // Sebelumnya BACKUP_META/WEATHER/WEATHER_LOG TIDAK ikut disegarkan di sini,
     // jadi selalu memakai nilai default (dari `let` di atas, dieksekusi sebelum

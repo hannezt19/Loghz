@@ -120,7 +120,7 @@ function setPkRencanaSopirFromDriver(rowId, val){
 function setPkRencanaSopirManual(rowId, val){
   const r = PROGRAM_RENCANA.find(x=>x.id===rowId);
   if(!r) return;
-  r.sopir = val; r.isInti=false;
+  r.sopir = toTitleCaseNama(val); r.isInti=false;
   saveProgramRencana();
   renderProker();
 }
@@ -242,7 +242,7 @@ function prunePkAktualIfSameAsProgram(rencanaId, tanggal){
 function updatePkAktual(rencanaId, tanggal, field, val){
   const a = ensurePkAktualRow(rencanaId, tanggal);
   if(!a) return;
-  a[field] = val;
+  a[field] = (field==='sopir') ? toTitleCaseNama(val) : val;
   if(field==='layanan'){
     a.tipe = ''; // ganti Layanan -> reset Tipe (opsi Tipe lama mungkin sudah tidak relevan)
     if(a.overtimeManual===null || a.overtimeManual===undefined) a.overtimeJam = pkJamOtomatis(a.layanan, a.tipe);
