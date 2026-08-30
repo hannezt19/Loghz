@@ -456,6 +456,7 @@ async function bootApp(){
     SHIFT_LIST = LS.get('v2_shift', ['Pagi','Siang','Malam']);
     JENIS_KERUSAKAN_LIST = LS.get('v2_jeniskerusakan', ['Rem','Mesin','Hidrolik','Kelistrikan','Ban/Roda']);
     MEKANIK_LIST = LS.get('v2_mekanik', []);
+    BBM_SUSULAN = LS.get('v2_bbm_susulan', []); // WAJIB: sebelumnya terlewat dari refresh, menyebabkan data Susulan tampak hilang & berisiko tertimpa kosong setiap app dibuka ulang
     PETA_BLOCKS = LS.get('v2_peta_blocks', []);
     DRIVER_LIST = LS.get('v2_program_driver', []);
     PROGRAM_RENCANA = LS.get('v2_program_rencana', []);

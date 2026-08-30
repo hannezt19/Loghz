@@ -78,25 +78,40 @@ function renderSusulanForm(){
     <div class="card" style="margin-top:10px;">
       <div style="font-weight:700;margin-bottom:8px;">Data Susulan</div>
       <label class="flabel">Unit BT</label>
-      <select onchange="window._susulanDraft.btId=this.value">
+      <select id="susulan-bt">
         ${list.map(u=>`<option value="${u.id}" ${d.btId===u.id?'selected':''}>${escapeHtml(u.kode)}</option>`).join('')}
       </select>
       <label class="flabel">Tanggal</label>
-      <input type="date" value="${d.tanggal}" onchange="window._susulanDraft.tanggal=this.value">
+      <input type="date" id="susulan-tgl" value="${d.tanggal}">
       <label class="flabel">HM saat isi</label>
-      <input type="text" inputmode="numeric" value="${escapeHtml(d.hm)}" oninput="this.value=fmtHmLive(this.value)" onchange="window._susulanDraft.hm=this.value">
+      <input type="text" id="susulan-hm" inputmode="numeric" value="${escapeHtml(d.hm)}" oninput="this.value=fmtHmLive(this.value)">
       <label class="flabel">BBM (ml)</label>
-      <input type="text" inputmode="numeric" value="${escapeHtml(fmtThousandsLive(d.bbmMl))}" oninput="this.value=fmtThousandsLive(this.value)" onchange="window._susulanDraft.bbmMl=stripDots(this.value)">
+      <input type="text" id="susulan-bbm" inputmode="numeric" value="${escapeHtml(fmtThousandsLive(d.bbmMl))}" oninput="this.value=fmtThousandsLive(this.value)">
       <button class="btn-block" onclick="simpanSusulanDraft()">Simpan</button>
     </div>
   `;
 }
 function simpanSusulanDraft(){
-  const d = window._susulanDraft;
-  if(!d.btId || !d.tanggal || d.hm===''||d.hm==null || d.bbmMl===''||d.bbmMl==null){ toast('Lengkapi semua field'); return; }
-  handleHmBaruInput(d.btId, d.tanggal, d.hm,
+  /* Poin penting (bug "Lengkapi semua field" padahal field sudah diisi):
+   * SEBELUMNYA nilai field disalin ke window._susulanDraft lewat event
+   * oninput/onchange, yang di sebagian WebView Android tidak selalu sempat
+   * jalan SEBELUM tombol Simpan diklik (race antara blur & click). Sekarang
+   * nilai dibaca LANGSUNG dari elemen DOM saat tombol ditekan — selalu akurat
+   * apa pun urutan event sebelumnya, karena dibaca di detik yang sama saat
+   * user menekan Simpan. */
+  const elBt = document.getElementById('susulan-bt');
+  const elTgl = document.getElementById('susulan-tgl');
+  const elHm = document.getElementById('susulan-hm');
+  const elBbm = document.getElementById('susulan-bbm');
+  const btId = elBt ? elBt.value : '';
+  const tanggal = elTgl ? elTgl.value : '';
+  const hm = elHm ? elHm.value : '';
+  const bbmMl = elBbm ? stripDots(elBbm.value) : '';
+  if(!btId || !tanggal || hm==='' || hm==null || bbmMl==='' || bbmMl==null){ toast('Lengkapi semua field'); return; }
+  window._susulanDraft = {btId, tanggal, hm, bbmMl};
+  handleHmBaruInput(btId, tanggal, hm,
     ()=>{
-      tambahBbmSusulan(d.btId, d.tanggal, d.hm, parseFloat(d.bbmMl)||0);
+      tambahBbmSusulan(btId, tanggal, hm, parseFloat(bbmMl)||0);
       window._susulanDraft = null;
       window._bbmShowSusulanForm = false;
       toast('Data susulan tersimpan');
