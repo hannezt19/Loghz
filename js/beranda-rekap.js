@@ -64,7 +64,7 @@ function renderBbmDetailModal(){
     <div class="mhead"><h2>Detail BBM</h2><button class="mclose" onclick="closeModal()">&times;</button></div>
     <div style="display:flex;gap:6px;overflow-x:auto;padding-bottom:8px;margin-bottom:8px;">
       <button class="pill-btn sm ${!filterBt?'':'outline'}" onclick="window._bbmFilterBt='';renderBbmDetailModal()">Semua</button>
-      ${list.map(u=>`<button class="pill-btn sm ${filterBt===u.id?'':'outline'}" style="display:flex;flex-direction:column;align-items:center;gap:2px;line-height:1.15;" onclick="window._bbmFilterBt='${u.id}';renderBbmDetailModal()"><span style="text-transform:uppercase;">${escapeHtml(u.kode)}</span><span style="font-size:9px;font-weight:600;opacity:.85;">${totalBulanByUnit[u.id]>0?totalBulanByUnit[u.id].toFixed(0)+' L':'-'}</span></button>`).join('')}
+      ${list.map(u=>`<button class="pill-btn sm ${filterBt===u.id?'':'outline'}" style="display:flex;flex-direction:column;align-items:center;gap:2px;line-height:1.15;flex-shrink:0;" onclick="window._bbmFilterBt='${u.id}';renderBbmDetailModal()"><span style="text-transform:uppercase;white-space:nowrap;">${escapeHtml(u.kode)}</span><span style="font-size:9px;font-weight:600;opacity:.85;white-space:nowrap;">${totalBulanByUnit[u.id]>0?totalBulanByUnit[u.id].toFixed(0)+' L':'-'}</span></button>`).join('')}
     </div>
     ${sorted.length===0 ? `<div class="empty-note">Belum ada data isi BBM.</div>` : sorted.map(t=>`
       <div class="card" style="margin-bottom:8px;padding:12px 14px;display:flex;justify-content:space-between;align-items:flex-start;">
