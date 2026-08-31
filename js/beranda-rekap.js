@@ -167,9 +167,12 @@ function openPencapaianServisScreen(){
     <div class="field-sub" style="margin-bottom:10px;">Progres tiap unit menuju ambang batas servis masing-masing</div>
     ${rows.length===0 ? '<div class="empty-note">Belum ada unit terdaftar.</div>' : rows.map(row=>`
       <div class="card card-flat" style="margin-bottom:10px;cursor:pointer;" onclick="openServisModalForUnit('${row.u.id}')">
-        <div style="display:flex;justify-content:space-between;align-items:center;">
-          <div style="font-weight:700;">${escapeHtml(row.u.kode)}${row.u.id===USER.mainBt?' <span style="background:var(--primary);color:#fff;font-size:9px;padding:2px 6px;border-radius:6px;">UTAMA</span>':''}</div>
-          <span style="color:var(--on-surface-variant);font-size:15px;opacity:.5;">&rsaquo;</span>
+        <div style="display:flex;justify-content:space-between;align-items:center;gap:8px;">
+          <div style="font-weight:700;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">${escapeHtml(row.u.kode)}${row.u.id===USER.mainBt?' <span style="background:var(--primary);color:#fff;font-size:9px;padding:2px 6px;border-radius:6px;">UTAMA</span>':''}</div>
+          <div style="display:flex;align-items:center;gap:6px;flex-shrink:0;">
+            ${row.svc.last ? `<span class="field-sub" style="white-space:nowrap;">Servis terakhir: ${fmtTanggalSingkat(row.svc.last.date)}</span>` : ''}
+            <span style="color:var(--on-surface-variant);font-size:15px;opacity:.5;">&rsaquo;</span>
+          </div>
         </div>
         ${row.svc.sisa===null ? `<div class="field-sub" style="margin-top:4px;">${row.svc.baseHm===null?'Belum ada catatan servis.':'Belum ada data HM saat ini.'}</div>` : `
           <div style="position:relative;background:var(--outline-variant);border-radius:100px;height:10px;margin-top:8px;overflow:hidden;">

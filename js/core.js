@@ -55,6 +55,14 @@ function fmtTanggalRingkas(iso){
   const d = new Date(iso+'T00:00:00');
   return d.getDate()+'.'+(d.getMonth()+1)+'.'+String(d.getFullYear()).slice(-2);
 }
+/* Format tanggal singkat tanpa nama hari (contoh: 12 Agu 2026) - dipakai di
+ * kartu ringkas seperti laman "Pencapaian Servis" supaya cukup 1 baris. */
+function fmtTanggalSingkat(iso){
+  if(!iso) return '-';
+  const d = new Date(iso+'T00:00:00');
+  const bulan = ['Jan','Feb','Mar','Apr','Mei','Jun','Jul','Agu','Sep','Okt','Nov','Des'][d.getMonth()];
+  return d.getDate()+' '+bulan+' '+d.getFullYear();
+}
 function toast(msg){ const t=document.getElementById('toast'); t.textContent=msg; t.classList.add('show'); clearTimeout(window._toastT); window._toastT=setTimeout(()=>t.classList.remove('show'),2200); }
 
 let expandedRowId = null;
