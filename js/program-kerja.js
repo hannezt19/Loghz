@@ -198,7 +198,13 @@ function renderPkRencanaEditModal(rowId){
   `);
 }
 function renderPkProgramTab(){
-  const rangeEntries = PROGRAM_RENCANA.filter(r=>r.tanggalMulai===pkTanggalMulai && r.tanggalSampai===pkTanggalSampai);
+  /* FIX: dulu pakai pencocokan tanggal PERSIS (tanggalMulai===pkTanggalMulai &&
+   * tanggalSampai===pkTanggalSampai), jadi kalau field filter di layar balik ke
+   * default (hari ini-hari ini) tapi baris Program yang tersimpan rentangnya
+   * beda, baris itu "menghilang" dari tab ini padahal datanya masih ada (dan
+   * tetap muncul di Aktual/Rekap karena keduanya pakai overlap, bukan cocok
+   * persis). Sekarang dipakai overlap juga di sini, supaya konsisten. */
+  const rangeEntries = PROGRAM_RENCANA.filter(r=>r.tanggalMulai<=pkTanggalSampai && r.tanggalSampai>=pkTanggalMulai);
   return `
     <label class="flabel">Tanggal Mulai</label>
     <input type="date" value="${pkTanggalMulai}" onchange="setPkTanggalMulai(this.value)">

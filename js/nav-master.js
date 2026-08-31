@@ -82,8 +82,9 @@ function renderKelolaUnitModal(){
     </div>
     <div class="card card-flat">
       ${unitAsli.length===0 ? '<div class="empty-note">Belum ada unit. Tambahkan di atas.</div>' :
-        unitAsli.map(u=>`<div class="list-row"><span>${escapeHtml(u.kode)}</span><button class="icon-btn" onclick="deleteUnit('${u.id}')">${ic('trash')}</button></div>`).join('')}
+        unitAsli.map(u=>`<div class="list-row" style="cursor:pointer;" onclick="openUnitEditModal('${u.id}')"><span>${escapeHtml(u.kode)}</span>${ic('edit',16)}</div>`).join('')}
     </div>
+    <div class="field-sub" style="margin:8px 0 12px;">Tap sebuah unit untuk mengubah nama atau menghapusnya.</div>
     <div class="field-sub" style="margin:12px 0 4px;">Bawaan aplikasi (tidak bisa dihapus)</div>
     <div class="card card-flat">
       ${unitSistem.map(u=>`<div class="list-row"><span style="color:var(--on-surface-variant);font-style:italic;">${escapeHtml(u.kode)}</span></div>`).join('')}
@@ -102,13 +103,108 @@ function addUnit(){
   renderKelolaUnitModal();
   toast('Unit ditambahkan');
 }
-function deleteUnit(id){
-  if(isSystemUnitId(id)){ toast('Unit bawaan ini tidak bisa dihapus'); return; }
-  if(!confirm('Hapus unit ini? Data entri lama yang memakai unit ini tidak akan terhapus, tapi labelnya akan hilang.')) return;
-  UNITS = UNITS.filter(u=>u.id!==id);
+
+/* ----- Edit 1 unit (dibuka dari tap baris di Kelola Unit) -----
+ * Rename di sini TIDAK memutus data lama sama sekali, karena semua data
+ * (ENTRIES, Program Kerja, Servis, dst) menyimpan referensi lewat `id` unit,
+ * bukan teks kodenya. Jadi kalau cuma salah ketik (mis. "bt 12" -> "BT.12"),
+ * cukup ganti nama di sini - TIDAK PERLU hapus+tambah baru. */
+function openUnitEditModal(id){ renderUnitEditModal(id); }
+function renderUnitEditModal(id){
+  const u = UNITS.find(x=>x.id===id);
+  if(!u) return;
+  openModal(`
+    <div class="mhead"><h2>Edit Unit</h2><button class="mclose" onclick="closeModal()">&times;</button></div>
+    <label class="flabel">No Unit</label>
+    <input type="text" id="editUnitKode" value="${escapeHtml(u.kode)}" style="text-transform:uppercase;" oninput="this.value=this.value.toUpperCase();">
+    <div class="field-sub" style="margin-bottom:14px;">Salah ketik? Ganti namanya saja di sini - semua data lama (Hari Ini, Program Kerja, Servis, BBM, dll) otomatis tetap ikut, tidak perlu hapus lalu buat baru.</div>
+    <button class="pill-btn" style="width:100%;justify-content:center;margin-bottom:16px;" onclick="saveUnitKode('${u.id}')">Simpan Nama</button>
+    <div style="border-top:1px solid var(--outline-variant);padding-top:14px;">
+      <div class="field-sub" style="font-weight:700;color:var(--secondary);margin-bottom:8px;">Zona Bahaya</div>
+      <button class="icon-btn" style="color:var(--secondary);" onclick="openDeleteUnitConfirm('${u.id}')">${ic('trash')} Hapus Unit Ini</button>
+    </div>
+  `);
+}
+function saveUnitKode(id){
+  const val = document.getElementById('editUnitKode').value.trim().toUpperCase();
+  if(!val){ toast('Isi nomor unit dulu'); return; }
+  if(UNITS.some(x=>x.id!==id && x.kode.toLowerCase()===val.toLowerCase())){ toast('Nama ini sudah dipakai unit lain'); return; }
+  const u = UNITS.find(x=>x.id===id);
+  if(!u) return;
+  u.kode = val;
   saveUnits();
   renderKelolaUnitModal();
+  toast('Nama unit diperbarui');
+}
+
+/* ----- Dialog konfirmasi hapus unit (menggantikan confirm() bawaan browser) -----
+ * 2 pilihan: Gabungkan dulu ke unit lain (migrasi semua data lama supaya
+ * TIDAK jadi yatim), atau Hapus Permanen (perilaku lama - data lama tidak
+ * terhapus, tapi labelnya hilang karena tidak terhubung ke unit manapun). */
+function openDeleteUnitConfirm(id){ renderDeleteUnitConfirm(id); }
+function renderDeleteUnitConfirm(id){
+  const u = UNITS.find(x=>x.id===id);
+  if(!u) return;
+  openModal(`
+    <div class="mhead"><h2>Hapus "${escapeHtml(u.kode)}"?</h2><button class="mclose" onclick="closeModal()">&times;</button></div>
+    <div class="field-sub" style="margin-bottom:16px;">Pilih salah satu:</div>
+    <button class="pill-btn" style="width:100%;justify-content:center;margin-bottom:8px;" onclick="openMergeUnitPicker('${u.id}')">Gabungkan ke Unit Lain</button>
+    <div class="field-sub" style="margin-bottom:16px;">Semua data lama yang memakai "${escapeHtml(u.kode)}" dipindah ke unit tujuan, baru "${escapeHtml(u.kode)}" dihapus. Cocok kalau unit ini duplikat/salah ketik.</div>
+    <button class="icon-btn" style="width:100%;justify-content:center;color:var(--secondary);border:1px solid var(--secondary);margin-bottom:8px;" onclick="deleteUnitConfirmed('${u.id}')">${ic('trash')} Hapus Permanen (Tanpa Pindah Data)</button>
+    <div class="field-sub">Data lama TIDAK terhapus, tapi labelnya jadi "-" karena tidak terhubung ke unit manapun lagi. Cocok kalau unit ini memang sudah tidak dipakai sama sekali.</div>
+  `);
+}
+function deleteUnitConfirmed(id){
+  if(isSystemUnitId(id)){ toast('Unit bawaan ini tidak bisa dihapus'); return; }
+  UNITS = UNITS.filter(u=>u.id!==id);
+  saveUnits();
+  closeModal();
   toast('Unit dihapus');
+}
+
+/* ----- Gabungkan unit: pindahkan semua rujukan dari unit lama ke unit tujuan,
+ * baru hapus unit lama. Ini yang dipakai untuk kasus "salah ketik BT 12,
+ * sudah kadung buat unit baru BT.12, data lama masih nempel di yang salah". */
+function openMergeUnitPicker(id){ renderMergeUnitPicker(id); }
+function renderMergeUnitPicker(id){
+  const u = UNITS.find(x=>x.id===id);
+  if(!u) return;
+  const target = UNITS.filter(x=>x.id!==id && !x.isSystem);
+  if(target.length===0){
+    openModal(`
+      <div class="mhead"><h2>Gabungkan "${escapeHtml(u.kode)}"</h2><button class="mclose" onclick="closeModal()">&times;</button></div>
+      <div class="empty-note">Belum ada unit lain untuk dijadikan tujuan. Tambahkan unit tujuannya dulu lewat "+ Tambah".</div>
+    `);
+    return;
+  }
+  openModal(`
+    <div class="mhead"><h2>Gabungkan "${escapeHtml(u.kode)}"</h2><button class="mclose" onclick="closeModal()">&times;</button></div>
+    <label class="flabel">Pindahkan semua data "${escapeHtml(u.kode)}" ke:</label>
+    <select id="mergeTargetUnit">
+      ${target.map(t=>`<option value="${t.id}">${escapeHtml(t.kode)}</option>`).join('')}
+    </select>
+    <div class="field-sub" style="margin:10px 0 16px;">Setelah digabung, "${escapeHtml(u.kode)}" akan dihapus dan semua data lamanya tercatat sebagai unit tujuan. Tindakan ini tidak bisa dibatalkan.</div>
+    <button class="pill-btn" style="width:100%;justify-content:center;" onclick="mergeUnitInto('${u.id}', document.getElementById('mergeTargetUnit').value)">Gabungkan Sekarang</button>
+  `);
+}
+/* Pindahkan semua rujukan unit lama -> unit tujuan di SELURUH data app
+ * (ENTRIES/Hari Ini, Servis, Reset HM, BBM Susulan, Program Kerja, unit
+ * default akun), lalu hapus unit lama. */
+function mergeUnitInto(oldId, newId){
+  if(!oldId || !newId || oldId===newId) return;
+  let n = 0;
+  ENTRIES.forEach(e=>{ if(e.btId===oldId){ e.btId=newId; n++; } }); saveEntries();
+  SERVIS.forEach(s=>{ if(s.btId===oldId){ s.btId=newId; n++; } }); saveServis();
+  HM_RESETS.forEach(h=>{ if(h.btId===oldId){ h.btId=newId; n++; } }); saveHmResets();
+  BBM_SUSULAN.forEach(b=>{ if(b.btId===oldId){ b.btId=newId; n++; } }); saveBbmSusulan();
+  PROGRAM_RENCANA.forEach(r=>{ if(r.unitId===oldId){ r.unitId=newId; n++; } }); saveProgramRencana();
+  PROGRAM_AKTUAL.forEach(a=>{ if(a.unitId===oldId){ a.unitId=newId; n++; } }); saveProgramAktual();
+  if(USER.mainBt===oldId){ USER.mainBt=newId; saveUser(); }
+  UNITS = UNITS.filter(u=>u.id!==oldId);
+  saveUnits();
+  closeModal();
+  toast('Digabungkan, '+n+' data lama ikut pindah');
+  showScreen(document.querySelector('#bottomnav button.active').dataset.tab);
 }
 
 /* ================= KELOLA BLOK ================= */
