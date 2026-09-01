@@ -74,6 +74,7 @@ function openKelolaUnit(){
 function renderKelolaUnitModal(){
   const unitAsli = UNITS.filter(u=>!u.isSystem);
   const unitSistem = UNITS.filter(u=>u.isSystem);
+  const orphans = findOrphanUnitIds();
   openModal(`
     <div class="mhead"><h2>Kelola No Unit</h2><button class="mclose" onclick="closeModal()">&times;</button></div>
     <div style="display:flex;gap:8px;margin-bottom:12px;">
@@ -85,10 +86,102 @@ function renderKelolaUnitModal(){
         unitAsli.map(u=>`<div class="list-row" style="cursor:pointer;" onclick="openUnitEditModal('${u.id}')"><span>${escapeHtml(u.kode)}</span>${ic('edit',16)}</div>`).join('')}
     </div>
     <div class="field-sub" style="margin:8px 0 12px;">Tap sebuah unit untuk mengubah nama atau menghapusnya.</div>
+    ${orphans.length>0 ? `<div class="card card-flat" style="border:1px solid var(--secondary);cursor:pointer;margin-bottom:12px;" onclick="openOrphanUnitList()"><div class="field-sub" style="color:var(--secondary);font-weight:700;">${orphans.length} unit lama datanya masih ada tapi labelnya hilang &middot; tap untuk pulihkan</div></div>` : ''}
     <div class="field-sub" style="margin:12px 0 4px;">Bawaan aplikasi (tidak bisa dihapus)</div>
     <div class="card card-flat">
       ${unitSistem.map(u=>`<div class="list-row"><span style="color:var(--on-surface-variant);font-style:italic;">${escapeHtml(u.kode)}</span></div>`).join('')}
     </div>
+  `);
+}
+
+/* ================= UNIT YATIM (label hilang) =================
+ * Sebelum ada dialog konfirmasi kustom, "Hapus Unit" pakai confirm() bawaan
+ * browser dan langsung menghapus definisi unit dari UNITS - TANPA memindah
+ * data lama. Akibatnya semua data yang dulu memakai unit itu (ENTRIES.btId,
+ * SERVIS.btId, HM_RESETS.btId, BBM_SUSULAN.btId, PROGRAM_RENCANA.unitId,
+ * PROGRAM_AKTUAL.unitId, USER.mainBt) TETAP menyimpan ID unit itu, cuma
+ * tidak ketemu lagi definisinya di UNITS sehingga labelnya tampil "-".
+ * Fungsi di bawah mencari semua ID "yatim" begini supaya bisa dipulihkan
+ * (buat ulang unit dengan ID persis sama -> label langsung kembali) atau
+ * digabung ke unit yang sudah ada sekarang. */
+function findOrphanUnitIds(){
+  const known = new Set(UNITS.map(u=>u.id));
+  const found = {};
+  function ensure(id){
+    if(!found[id]) found[id] = {entries:0,servis:0,hmresets:0,bbm:0,rencana:0,aktual:0,mainBt:false,sampleDates:[]};
+    return found[id];
+  }
+  function hit(id, type, date){
+    if(!id || known.has(id)) return;
+    const f = ensure(id);
+    f[type]++;
+    if(date && f.sampleDates.length<3 && !f.sampleDates.includes(date)) f.sampleDates.push(date);
+  }
+  ENTRIES.forEach(e=>hit(e.btId,'entries',e.date));
+  SERVIS.forEach(s=>hit(s.btId,'servis',s.date));
+  HM_RESETS.forEach(h=>hit(h.btId,'hmresets',h.date));
+  BBM_SUSULAN.forEach(b=>hit(b.btId,'bbm',b.tanggal));
+  PROGRAM_RENCANA.forEach(r=>hit(r.unitId,'rencana',r.tanggalMulai));
+  PROGRAM_AKTUAL.forEach(a=>hit(a.unitId,'aktual',a.tanggal));
+  if(USER.mainBt && !known.has(USER.mainBt)) ensure(USER.mainBt).mainBt = true;
+  return Object.keys(found).map(id=>({id, ...found[id]}));
+}
+function orphanTotalCount(o){ return o.entries+o.servis+o.hmresets+o.bbm+o.rencana+o.aktual+(o.mainBt?1:0); }
+function openOrphanUnitList(){ renderOrphanUnitList(); }
+function renderOrphanUnitList(){
+  const orphans = findOrphanUnitIds();
+  openModal(`
+    <div class="mhead"><h2>Unit Lama (Label Hilang)</h2><button class="mclose" onclick="closeModal()">&times;</button></div>
+    ${orphans.length===0 ? '<div class="empty-note">Tidak ada lagi - semua data sudah punya label unit.</div>' : `
+    <div class="field-sub" style="margin-bottom:12px;">ID unit ini dulu terhapus, tapi datanya masih tersimpan utuh. "Pulihkan" untuk kasih nama lagi (data langsung kembali ketemu labelnya), atau "Gabungkan" untuk pindahkan ke unit yang sudah ada sekarang.</div>
+    ${orphans.map(o=>`
+      <div class="card card-flat" style="margin-bottom:10px;">
+        <div style="font-weight:700;margin-bottom:4px;">${orphanTotalCount(o)} data${o.mainBt?' &middot; termasuk unit default akun':''}</div>
+        <div class="field-sub" style="margin-bottom:8px;">${[o.entries&&o.entries+' Hari Ini',o.rencana&&o.rencana+' Program',o.aktual&&o.aktual+' Aktual',o.servis&&o.servis+' Servis',o.bbm&&o.bbm+' BBM Susulan',o.hmresets&&o.hmresets+' Reset HM'].filter(Boolean).join(' &middot; ')}${o.sampleDates.length?'<br>Contoh tanggal: '+o.sampleDates.map(fmtTanggalSingkat).join(', '):''}</div>
+        <div style="display:flex;gap:8px;">
+          <button class="pill-btn sm" onclick="promptRestoreOrphanUnit('${o.id}')">Pulihkan Sebagai Unit Baru</button>
+          <button class="pill-btn sm outline" onclick="openOrphanMergePicker('${o.id}')">Gabungkan</button>
+        </div>
+      </div>
+    `).join('')}
+    `}
+  `);
+}
+function promptRestoreOrphanUnit(id){ renderRestoreOrphanUnitModal(id); }
+function renderRestoreOrphanUnitModal(id){
+  openModal(`
+    <div class="mhead"><h2>Pulihkan Unit</h2><button class="mclose" onclick="closeModal()">&times;</button></div>
+    <label class="flabel">Nama unit ini dulu apa? (lihat contoh tanggal di layar sebelumnya untuk bantu ingat)</label>
+    <input type="text" id="restoreUnitKode" placeholder="mis. BT.12" style="text-transform:uppercase;" oninput="this.value=this.value.toUpperCase();">
+    <div class="field-sub" style="margin-bottom:14px;">Unit akan dibuat ulang dengan ID yang sama persis seperti dulu, jadi semua data lama otomatis langsung ketemu labelnya lagi - tidak ada yang perlu dipindah manual.</div>
+    <button class="pill-btn" style="width:100%;justify-content:center;" onclick="restoreOrphanUnit('${id}')">Pulihkan</button>
+  `);
+}
+function restoreOrphanUnit(id){
+  const val = document.getElementById('restoreUnitKode').value.trim().toUpperCase();
+  if(!val){ toast('Isi nama unit dulu'); return; }
+  if(UNITS.some(u=>u.kode.toLowerCase()===val.toLowerCase())){ toast('Unit ini sudah ada - pakai "Gabungkan" saja'); return; }
+  const idxSistem = UNITS.findIndex(u=>u.isSystem);
+  const baru = {id, kode:val};
+  if(idxSistem<0) UNITS.push(baru); else UNITS.splice(idxSistem, 0, baru);
+  saveUnits();
+  closeModal();
+  toast('Unit dipulihkan, label lama kembali');
+  showScreen(document.querySelector('#bottomnav button.active').dataset.tab);
+}
+function openOrphanMergePicker(id){ renderOrphanMergePicker(id); }
+function renderOrphanMergePicker(id){
+  const target = UNITS.filter(u=>!u.isSystem);
+  if(target.length===0){
+    openModal(`<div class="mhead"><h2>Gabungkan Unit Lama</h2><button class="mclose" onclick="closeModal()">&times;</button></div><div class="empty-note">Belum ada unit untuk dijadikan tujuan. Tambahkan unit dulu lewat "+ Tambah".</div>`);
+    return;
+  }
+  openModal(`
+    <div class="mhead"><h2>Gabungkan Unit Lama</h2><button class="mclose" onclick="closeModal()">&times;</button></div>
+    <label class="flabel">Pindahkan semua datanya ke:</label>
+    <select id="orphanMergeTarget">${target.map(t=>`<option value="${t.id}">${escapeHtml(t.kode)}</option>`).join('')}</select>
+    <div class="field-sub" style="margin:10px 0 16px;">Tindakan ini tidak bisa dibatalkan.</div>
+    <button class="pill-btn" style="width:100%;justify-content:center;" onclick="mergeUnitInto('${id}', document.getElementById('orphanMergeTarget').value)">Gabungkan Sekarang</button>
   `);
 }
 function addUnit(){
