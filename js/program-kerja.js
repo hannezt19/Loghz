@@ -230,7 +230,7 @@ function ensurePkAktualRow(rencanaId, tanggal){
   if(!a){
     const r = PROGRAM_RENCANA.find(x=>x.id===rencanaId);
     if(!r) return null;
-    a = {id:uid(), rencanaId, tanggal, unitId:r.unitId, sopir:r.sopir, isInti:r.isInti, layanan:r.layanan, tipe:r.tipe||'', overtimeJam:pkJamOtomatis(r.layanan, r.tipe), overtimeManual:null};
+    a = {id:uid(), rencanaId, tanggal, unitId:r.unitId, sopir:r.sopir, isInti:r.isInti, layanan:r.layanan, tipe:r.tipe||'', overtimeJam:pkJamOtomatis(r.layanan, r.tipe), overtimeManual:null, lanjutLayanan:'', lanjutTipe:'', lanjutUnitId:''};
     PROGRAM_AKTUAL.push(a);
   }
   return a;
@@ -242,7 +242,8 @@ function prunePkAktualIfSameAsProgram(rencanaId, tanggal){
   const r = PROGRAM_RENCANA.find(x=>x.id===rencanaId);
   if(!r) return;
   const sama = a.unitId===r.unitId && a.sopir===r.sopir && a.isInti===r.isInti && a.layanan===r.layanan && (a.tipe||'')===(r.tipe||'') &&
-    (a.overtimeManual===null || a.overtimeManual===undefined || a.overtimeManual===pkJamOtomatis(r.layanan, r.tipe));
+    (a.overtimeManual===null || a.overtimeManual===undefined || a.overtimeManual===pkJamOtomatis(r.layanan, r.tipe)) &&
+    !a.lanjutLayanan && !a.lanjutUnitId; // Program (rencana) tidak punya konsep "Pekerjaan Selanjutnya" - kalau salah satu ini diisi, baris Aktual WAJIB tetap ada walau field lain sama persis dengan Program, supaya isian ini tidak ikut hilang.
   if(sama) PROGRAM_AKTUAL.splice(idx,1);
 }
 function updatePkAktual(rencanaId, tanggal, field, val){
@@ -279,6 +280,28 @@ function updatePkAktualOvertime(rencanaId, tanggal, val){
   saveProgramAktual();
   renderProker();
 }
+function updatePkAktualLanjut(rencanaId, tanggal, field, val){
+  const a = ensurePkAktualRow(rencanaId, tanggal);
+  if(!a) return;
+  a[field] = val;
+  if(field==='lanjutLayanan'){
+    a.lanjutTipe = ''; // ganti Layanan lanjutan -> reset Tipe lanjutan
+    if(!val) a.lanjutUnitId = ''; // "- Tidak ada -" dipilih lagi -> bersihkan juga unit lanjutan
+  }
+  prunePkAktualIfSameAsProgram(rencanaId, tanggal);
+  saveProgramAktual();
+  renderProker();
+}
+/* Label tampilan utk Pekerjaan Selanjutnya. Kalau unit lanjutan tidak diisi
+ * (kosong) atau sama dengan unit baris utama, unitnya TIDAK ditulis ulang
+ * (laporan tetap ringkas, 1 baris/1 sel saja). Unit lanjutan cuma ditulis
+ * kalau memang beda dari unit utama baris ini. */
+function pkLanjutLabel(row){
+  if(!row || !row.lanjutLayanan) return '';
+  const svc = pkSubLayananLabel(row.lanjutLayanan, row.lanjutTipe);
+  if(row.lanjutUnitId && row.lanjutUnitId!==row.unitId) return btLabel(row.lanjutUnitId)+' '+svc;
+  return svc;
+}
 /* Baris ringkas di tabel Aktual (tap untuk buka form edit kecil) */
 function renderPkAktualRowCompact(r, tanggal){
   const a = getPkAktualFor(r.id, tanggal);
@@ -288,11 +311,12 @@ function renderPkAktualRowCompact(r, tanggal){
   const layanan = a ? a.layanan : r.layanan;
   const tipe = a ? a.tipe : r.tipe;
   const overtime = a && a.overtimeManual!=null ? a.overtimeManual : pkJamOtomatis(layanan, tipe);
+  const lanjut = a ? pkLanjutLabel(a) : '';
   return `
     <div class="pk-row pk-row-aktual" onclick="openPkAktualEdit('${r.id}','${tanggal}')">
       <span>${unitId?escapeHtml(btLabel(unitId)):'-'}</span>
       <span>${escapeHtml(sopir||'-')}${!isInti && sopir ? ' <span class="badge-noninti">(non-inti)</span>' : ''}</span>
-      <span>${escapeHtml(pkSubLayananLabel(layanan, tipe))}${a?' <span class="badge-noninti" style="color:var(--primary);">(diubah)</span>':''}</span>
+      <span style="white-space:normal;line-height:1.3;">${escapeHtml(pkSubLayananLabel(layanan, tipe))}${a?' <span class="badge-noninti" style="color:var(--primary);">(diubah)</span>':''}${lanjut?`<br><span style="font-size:10px;color:var(--on-surface-variant);">&rarr; ${escapeHtml(lanjut)}</span>`:''}</span>
       <span>${(parseFloat(overtime)||0).toFixed(1)}j</span>
       <span class="pk-row-actions"></span>
     </div>
@@ -303,6 +327,7 @@ function openPkAktualEdit(rencanaId, tanggal){ renderPkAktualEditModal(rencanaId
 function updatePkAktualModal(rencanaId, tanggal, field, val){ updatePkAktual(rencanaId, tanggal, field, val); renderPkAktualEditModal(rencanaId, tanggal); }
 function updatePkAktualSopirModal(rencanaId, tanggal, val){ updatePkAktualSopir(rencanaId, tanggal, val); renderPkAktualEditModal(rencanaId, tanggal); }
 function updatePkAktualOvertimeModal(rencanaId, tanggal, val){ updatePkAktualOvertime(rencanaId, tanggal, val); renderPkAktualEditModal(rencanaId, tanggal); }
+function updatePkAktualLanjutModal(rencanaId, tanggal, field, val){ updatePkAktualLanjut(rencanaId, tanggal, field, val); renderPkAktualEditModal(rencanaId, tanggal); }
 function renderPkAktualEditModal(rencanaId, tanggal){
   const r = PROGRAM_RENCANA.find(x=>x.id===rencanaId);
   if(!r) return;
@@ -313,6 +338,9 @@ function renderPkAktualEditModal(rencanaId, tanggal){
   const layanan = a ? a.layanan : r.layanan;
   const tipe = a ? a.tipe : r.tipe;
   const overtime = a && a.overtimeManual!=null ? a.overtimeManual : pkJamOtomatis(layanan, tipe);
+  const lanjutLayanan = a ? (a.lanjutLayanan||'') : '';
+  const lanjutTipe = a ? (a.lanjutTipe||'') : '';
+  const lanjutUnitId = a ? (a.lanjutUnitId||'') : '';
   openModal(`
     <div class="mhead"><h2>Edit Aktual</h2><button class="mclose" onclick="closeModal()">&times;</button></div>
     <div class="field-sub" style="margin-bottom:8px;">Program asli (${fmtLabel(tanggal)}): ${escapeHtml(btLabel(r.unitId))} &middot; ${escapeHtml(r.sopir||'-')} &middot; ${escapeHtml(pkSubLayananLabel(r.layanan, r.tipe))}${a?' <b style="color:var(--primary);">(sudah diubah)</b>':''}</div>
@@ -340,7 +368,27 @@ function renderPkAktualEditModal(rencanaId, tanggal){
     ` : ''}
     <label class="flabel">Jam</label>
     <input type="text" inputmode="numeric" value="${overtime}" onchange="updatePkAktualOvertimeModal('${r.id}','${tanggal}', this.value)">
-    <div class="field-sub">Otomatis dari ${pkTipeLabelFor(layanan) ? 'Layanan + '+escapeHtml(pkTipeLabelFor(layanan)) : 'Layanan'}: ${pkJamOtomatis(layanan, tipe)} jam &middot; bisa ditimpa manual di atas.</div>
+    <div class="field-sub" style="margin-bottom:14px;">Otomatis dari ${pkTipeLabelFor(layanan) ? 'Layanan + '+escapeHtml(pkTipeLabelFor(layanan)) : 'Layanan'}: ${pkJamOtomatis(layanan, tipe)} jam &middot; bisa ditimpa manual di atas.</div>
+    <div style="border-top:1px solid var(--outline-variant);padding-top:12px;">
+      <label class="flabel" style="margin-top:0;">Pekerjaan Selanjutnya <span style="font-weight:400;color:var(--on-surface-variant);">(opsional, catatan saja &mdash; tidak menambah Jam)</span></label>
+      <select onchange="updatePkAktualLanjutModal('${r.id}','${tanggal}','lanjutLayanan',this.value)">
+        <option value="" ${!lanjutLayanan?'selected':''}>- Tidak ada -</option>
+        ${JENIS_LAYANAN_LIST.map(j=>`<option value="${j}" ${lanjutLayanan===j?'selected':''}>${escapeHtml(j)}</option>`).join('')}
+      </select>
+      ${lanjutLayanan && pkTipeLabelFor(lanjutLayanan) ? `
+      <select onchange="updatePkAktualLanjutModal('${r.id}','${tanggal}','lanjutTipe',this.value)">
+        <option value="">- Pilih ${escapeHtml(pkTipeLabelFor(lanjutLayanan))} -</option>
+        ${pkTipeOptionsFor(lanjutLayanan).map(t=>`<option value="${escapeHtml(t)}" ${lanjutTipe===t?'selected':''}>${escapeHtml(t)}</option>`).join('')}
+      </select>
+      ` : ''}
+      ${lanjutLayanan ? `
+      <label class="flabel">No Unit Lanjutan <span style="font-weight:400;color:var(--on-surface-variant);">(opsional &mdash; kosongkan kalau masih unit yang sama)</span></label>
+      <select onchange="updatePkAktualLanjutModal('${r.id}','${tanggal}','lanjutUnitId',this.value)">
+        <option value="">- Sama seperti di atas (${escapeHtml(btLabel(unitId))}) -</option>
+        ${UNITS.filter(u=>!u.isSystem).map(u=>`<option value="${u.id}" ${lanjutUnitId===u.id?'selected':''}>${escapeHtml(u.kode)}</option>`).join('')}
+      </select>
+      ` : ''}
+    </div>
   `);
 }
 function renderPkAktualTab(){
@@ -367,8 +415,8 @@ function pkEffectiveRowsForDate(tanggal){
   const tandaLL = pkTandaLiburLembur(tanggal);
   return pkProgramRowsForDate(tanggal).map(r=>{
     const a = getPkAktualFor(r.id, tanggal);
-    if(a) return {tanggal, unitId:a.unitId, sopir:a.sopir, isInti:a.isInti, layanan:a.layanan, tipe:a.tipe||'', overtimeJam:(a.overtimeManual!=null?a.overtimeManual:pkJamOtomatis(a.layanan, a.tipe)), tandaLiburLembur:tandaLL};
-    return {tanggal, unitId:r.unitId, sopir:r.sopir, isInti:r.isInti, layanan:r.layanan, tipe:r.tipe||'', overtimeJam:pkJamOtomatis(r.layanan, r.tipe), tandaLiburLembur:tandaLL};
+    if(a) return {tanggal, unitId:a.unitId, sopir:a.sopir, isInti:a.isInti, layanan:a.layanan, tipe:a.tipe||'', overtimeJam:(a.overtimeManual!=null?a.overtimeManual:pkJamOtomatis(a.layanan, a.tipe)), tandaLiburLembur:tandaLL, lanjutLayanan:a.lanjutLayanan||'', lanjutTipe:a.lanjutTipe||'', lanjutUnitId:a.lanjutUnitId||''};
+    return {tanggal, unitId:r.unitId, sopir:r.sopir, isInti:r.isInti, layanan:r.layanan, tipe:r.tipe||'', overtimeJam:pkJamOtomatis(r.layanan, r.tipe), tandaLiburLembur:tandaLL, lanjutLayanan:'', lanjutTipe:'', lanjutUnitId:''};
   });
 }
 function pkDatesInPeriode(prefix){
@@ -433,7 +481,7 @@ function renderPkRekapBody(){
             </div>
             ${expanded ? `
             <div style="padding:0 0 10px 22px;">
-              ${driverRows.map(r=>`<div class="list-row" style="padding:7px 0;border-bottom:1px dashed var(--outline-variant);"><span style="font-size:12.5px;color:var(--on-surface-variant);">${fmtLabel(r.tanggal).split(', ')[1]} &middot; ${escapeHtml(btLabel(r.unitId))} &middot; ${escapeHtml(pkSubLayananLabel(r.layanan, r.tipe))}</span><span style="font-size:12.5px;">${(parseFloat(r.overtimeJam)||0).toFixed(1)} j</span></div>`).join('')}
+              ${driverRows.map(r=>`<div class="list-row" style="padding:7px 0;border-bottom:1px dashed var(--outline-variant);"><span style="font-size:12.5px;color:var(--on-surface-variant);">${fmtLabel(r.tanggal).split(', ')[1]} &middot; ${escapeHtml(btLabel(r.unitId))} &middot; ${escapeHtml(pkSubLayananLabel(r.layanan, r.tipe))}${r.lanjutLayanan?' &rarr; '+escapeHtml(pkLanjutLabel(r)):''}</span><span style="font-size:12.5px;">${(parseFloat(r.overtimeJam)||0).toFixed(1)} j</span></div>`).join('')}
             </div>` : ''}
           </div>`;
         }).join('')}
@@ -454,7 +502,7 @@ function renderPkRekapBody(){
           </div>
           ${expanded ? `
           <div style="margin-top:8px;" onclick="event.stopPropagation()">
-            ${list.map(r=>`<div class="list-row"><span>${escapeHtml(btLabel(r.unitId))} &middot; ${escapeHtml(r.sopir||'-')} &middot; ${escapeHtml(pkSubLayananLabel(r.layanan, r.tipe))}</span><span>${(parseFloat(r.overtimeJam)||0).toFixed(1)} j</span></div>`).join('')}
+            ${list.map(r=>`<div class="list-row"><span>${escapeHtml(btLabel(r.unitId))} &middot; ${escapeHtml(r.sopir||'-')} &middot; ${escapeHtml(pkSubLayananLabel(r.layanan, r.tipe))}${r.lanjutLayanan?' &rarr; '+escapeHtml(pkLanjutLabel(r)):''}</span><span>${(parseFloat(r.overtimeJam)||0).toFixed(1)} j</span></div>`).join('')}
           </div>` : ''}
         </div>
       `;}).join('')}
@@ -556,7 +604,9 @@ function pkExportRowsFiltered(dateList, selectedSet){
   dateList.forEach(d=>{ rows = rows.concat(pkEffectiveRowsForDate(d).filter(r=>selectedSet.has(r.sopir))); });
   rows.sort((a,b)=>a.tanggal.localeCompare(b.tanggal));
   const data = rows.map(r=>({
-    'Tanggal': fmtLabel(r.tanggal), 'No Unit': btLabel(r.unitId), 'Sopir': r.sopir||'-', 'Layanan': pkSubLayananLabel(r.layanan, r.tipe), 'Overtime (jam)': (parseFloat(r.overtimeJam)||0).toFixed(1),
+    'Tanggal': fmtLabel(r.tanggal), 'No Unit': btLabel(r.unitId), 'Sopir': r.sopir||'-', 'Layanan': pkSubLayananLabel(r.layanan, r.tipe),
+    'Pekerjaan Selanjutnya': r.lanjutLayanan ? pkLanjutLabel(r) : '-',
+    'Overtime (jam)': (parseFloat(r.overtimeJam)||0).toFixed(1),
     _tanggalIso: r.tanggal /* dipakai untuk penanda "(Libur)" di Excel — bukan kolom cetak */
   }));
   for(let i=data.length-1;i>0;i--){ if(rows[i].tanggal===rows[i-1].tanggal) data[i]['Tanggal']=''; }
@@ -582,7 +632,21 @@ function pkCellUnitSingkatan(row){
   if(isSystemUnitId(row.unitId)) return btLabel(row.unitId);
   const unitLabel = btLabel(row.unitId);
   const sing = pkSingkatanLayanan(row.layanan, row.tipe);
-  return [unitLabel, sing].filter(Boolean).join(' ');
+  const base = [unitLabel, sing].filter(Boolean).join(' ');
+  // Pekerjaan Selanjutnya (kalau diisi) ditambahkan sebagai "→singkatan" - pakai
+  // Singkatan yang sama (maks. 6 huruf) supaya sel matriks PDF yang sempit tetap
+  // muat. Kalau Singkatan-nya belum diatur di menu "Jam Otomatis per Layanan",
+  // bagian ini otomatis tidak ditambahkan (tidak memaksa muat teks panjang).
+  if(row.lanjutLayanan){
+    const lanjutSing = pkSingkatanLayanan(row.lanjutLayanan, row.lanjutTipe);
+    if(lanjutSing){
+      // Unit lanjutan cuma ditulis kalau beda dari unit utama baris ini - kalau
+      // sama/kosong tidak perlu diulang, biar sel matriks yang sempit tetap muat.
+      const lanjutUnitPart = (row.lanjutUnitId && row.lanjutUnitId!==row.unitId) ? btLabel(row.lanjutUnitId)+' ' : '';
+      return base+'\u2192'+lanjutUnitPart+lanjutSing;
+    }
+  }
+  return base;
 }
 /* Ambil sel gabungan untuk 1 sopir di 1 tanggal dari daftar baris efektif
  * tanggal itu (pkEffectiveRowsForDate). Kalau sopir yang sama kebetulan punya
@@ -728,7 +792,7 @@ async function doPkExport(fmt){
     if(!window.XLSX){ toast('Library Excel belum siap'); return; }
     const data = pkExportRowsFiltered(dateList, pkPrintFilter.selected);
     if(data.length===0){ toast('Tidak ada data pada filter ini'); return; }
-    const headers = ['Tanggal','No Unit','Sopir','Layanan','Overtime (jam)'];
+    const headers = ['Tanggal','No Unit','Sopir','Layanan','Pekerjaan Selanjutnya','Overtime (jam)'];
     /* Excel Program Kerja sebelumnya TIDAK punya highlight sama sekali (cuma PDF-nya).
      * Community edition SheetJS tidak bisa menulis warna latar sel di .xlsx, jadi
      * dipakai penanda teks "(Libur)" di kolom Tanggal, sama seperti export Excel lain. */
