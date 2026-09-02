@@ -315,7 +315,7 @@ function buildExportCheckGroups(){
 }
 function openExportSheet(){
   openModal(`
-    <div class="mhead"><h2>Export / Cetak Laporan</h2><button class="mclose" onclick="closeModal()">&times;</button></div>
+    <div class="mhead"><h2 id="exportSheetTitle">Export / Cetak Laporan</h2><button class="mclose" onclick="closeModal()">&times;</button></div>
     <div class="section-eyebrow">Periode</div>
     <div class="chk-row"><input type="radio" name="exp-mode" id="exp-mode-month" value="month" checked onchange="updateExpModeUI()"><label for="exp-mode-month" style="margin-left:6px;">Bulan ini</label></div>
     <div class="chk-row"><input type="radio" name="exp-mode" id="exp-mode-all" value="all" onchange="updateExpModeUI()"><label for="exp-mode-all" style="margin-left:6px;">Semua periode</label></div>
@@ -335,6 +335,7 @@ function openExportSheet(){
       <button class="btn-block outline" style="flex:1;" onclick="doExport('xlsx')">${ic('barchart')} Excel</button>
     </div>
   `);
+  wireLongPressExportTitle();
 }
 function toggleAllExportCols(){
   const boxes = document.querySelectorAll('.exp-col-chk');

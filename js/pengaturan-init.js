@@ -343,6 +343,7 @@ async function jalankanRestore(){
       // reload/setTimeout di bawah tidak sempat jalan, mis. app dibackground)
       UNITS = LS.get('v2_units', []);
       ENTRIES = LS.get('v2_entries', []);
+      CATATAN_MANDOR = LS.get('v2_catatan_mandor', []);
     }
   }catch(err){
     console.error('Gagal reconnect database setelah restore:', err);
@@ -466,6 +467,7 @@ async function bootApp(){
     PK_DRONE_TIPE_LIST = LS.get('v2_pk_dronetipe', ['ZPK','Prevatone']);
     PK_SHIFT_LIST = LS.get('v2_pk_shift', ['Pagi','Siang']);
     LAYANAN_SINGKATAN = LS.get('v2_layanan_singkatan', {});
+    CATATAN_MANDOR = LS.get('v2_catatan_mandor', []);
     migratePkDataIfNeeded(); // konversi baris Program lama (v1.0.26, tanggal tunggal) ke skema rentang v1.0.27
     migratePkJamLayananIfNeeded(); // konversi jam otomatis lama (per-Layanan) ke per-sub-tipe (Agustus 2026)
     migrateLayananSingkatanIfNeeded(); // konversi Singkatan lama (per-Layanan) ke per-sub-tipe (v1.0.33)
