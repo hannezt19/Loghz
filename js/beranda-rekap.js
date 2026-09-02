@@ -224,14 +224,18 @@ function renderBeranda(){
   const literJam = hitungLiterPerJam(bt);
 
   // 15 hari terakhir (HM + Lembur, stacked)
+  // FIX: dulu pakai ENTRIES.find() -> cuma ambil 1 entri pertama per tanggal,
+  // jadi kalau hari itu ada >1 entri (mis. ganti unit / entri tambahan),
+  // sisanya "hilang" dari grafik ini walau tetap ikut di Total HM & Overtime
+  // Bulan Ini (yang sudah benar, pakai reduce atas SEMUA entri sebulan).
+  // Sekarang disamakan: jumlahkan semua entri di tanggal itu.
   const days15 = [];
   for(let i=14;i>=0;i--){
     const d = new Date(todayIso()+'T00:00:00'); d.setDate(d.getDate()-i);
     const iso = d.getFullYear()+'-'+String(d.getMonth()+1).padStart(2,'0')+'-'+String(d.getDate()).padStart(2,'0');
-    const e = ENTRIES.find(x=>x.date===iso);
-    const a=e?parseFloat(e.hmAwal):NaN, b=e?parseFloat(e.hmAkhir):NaN;
-    const hm = (!isNaN(a)&&!isNaN(b)&&b>=a)?(b-a):0;
-    const lembur = e?(parseFloat(e.lembur)||0):0;
+    const entriesHari = ENTRIES.filter(x=>x.date===iso);
+    const hm = entriesHari.reduce((s,e)=>{ const a=parseFloat(e.hmAwal), b=parseFloat(e.hmAkhir); return s+((!isNaN(a)&&!isNaN(b)&&b>=a)?(b-a):0); },0);
+    const lembur = entriesHari.reduce((s,e)=>s+(parseFloat(e.lembur)||0),0);
     days15.push({iso, hm, lembur});
   }
   const maxTotal15 = Math.max(1, ...days15.map(d=>d.hm+d.lembur));

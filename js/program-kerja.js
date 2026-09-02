@@ -553,6 +553,18 @@ function togglePkPrintSelectAll(){
   pkPrintFilter.selected = (pkPrintFilter.selected.size >= all.length) ? new Set() : new Set(all);
   renderPkPrintFilterModal();
 }
+/* Saklar KHUSUS grup Non-inti - terpisah dari "Pilih Semua" di atas (yang
+ * tetap menyentuh SEMUA sopir termasuk inti, tidak diubah). Toggle ini hanya
+ * menambah/menghapus nama-nama non-inti dari pilihan, status centang sopir
+ * inti tidak ikut tersentuh sama sekali. */
+function togglePkPrintSelectAllNonInti(){
+  const { nonInti } = pkAllDriverNamesForFilter();
+  const allNonIntiSelected = nonInti.length>0 && nonInti.every(nm=>pkPrintFilter.selected.has(nm));
+  nonInti.forEach(nm=>{
+    if(allNonIntiSelected) pkPrintFilter.selected.delete(nm); else pkPrintFilter.selected.add(nm);
+  });
+  renderPkPrintFilterModal();
+}
 function pkPrintCheckboxRow(nama){
   const namaJs = nama.replace(/'/g,"\\'");
   const namaAttr = escapeHtml(nama).replace(/"/g,'&quot;');
@@ -571,8 +583,14 @@ function renderPkPrintFilterModal(){
     <div class="section-eyebrow section-eyebrow-row">Pilih Sopir<button class="pill-btn sm outline" onclick="togglePkPrintSelectAll()">${pkPrintFilter.selected.size>=totalOpsi && totalOpsi>0 ? 'Batal Semua' : 'Pilih Semua'}</button></div>
     ${totalOpsi===0 ? '<div class="card"><div class="empty-note">Belum ada data sopir sama sekali (dari Driver maupun baris Program).</div></div>' : `
     <div class="card card-flat" style="padding:2px 14px;max-height:280px;overflow-y:auto;">
-      ${inti.map(pkPrintCheckboxRow).join('')}
-      ${nonInti.length>0 ? `<div class="field-sub" style="font-weight:700;margin:8px 0 2px;">Non-inti</div>${nonInti.map(pkPrintCheckboxRow).join('')}` : ''}
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:0 8px;">
+        ${inti.map(pkPrintCheckboxRow).join('')}
+      </div>
+      ${nonInti.length>0 ? `
+      <div class="field-sub section-eyebrow-row" style="font-weight:700;margin:8px 0 2px;">Non-inti<button class="pill-btn sm outline" onclick="togglePkPrintSelectAllNonInti()">${nonInti.every(nm=>pkPrintFilter.selected.has(nm)) ? 'Batal Non-Inti' : 'Pilih Semua Non-Inti'}</button></div>
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:0 8px;">
+        ${nonInti.map(pkPrintCheckboxRow).join('')}
+      </div>` : ''}
     </div>`}
     <div class="field-sub" style="margin:8px 0 14px;">${pkPrintFilter.selected.size} sopir dipilih &middot; sel tanpa aktivitas dikosongkan di PDF, baris Minggu/libur nasional otomatis disorot hijau.</div>
     <button class="btn-block" onclick="confirmPkPrintFilter()">${ic('document')} Lanjutkan</button>
@@ -625,39 +643,43 @@ function pkTanggalPdfLabel(iso){
   const hari = ['Min','Sen','Sel','Rab','Kam','Jum','Sab'][d.getDay()];
   return hari+' '+d.getDate()+'/'+(d.getMonth()+1);
 }
-/* Isi kompak 1 sel Unit+Singkatan — unit sistem (Libur/Standby) cukup nama
- * unitnya saja, unit biasa digabung dengan Singkatan Layanan (kalau ada). */
+/* Isi kompak 1 sel Unit+Singkatan (BARIS UTAMA SAJA) — unit sistem
+ * (Libur/Standby) cukup nama unitnya saja, unit biasa digabung dengan
+ * Singkatan Layanan (kalau ada). Pekerjaan Selanjutnya TIDAK digabung di sini
+ * lagi (lihat pkCellLanjutSingkatan) - supaya bisa digambar sebagai baris ke-2
+ * yang terpisah di PDF, bukan disambung tanpa spasi dalam 1 baris yang bikin
+ * teks kepotong per-huruf kalau kepanjangan. */
 function pkCellUnitSingkatan(row){
   if(!row || !row.unitId) return '';
   if(isSystemUnitId(row.unitId)) return btLabel(row.unitId);
   const unitLabel = btLabel(row.unitId);
   const sing = pkSingkatanLayanan(row.layanan, row.tipe);
-  const base = [unitLabel, sing].filter(Boolean).join(' ');
-  // Pekerjaan Selanjutnya (kalau diisi) ditambahkan sebagai "→singkatan" - pakai
-  // Singkatan yang sama (maks. 6 huruf) supaya sel matriks PDF yang sempit tetap
-  // muat. Kalau Singkatan-nya belum diatur di menu "Jam Otomatis per Layanan",
-  // bagian ini otomatis tidak ditambahkan (tidak memaksa muat teks panjang).
-  if(row.lanjutLayanan){
-    const lanjutSing = pkSingkatanLayanan(row.lanjutLayanan, row.lanjutTipe);
-    if(lanjutSing){
-      // Unit lanjutan cuma ditulis kalau beda dari unit utama baris ini - kalau
-      // sama/kosong tidak perlu diulang, biar sel matriks yang sempit tetap muat.
-      const lanjutUnitPart = (row.lanjutUnitId && row.lanjutUnitId!==row.unitId) ? btLabel(row.lanjutUnitId)+' ' : '';
-      return base+'\u2192'+lanjutUnitPart+lanjutSing;
-    }
-  }
-  return base;
+  return [unitLabel, sing].filter(Boolean).join(' ');
+}
+/* Baris ke-2 (opsional) khusus Pekerjaan Selanjutnya, dgn tanda panah + spasi
+ * (bukan langsung nempel) supaya kalau toh masih kepanjangan untuk sel yang
+ * sempit, jsPDF membungkusnya di spasi terdekat, bukan di tengah kata. */
+function pkCellLanjutSingkatan(row){
+  if(!row || !row.lanjutLayanan) return '';
+  const lanjutSing = pkSingkatanLayanan(row.lanjutLayanan, row.lanjutTipe);
+  if(!lanjutSing) return '';
+  const lanjutUnitPart = (row.lanjutUnitId && row.lanjutUnitId!==row.unitId) ? btLabel(row.lanjutUnitId)+' ' : '';
+  return '\u2192 '+lanjutUnitPart+lanjutSing;
 }
 /* Ambil sel gabungan untuk 1 sopir di 1 tanggal dari daftar baris efektif
  * tanggal itu (pkEffectiveRowsForDate). Kalau sopir yang sama kebetulan punya
  * lebih dari 1 baris di tanggal yang sama (mis. 2 shift), digabung jadi 1 sel
- * (label dipisah " / ", jam OT dijumlah) supaya tabel tetap 2 kolom per sopir. */
+ * (label dipisah " / ", jam OT dijumlah) supaya tabel tetap 2 kolom per sopir.
+ * `label` = baris utama, `lanjut` = baris ke-2 opsional (Pekerjaan Selanjutnya)
+ * - sengaja dipisah, BUKAN digabung 1 baris, supaya PDF bisa menggambarnya
+ * sebagai 2 baris teks yang rapi di dalam 1 sel (lihat pkBuildPivotPdf). */
 function pkCellFor(rowsForDate, namaSopir){
   const matches = rowsForDate.filter(r=>r.sopir===namaSopir);
   if(matches.length===0) return null;
   const label = matches.map(pkCellUnitSingkatan).filter(Boolean).join(' / ');
+  const lanjut = matches.map(pkCellLanjutSingkatan).filter(Boolean).join(' / ');
   const ot = matches.reduce((s,r)=>s+(parseFloat(r.overtimeJam)||0),0);
-  return { label, ot };
+  return { label, lanjut, ot };
 }
 
 /* ================= PDF PIVOT PROKER (v1.0.32) =================
@@ -692,7 +714,11 @@ function pkBuildPivotPdf(dateList, driverNames, holidaySet){
     });
   });
 
-  const rowH = 6.2, headH1 = 9, headH2 = 6, totalRowH = 7.5;
+  // rowH dinaikkan (v1.0.35) dari 6.2 -> 9.2mm supaya tiap sel muat 2 baris teks:
+  // baris utama (Unit+Singkatan) dan baris ke-2 opsional "→ Pekerjaan Selanjutnya".
+  // Konsekuensinya jumlah baris tanggal per halaman jadi sedikit lebih sedikit,
+  // tapi tetap otomatis lanjut ke halaman berikutnya seperti biasa.
+  const rowH = 9.2, headH1 = 9, headH2 = 6, totalRowH = 7.5;
 
   chunks.forEach((chunkDrivers, chunkIdx)=>{
     if(chunkIdx>0) doc.addPage();
@@ -742,7 +768,7 @@ function pkBuildPivotPdf(dateList, driverNames, holidaySet){
       doc.setDrawColor(200,200,200);
       doc.rect(marginX, y, dateColW, rowH);
       doc.setFontSize(7.2);
-      doc.text(pkTanggalPdfLabel(dt), marginX+1.5, y+rowH-2);
+      doc.text(pkTanggalPdfLabel(dt), marginX+1.5, y+rowH/2+1.1);
       const rowsForDate = rowsByDate[dt];
       let x = marginX+dateColW;
       chunkDrivers.forEach(nm=>{
@@ -751,9 +777,19 @@ function pkBuildPivotPdf(dateList, driverNames, holidaySet){
         const cell = pkCellFor(rowsForDate, nm);
         if(cell){
           doc.setFontSize(6.5);
-          doc.text(cell.label, x+1, y+rowH-2, {maxWidth:unitColW-2});
+          if(cell.lanjut){
+            // 2 baris: baris utama di atas, "→ Pekerjaan Selanjutnya" di bawah -
+            // digambar sebagai 2 pemanggilan text() terpisah (BUKAN digabung 1
+            // string lalu dibiarkan auto-wrap), supaya posisinya selalu rapi &
+            // tidak pernah kepotong per-huruf walau kepanjangan (lihat FIX v1.0.35).
+            doc.text(cell.label, x+1, y+3.7, {maxWidth:unitColW-2});
+            doc.setFontSize(5.8);
+            doc.text(cell.lanjut, x+1, y+7.3, {maxWidth:unitColW-2});
+          } else {
+            doc.text(cell.label, x+1, y+rowH/2+1.1, {maxWidth:unitColW-2});
+          }
           doc.setFontSize(7.2);
-          doc.text(cell.ot.toFixed(1), x+unitColW+otColW-1.2, y+rowH-2, {align:'right'});
+          doc.text(cell.ot.toFixed(1), x+unitColW+otColW-1.2, y+rowH/2+1.1, {align:'right'});
         }
         x += groupW;
       });
