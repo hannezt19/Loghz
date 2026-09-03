@@ -305,9 +305,12 @@ function renderBeranda(){
         </div>`;
       }).join('')}
     </div>
-    <div style="display:flex;justify-content:flex-end;align-items:center;gap:6px;font-size:10px;color:var(--on-surface-variant);margin:2px 2px 8px;">
-      <span>${weatherLastError ? `<span style="color:var(--secondary);font-weight:700;">Gagal update, masih data lama</span> &middot; ` : ''}${WEATHER?`Diperbarui ${new Date(WEATHER.ts).toLocaleTimeString('id-ID',{hour:'2-digit',minute:'2-digit'})}`:''} &middot; sumber ${WEATHER_SOURCE_LABEL}</span>
-      ${!weatherLoading?`<button class="icon-btn" style="width:22px;height:22px;" title="Refresh cuaca" onclick="fetchWeatherIfNeeded(true)">${ic('sync',14)}</button>`:''}
+    <div style="display:flex;flex-direction:column;align-items:flex-end;gap:2px;font-size:10px;color:var(--on-surface-variant);margin:2px 2px 8px;">
+      <div style="display:flex;align-items:center;gap:6px;">
+        <span>${weatherLastError ? `<span style="color:var(--secondary);font-weight:700;">Gagal update, masih data lama</span> &middot; ` : ''}${WEATHER?`Diperbarui ${new Date(WEATHER.ts).toLocaleTimeString('id-ID',{hour:'2-digit',minute:'2-digit'})}`:''} &middot; sumber ${WEATHER_SOURCE_LABEL}</span>
+        ${!weatherLoading?`<button class="icon-btn" style="width:22px;height:22px;" title="Refresh cuaca" onclick="fetchWeatherIfNeeded(true)">${ic('sync',14)}</button>`:''}
+      </div>
+      ${weatherLastError ? `<div style="color:var(--secondary);">Detail: ${escapeHtml(weatherLastError)}</div>` : ''}
     </div>
 
     <div class="section-eyebrow">Progres Servis</div>

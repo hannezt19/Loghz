@@ -242,7 +242,11 @@ async function fetchWeatherIfNeeded(force){
     // FIX: dulu cuma console.warn (tidak kelihatan sama sekali di APK rilis) -
     // sekarang disimpan supaya renderBeranda() bisa menunjukkan ke user bahwa
     // ini masih data lama karena update terakhir gagal, bukan diam-diam gagal.
-    weatherLastError = (err && err.message) ? err.message : 'Gagal mengambil data cuaca';
+    // TypeError generik dari fetch() browser/WebView (pesannya biasanya cuma
+    // "Failed to fetch") hampir selalu berarti diblokir CORS atau memang tidak
+    // ada koneksi internet saat itu - dikasih keterangan supaya lebih jelas.
+    const raw = (err && err.message) ? err.message : 'Gagal mengambil data cuaca';
+    weatherLastError = (err instanceof TypeError) ? raw+' (kemungkinan diblokir CORS atau tidak ada internet)' : raw;
     console.warn('Gagal ambil data cuaca:', weatherLastError);
   }finally{
     weatherLoading = false;
