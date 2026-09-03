@@ -16,6 +16,7 @@ const WEATHER_MAX_AGE = 30*60*1000; // 30 menit (BMKG membatasi 60 request/menit
 let WEATHER = LS.get('v2_weather_cache', null); // {ts, utara:{...}, selatan:{...}}
 let WEATHER_LOG = LS.get('v2_weather_log', []); // [{date, utara:{...}, selatan:{...}}]
 let weatherLoading = false;
+let weatherLastError = null; // pesan error fetch terakhir, null kalau update terakhir berhasil
 function saveWeatherLog(){ LS.set('v2_weather_log', WEATHER_LOG); }
 /* Kode cuaca BMKG (field "weather" di respons API) — BEDA dari kode WMO yang dipakai
  * Open-Meteo dulu. Referensi resmi: https://data.bmkg.go.id/prakiraan-cuaca/
@@ -236,8 +237,13 @@ async function fetchWeatherIfNeeded(force){
     WEATHER = { ts: now, utara, selatan };
     LS.set('v2_weather_cache', WEATHER);
     simpanWeatherLogHariIni();
+    weatherLastError = null; // fetch berhasil - bersihkan status gagal sebelumnya kalau ada
   }catch(err){
-    console.warn('Gagal ambil data cuaca:', err && err.message ? err.message : err);
+    // FIX: dulu cuma console.warn (tidak kelihatan sama sekali di APK rilis) -
+    // sekarang disimpan supaya renderBeranda() bisa menunjukkan ke user bahwa
+    // ini masih data lama karena update terakhir gagal, bukan diam-diam gagal.
+    weatherLastError = (err && err.message) ? err.message : 'Gagal mengambil data cuaca';
+    console.warn('Gagal ambil data cuaca:', weatherLastError);
   }finally{
     weatherLoading = false;
     renderBerandaIfActive();
@@ -247,10 +253,17 @@ function renderBerandaIfActive(){
   const host = document.getElementById('screen-beranda');
   if(host && host.classList.contains('active')) renderBeranda();
 }
-/* Render ulang berkala (bukan fetch ulang data BMKG) supaya slot jam yang
- * ditampilkan di kartu Cuaca Hari Ini otomatis maju mengikuti jam berjalan
- * selama aplikasi dibiarkan terbuka, tidak "berhenti" di jam saat dibuka. */
-setInterval(renderBerandaIfActive, 5*60*1000);
+/* FIX: sebelumnya pengulang ini cuma renderBerandaIfActive() (gambar ulang
+ * pakai data LAMA supaya slot jam maju) - TIDAK PERNAH benar-benar mengecek/
+ * mengambil data baru. Akibatnya kalau app cuma dibiarkan terbuka/di-resume
+ * dari recent-apps (bukan dibuka ulang dari kondisi tertutup total, dan tidak
+ * pernah pindah-lalu-balik ke tab Beranda), cuaca tidak pernah ter-refresh
+ * sama sekali walau sudah berhari-hari - "Diperbarui" & curah hujan jadi
+ * kelihatan beku. Sekarang fetchWeatherIfNeeded() dipanggil juga di sini -
+ * fungsi itu sendiri sudah pintar (cuma benar-benar fetch kalau data sudah
+ * lebih tua dari WEATHER_MAX_AGE), lalu tetap render ulang setelahnya supaya
+ * slot jam tetap maju walau kebetulan belum waktunya fetch baru. */
+setInterval(()=>{ fetchWeatherIfNeeded(); renderBerandaIfActive(); }, 5*60*1000);
 
 /* ================= DETAIL CUACA PER JAM ================= */
 let weatherDetailState = null; // {region, idx}
@@ -303,7 +316,7 @@ function renderWeatherDetailHtml(){
     <div style="font-size:10px;color:var(--on-surface-variant);margin-top:4px;">*dihitung dari suhu &amp; kelembapan, bukan data langsung BMKG</div>
     <div style="display:flex;justify-content:space-between;font-size:12px;color:var(--on-surface-variant);margin-top:14px;">
       <span>Suhu maks/min hari ini: ${w.tmax!==null?Math.round(w.tmax):'-'}&deg;/${w.tmin!==null?Math.round(w.tmin):'-'}&deg;</span>
-      <span>Curah hujan hari ini: ${w.precipSum!==null&&w.precipSum!==undefined?w.precipSum.toFixed(1):'0.0'} mm</span>
+      <span>Prakiraan curah hujan hari ini: ${w.precipSum!==null&&w.precipSum!==undefined?w.precipSum.toFixed(1):'0.0'} mm</span>
     </div>
     <div class="section-eyebrow" style="margin-top:16px;">Tren 7 Hari &middot; Curah Hujan</div>
     ${renderTrenMingguanCuaca(region)}

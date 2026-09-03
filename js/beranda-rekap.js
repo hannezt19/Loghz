@@ -281,21 +281,22 @@ function renderBeranda(){
         const border = w.isRain ? 'border-color:#F0C4BE;' : '';
         const warnColor = w.isRain ? '#B3261E' : 'var(--success)';
         const warnText = w.isRain ? `${weatherInfo(w.repCode)[1]} ${w.rainKategori} sekitar ${jamLabel(w.rainHour)}` : 'Tidak ada potensi hujan';
-        const subText = w.isRain ? `Curah hujan ${w.rainMm.toFixed(1)} mm (per 3 jam)` : `Curah hujan hari ini ${(w.precipSum||0).toFixed(1)} mm`;
+        const subText = w.isRain ? `Prakiraan curah hujan ${w.rainMm.toFixed(1)} mm (per 3 jam)` : `Prakiraan curah hujan hari ini ${(w.precipSum||0).toFixed(1)} mm`;
         return `<div class="card" style="flex:1;padding:0;overflow:hidden;min-width:0;${border}">
           <div style="padding:14px 14px 10px;${bgTop}">
             <div style="font-size:11px;font-weight:700;color:${w.isRain?'#7A2618':'var(--on-surface-variant)'};text-transform:uppercase;letter-spacing:.05em;">${label}</div>
             <div style="display:flex;align-items:center;gap:8px;margin-top:6px;">
               <div style="font-size:26px;line-height:1;flex-shrink:0;">${curInfo[1]}</div>
               <div style="min-width:0;">
-                <div style="font-weight:800;font-size:14px;">${curSlot&&curSlot.temp!==null?Math.round(curSlot.temp):'-'}&deg;<span style="font-weight:600;font-size:10px;color:var(--on-surface-variant);"> &middot; pukul ${curSlot?jamLabel(curSlot.hour):'-'}</span></div>
+                <div style="font-weight:800;font-size:22px;line-height:1.1;">${curSlot&&curSlot.temp!==null?Math.round(curSlot.temp):'-'}&deg;</div>
+                <div style="font-size:10px;color:var(--on-surface-variant);">pukul ${curSlot?jamLabel(curSlot.hour):'-'}</div>
                 <div style="font-size:11px;color:var(--on-surface-variant);">${escapeHtml(curInfo[0])}</div>
                 <div style="font-size:10px;color:var(--on-surface-variant);margin-top:1px;">Min/Maks hari ini: ${w.tmin!==null?Math.round(w.tmin):'-'}&deg;/${w.tmax!==null?Math.round(w.tmax):'-'}&deg;</div>
               </div>
             </div>
             <div style="margin-top:8px;">
               <div style="font-size:11px;font-weight:800;color:${warnColor};">${warnText}</div>
-              <div style="font-size:10px;color:var(--on-surface-variant);margin-top:1px;">${subText}</div>
+              <div style="font-size:10px;color:var(--on-surface-variant);">${subText}</div>
             </div>
           </div>
           <div style="padding:10px 14px 12px;">
@@ -305,7 +306,7 @@ function renderBeranda(){
       }).join('')}
     </div>
     <div style="display:flex;justify-content:flex-end;align-items:center;gap:6px;font-size:10px;color:var(--on-surface-variant);margin:2px 2px 8px;">
-      <span>${WEATHER?`Diperbarui ${new Date(WEATHER.ts).toLocaleTimeString('id-ID',{hour:'2-digit',minute:'2-digit'})}`:''} &middot; sumber ${WEATHER_SOURCE_LABEL}</span>
+      <span>${weatherLastError ? `<span style="color:var(--secondary);font-weight:700;">Gagal update, masih data lama</span> &middot; ` : ''}${WEATHER?`Diperbarui ${new Date(WEATHER.ts).toLocaleTimeString('id-ID',{hour:'2-digit',minute:'2-digit'})}`:''} &middot; sumber ${WEATHER_SOURCE_LABEL}</span>
       ${!weatherLoading?`<button class="icon-btn" style="width:22px;height:22px;" title="Refresh cuaca" onclick="fetchWeatherIfNeeded(true)">${ic('sync',14)}</button>`:''}
     </div>
 
