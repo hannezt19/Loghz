@@ -100,9 +100,22 @@ function isKodeHujan(code){
 }
 /* Ambil & ringkas data 1 wilayah dari respons BMKG (data.cuaca = array 3 hari,
  * tiap hari berisi beberapa slot per-3-jam). Hanya slot HARI INI yang dipakai,
- * sisanya (H+1, H+2) diabaikan supaya perilaku sama seperti sebelumnya. */
+ * sisanya (H+1, H+2) diabaikan supaya perilaku sama seperti sebelumnya.
+ *
+ * FIX (v1.0.36): bug lama sejak fitur ini pertama dibuat - kode di sini baca
+ * `data.cuaca` langsung di level atas, padahal struktur ASLI respons BMKG
+ * (dikonfirmasi dari kode contoh resmi https://github.com/infoBMKG/data-cuaca)
+ * adalah `data.data[0].cuaca` - ada 1 lapis pembungkus "data" + array lokasi
+ * yang selama ini tidak diperhitungkan. Akibatnya `data.cuaca` SELALU
+ * undefined -> lolos jadi array kosong `(data.cuaca || [])` -> slotsToday
+ * kosong -> render tetap "berhasil" tanpa error di banyak kasus, TAPI kalau
+ * skema responsnya sedikit beda (mis. field lain berubah), errornya jadi
+ * "Format data BMKG tidak dikenali" seperti yang dilaporkan - BUKAN karena
+ * kode wilayah (adm4) salah. adm4 milik Han sudah benar, ini murni salah
+ * baca struktur JSON dari awal. */
 function ringkasCuacaWilayah(data){
-  const allSlots = [].concat.apply([], data.cuaca || []);
+  const cuacaArr = (data && data.data && data.data[0] && data.data[0].cuaca) || data.cuaca || [];
+  const allSlots = [].concat.apply([], cuacaArr);
   const todayStr = todayIso();
   const slotsToday = allSlots.map(raw=>{
     const dt = raw.local_datetime || raw.datetime || '';
@@ -212,7 +225,8 @@ async function fetchCuacaWilayah(point){
   const resp = await fetch(url);
   if(!resp.ok) throw new Error('HTTP '+resp.status);
   const data = await resp.json();
-  if(!data || !Array.isArray(data.cuaca)) throw new Error('Format data BMKG tidak dikenali (cek kode wilayah adm4)');
+  const cuacaOk = data && ((data.data && data.data[0] && Array.isArray(data.data[0].cuaca)) || Array.isArray(data.cuaca));
+  if(!cuacaOk) throw new Error('Format data BMKG tidak dikenali (cek kode wilayah adm4)');
   return ringkasCuacaWilayah(data);
 }
 function simpanWeatherLogHariIni(){
