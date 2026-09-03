@@ -67,6 +67,32 @@ jobs:
       - name: Init Capacitor project
         run: npx cap init "Log Hz" "com.hz.loghz" --web-dir=www
 
+      # FIX: WebView Capacitor menganggap semua request fetch() ke domain luar
+      # (mis. api.bmkg.go.id) sebagai cross-origin, tunduk pada aturan CORS
+      # browser biasa. Kalau server API itu tidak mengirim header
+      # Access-Control-Allow-Origin (banyak API instansi pemerintah begitu),
+      # fetch() akan SELALU gagal ("Failed to fetch") di HP walau di internet
+      # normal-normal saja - inilah kemungkinan besar penyebab cuaca BMKG
+      # tidak pernah berhasil update. CapacitorHttp mengalihkan fetch()/XHR
+      # supaya jalan lewat kode native Android (bukan mesin JS WebView), yang
+      # sama sekali tidak tunduk aturan CORS browser - tanpa perlu ubah kode
+      # fetch() yang sudah ada di js/weather.js sama sekali.
+      - name: Aktifkan CapacitorHttp (request via native, bebas CORS)
+        run: |
+          cat > capacitor.config.json << 'EOF'
+          {
+            "appId": "com.hz.loghz",
+            "appName": "Log Hz",
+            "webDir": "www",
+            "plugins": {
+              "CapacitorHttp": {
+                "enabled": true
+              }
+            }
+          }
+          EOF
+          cat capacitor.config.json
+
       - name: Tambah platform Android
         run: npx cap add android
 
