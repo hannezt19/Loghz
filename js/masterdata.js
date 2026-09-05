@@ -717,19 +717,29 @@ const HM_BARU_AMBANG = 9.9;
  * saat reset dibuat), baru segmen berikutnya dihitung dari 0 (karena meter baru
  * dianggap mulai dari titik hampir-nol sesuai HM_BARU_AMBANG).
  */
+/* FIX (v1.0.37): sebelumnya kalau ada catatan HM_RESETS dengan hmSebelumReset
+ * TIDAK VALID (null/NaN - bisa tercipta dari popup "Konfirmasi HM Baru" yang
+ * dikonfirmasi user padahal saat itu currentHmForBt() masih null, mis. karena
+ * unit baru saja dipulihkan/digabung dan datanya belum lengkap), kode ini
+ * MEMAKSA anggap "meter direset ke hampir-nol" (segStart=0) walau sama sekali
+ * tidak tahu itu benar atau tidak. Akibatnya seluruh HM sejak servis terakhir
+ * dihitung ulang dari 0 - progres servis jadi meloncat ke HM mentah penuh
+ * (seperti dilaporkan untuk BT.15). Sekarang catatan yang datanya tidak
+ * lengkap begini DILEWATI SAJA (dianggap tidak pernah terjadi), bukan
+ * dipaksa jadi titik reset - jauh lebih aman karena tidak mengubah hasil
+ * berdasarkan data yang justru tidak diketahui. */
 function hmServiceStatus(btId){
   const last = lastServisForBt(btId);
   const current = currentHmForBt(btId);
   const baseHm = last ? (parseFloat(last.hm)||0) : null;
   if(baseHm===null || current===null) return {last, current, baseHm, sisa:null};
   const resetsRelevan = HM_RESETS
-    .filter(r=>r.btId===btId && r.date>=last.date)
+    .filter(r=>r.btId===btId && r.date>=last.date && r.hmSebelumReset!=null && !isNaN(r.hmSebelumReset))
     .sort((a,b)=>a.date.localeCompare(b.date) || (a.id>b.id?1:-1));
   let sisa = 0;
   let segStart = baseHm;
   resetsRelevan.forEach(r=>{
-    const hmSebelum = (r.hmSebelumReset!=null && !isNaN(r.hmSebelumReset)) ? r.hmSebelumReset : segStart;
-    sisa += Math.max(0, hmSebelum - segStart);
+    sisa += Math.max(0, r.hmSebelumReset - segStart);
     segStart = 0; // segmen baru (setelah meter diganti) dimulai dari hampir-nol
   });
   sisa += Math.max(0, current - segStart);
