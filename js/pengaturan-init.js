@@ -427,6 +427,7 @@ async function bootApp(){
         tahunan: { lastYear:null }
       }
     });
+    migrateBackupMetaIfNeeded(); // FIX: v2_backup_meta lama (sebelum sistem berlapis) tidak punya field `rotasi` sama sekali - LS.get() cuma pakai default kalau KEY-nya belum ada sama sekali, jadi user yang sudah pernah backup sebelum update ini tetap dapat objek lama tanpa `rotasi`, bikin checkBackupBerlapis() error "Cannot read properties of undefined (reading 'harian')". Migrasi ini menambal field yang kurang tanpa menghapus riwayat yang sudah ada.
     WEATHER = LS.get('v2_weather_cache', null);
     WEATHER_LOG = LS.get('v2_weather_log', []);
   }catch(err){

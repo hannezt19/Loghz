@@ -302,6 +302,32 @@ let BACKUP_META = LS.get('v2_backup_meta', {
     tahunan: { lastYear:null }
   }
 });
+/* Migrasi v2_backup_meta lama (dari sebelum sistem berlapis harian/mingguan/
+ * bulanan/tahunan) yang belum punya field `rotasi` sama sekali - tanpa ini,
+ * checkBackupBerlapis() error "Cannot read properties of undefined (reading
+ * 'harian')" untuk siapa pun yang sudah pakai app sebelum update ini.
+ * Dipanggil sekali tiap boot (lihat pengaturan-init.js) - aman dipanggil
+ * berkali-kali, langsung berhenti kalau `rotasi` sudah ada. */
+function migrateBackupMetaIfNeeded(){
+  if(BACKUP_META.rotasi) return;
+  BACKUP_META.rotasi = {
+    harian:  { idx:0, lastDate:null },
+    mingguan:{ idx:0, lastDate:null },
+    bulanan: { idx:0, lastDate:null },
+    tahunan: { lastYear:null }
+  };
+  // lastMethod dulu isinya 'lokal'/'cloud' (metode), sekarang seharusnya nama
+  // tingkat backup ('harian' dst) - nilai lama sudah tidak nyambung kalau
+  // ditampilkan apa adanya (jadi kartu Beranda sempat menampilkan aneh
+  // "Backup terakhir: cloud"), jadi dikosongkan saja.
+  if(BACKUP_META.lastMethod==='lokal' || BACKUP_META.lastMethod==='cloud') BACKUP_META.lastMethod = null;
+  delete BACKUP_META.scheduleMode;
+  delete BACKUP_META.scheduleInterval;
+  delete BACKUP_META.scheduleDate;
+  delete BACKUP_META.autoMethod;
+  delete BACKUP_META.jadwalPernahDibuka;
+  saveBackupMeta();
+}
 /* Jumlah total data "nyata" (bukan pengaturan/cache) - dipakai rem darurat.
  * Sengaja tidak ikutkan cache cuaca dsb yang boleh kosong/berubah wajar. */
 function totalDataCount(){
