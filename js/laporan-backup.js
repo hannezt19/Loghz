@@ -268,15 +268,50 @@ async function doWeatherExport(fmt){
   closeModal();
 }
 /* ================= BACKUP & RESTORE ================= */
-/* ================= BACKUP & RESTORE (v2 — lokal + placeholder cloud) ================= */
+/* ================= BACKUP & RESTORE (v3 — berlapis: harian/mingguan/bulanan/tahunan) =================
+ * Skema (disepakati setelah insiden kehilangan data 6 Sep 2026):
+ *  - HARIAN  : 3 slot berputar (harian-1/2/3.json), ditimpa tiap hari sekali
+ *  - MINGGUAN: 3 slot berputar (mingguan-1/2/3.json), ditimpa tiap hari Minggu sekali
+ *  - BULANAN : 3 slot berputar (bulanan-1/2/3.json), ditimpa tiap tanggal 1 sekali
+ *  - TAHUNAN : file baru tiap pergantian tahun (tahunan-2026.json, dst), TIDAK PERNAH
+ *              ditimpa/dihapus otomatis - arsip permanen.
+ * Semua tingkatan disimpan LOKAL (folder privat app) DAN diupload ke Dropbox
+ * (kalau tersambung) - ukuran 1 backup cuma sekitar 2 MB (isi terbesarnya
+ * gambar peta, bukan data kerja), jadi tidak akan pernah bikin penyimpanan
+ * penuh walau disimpan bertahun-tahun.
+ *
+ * "Rem darurat": SEBELUM menimpa slot apa pun (atau membuat file tahunan
+ * baru), jumlah data saat ini dibandingkan dengan jumlah data backup
+ * terakhir yang berhasil (BACKUP_META.lastKnownDataCount). Kalau datanya
+ * tiba-tiba kosong atau anjlok drastis (kurang dari separuh), backup
+ * DIBATALKAN - tidak ada slot yang ditimpa - dan dicatat sebagai peringatan
+ * permanen (lastSkippedBackup) yang tetap tampil di layar Pengaturan sampai
+ * dilihat sendiri, kapan pun itu (tidak sekadar toast sekilas).
+ */
 const BACKUP_FOLDER = 'backups';
-const BACKUP_FILENAME = 'backup-terakhir.json'; // model "ditimpa": selalu 1 file, ditimpa tiap backup
-const BACKUP_AUTO_DAYS = 30;
+const BACKUP_TIERS = ['harian','mingguan','bulanan']; // jumlah slot berputar per tingkat, semuanya 3
+const BACKUP_SLOTS_PER_TIER = 3;
 let BACKUP_META = LS.get('v2_backup_meta', {
   lastBackupAt:null, lastMethod:null, autoEnabled:true,
-  scheduleMode:'interval', scheduleInterval:BACKUP_AUTO_DAYS, scheduleDate:5, autoMethod:'lokal',
-  jadwalPernahDibuka:false
+  lastKnownDataCount:null,
+  lastSkippedBackup:null, // {at, tier, jumlahSekarang, jumlahTerakhirBaik}
+  rotasi: {
+    harian:  { idx:0, lastDate:null },   // lastDate: 'YYYY-MM-DD'
+    mingguan:{ idx:0, lastDate:null },
+    bulanan: { idx:0, lastDate:null },
+    tahunan: { lastYear:null }
+  }
 });
+/* Jumlah total data "nyata" (bukan pengaturan/cache) - dipakai rem darurat.
+ * Sengaja tidak ikutkan cache cuaca dsb yang boleh kosong/berubah wajar. */
+function totalDataCount(){
+  return (ENTRIES?ENTRIES.length:0) + (PROGRAM_RENCANA?PROGRAM_RENCANA.length:0) +
+    (PROGRAM_AKTUAL?PROGRAM_AKTUAL.length:0) + (SERVIS?SERVIS.length:0) +
+    (CATATAN_MANDOR?CATATAN_MANDOR.length:0);
+}
+function namaFileBackupLokal(tier, idxAtauTahun){
+  return tier==='tahunan' ? ('tahunan-'+idxAtauTahun+'.json') : (tier+'-'+(idxAtauTahun+1)+'.json');
+}
 
 /* ================= DROPBOX (Tahap 2, migrasi dari Google Drive) =================
  * Login pakai OAuth 2.0 + PKCE (tanpa client secret, aman dipakai di app publik/mobile).
@@ -434,18 +469,14 @@ async function getDropboxAccessToken(interactive){
   return getDropboxAccessToken(false);
 }
 
-/** Path file backup bulan berjalan di dalam App folder Dropbox, format /LogHz_Backup_YYYY-MM.json. */
-function getDropboxBackupFilename(date){
-  const d = date || new Date();
-  const yyyy = d.getFullYear();
-  const mm = String(d.getMonth() + 1).padStart(2, '0');
-  return '/LogHz_Backup_' + yyyy + '-' + mm + '.json';
-}
-
-/** Upload/timpa file backup bulan berjalan ke Dropbox (path langsung, tidak perlu cari folder/ID). */
-async function uploadBackupToDropbox(blob, interactive){
+/** Upload/timpa 1 file backup ke Dropbox. `filename` HARUS sama persis dengan
+ * nama file lokalnya (harian-1.json, mingguan-2.json, tahunan-2026.json, dst)
+ * supaya rotasi di Dropbox konsisten dengan rotasi di HP - dulu semua tingkat
+ * malah menimpa 1 file bulanan yang sama di Dropbox, jadi Dropbox tidak ikut
+ * "berlapis" walau lokal sudah. */
+async function uploadBackupToDropbox(blob, interactive, filename){
   const token = await getDropboxAccessToken(interactive);
-  const path = getDropboxBackupFilename();
+  const path = '/LogHz_Backup_' + filename;
   const text = await blob.text();
   const res = await fetch('https://content.dropboxapi.com/2/files/upload', {
     method: 'POST',
@@ -462,14 +493,17 @@ async function uploadBackupToDropbox(blob, interactive){
   return path;
 }
 
-/** Upload ulang manual dari file backup lokal yang sudah ada — dipanggil dari Riwayat Backup. */
+/** Upload ulang manual dari file backup lokal TERAKHIR yang sudah ada (tingkat apa pun
+ * yang paling baru jalan) — dipanggil dari Riwayat Backup. */
 async function uploadUlangKeDropboxManual(){
   try{
-    const base64 = await bacaBackupFilePersisten();
-    if(!base64){ toast('Tidak ada file backup lokal untuk diupload'); return; }
+    const filename = BACKUP_META.lastFileName;
+    if(!filename){ toast('Belum ada file backup lokal untuk diupload'); return; }
+    const base64 = await bacaBackupFileBernama(filename);
+    if(!base64){ toast('File backup tidak ditemukan di HP ini'); return; }
     toast('Mengunggah ke Dropbox...');
     const blob = await (await fetch('data:application/json;base64,'+base64)).blob();
-    await uploadBackupToDropbox(blob, true);
+    await uploadBackupToDropbox(blob, true, filename);
     BACKUP_META.uploadedToCloud = true;
     await saveBackupMeta();
     toast('Berhasil diupload ke Dropbox');
@@ -510,69 +544,92 @@ async function buildBackupPayload(){
   return { backup, blob: new Blob([json], {type:'application/json'}) };
 }
 /* Tulis file backup ke folder privat aplikasi (persisten, tidak hilang saat 'clear cache') */
-async function writeBackupFilePersisten(blob){
+async function tulisBackupFileBernama(blob, filename){
   if(!isNativeApp() || !window.Capacitor.Plugins || !window.Capacitor.Plugins.Filesystem) return null;
   try{
     const { Filesystem } = window.Capacitor.Plugins;
     const base64 = await blobToBase64(blob);
-    const written = await Filesystem.writeFile({ path: BACKUP_FOLDER+'/'+BACKUP_FILENAME, data: base64, directory: 'DATA', recursive: true });
+    const written = await Filesystem.writeFile({ path: BACKUP_FOLDER+'/'+filename, data: base64, directory: 'DATA', recursive: true });
     return written.uri || null;
   }catch(err){
-    console.warn('Gagal simpan backup persisten:', err && err.message ? err.message : err);
+    console.warn('Gagal simpan backup lokal ('+filename+'):', err && err.message ? err.message : err);
     return null;
   }
 }
-async function bacaBackupFilePersisten(){
+async function bacaBackupFileBernama(filename){
   if(!isNativeApp() || !window.Capacitor.Plugins || !window.Capacitor.Plugins.Filesystem) return null;
   try{
     const { Filesystem } = window.Capacitor.Plugins;
-    const res = await Filesystem.readFile({ path: BACKUP_FOLDER+'/'+BACKUP_FILENAME, directory: 'DATA' });
+    const res = await Filesystem.readFile({ path: BACKUP_FOLDER+'/'+filename, directory: 'DATA' });
     return res.data; // base64
   }catch(err){ return null; }
 }
-/* Jalankan backup — dipanggil dari popup manual atau auto-backup bulanan (silent=true) */
-async function buatBackupSekarang(method, silent){
+/* Jalankan backup untuk 1 tingkat (harian/mingguan/bulanan/tahunan) - dipanggil
+ * dari tombol "Backup" manual (tier='harian', silent=false) atau dari
+ * checkBackupBerlapis() saat jadwal jatuh tempo (silent=true). */
+async function jalankanBackupTier(tier, silent){
   try{
-    if(!silent) toast('Menyiapkan backup...');
-    const { blob } = await buildBackupPayload();
-    const uriPersisten = await writeBackupFilePersisten(blob);
-
-    let uploadedToCloud = false;
-    if(method==='cloud'){
-      try{
-        await uploadBackupToDropbox(blob, !silent); // interaktif kalau bukan auto-backup senyap
-        uploadedToCloud = true;
-        BACKUP_META.lastCloudError = null; // upload kali ini sukses, hapus jejak error lama
-      }catch(err){
-        console.error('Gagal upload ke Dropbox, tetap simpan Lokal:', err);
-        if(!silent) toast('Gagal upload ke Dropbox — backup tetap tersimpan di HP');
-        // FIX: sebelumnya error ini ditelan diam-diam kalau silent=true (auto-backup),
-        // jadi kalau sesi akun cloud putus, app akan terus "gagal diam-diam" tiap
-        // bulan tanpa Anda pernah tahu. Sekarang jejaknya disimpan supaya tampil sebagai
-        // peringatan di layar Pengaturan, walau backup keseluruhan tetap dianggap sukses
-        // (karena Lokal berhasil).
-        BACKUP_META.lastCloudError = { at: new Date().toISOString(), msg: (err && err.message) || String(err) };
-      }
+    const jumlahSekarang = totalDataCount();
+    const jumlahTerakhirBaik = BACKUP_META.lastKnownDataCount;
+    // REM DARURAT: kalau sebelumnya sudah pernah ada backup dengan data > 0,
+    // tapi sekarang datanya kosong total atau anjlok lebih dari separuh -
+    // batalkan, JANGAN timpa slot/file apa pun. Dicatat sebagai peringatan
+    // permanen (bukan toast sekilas) supaya tetap kelihatan kapan pun app
+    // dibuka lagi, walau berhari-hari kemudian.
+    if(jumlahTerakhirBaik!=null && jumlahTerakhirBaik>0 && (jumlahSekarang===0 || jumlahSekarang < jumlahTerakhirBaik*0.5)){
+      BACKUP_META.lastSkippedBackup = { at: new Date().toISOString(), tier, jumlahSekarang, jumlahTerakhirBaik };
+      await saveBackupMeta();
+      if(!silent) toast('Backup dibatalkan - data tiba-tiba jauh berkurang, backup lama TIDAK ditimpa demi keamanan');
+      return;
     }
 
-    // tetap tawarkan share/unduh manual (kecuali auto-backup silent, cukup simpan persisten saja)
+    if(!silent) toast('Menyiapkan backup...');
+    const { blob } = await buildBackupPayload();
+
+    const filename = tier==='tahunan'
+      ? namaFileBackupLokal('tahunan', new Date().getFullYear())
+      : namaFileBackupLokal(tier, BACKUP_META.rotasi[tier].idx);
+    await tulisBackupFileBernama(blob, filename);
+
+    let uploadedToCloud = false;
+    try{
+      await uploadBackupToDropbox(blob, !silent, filename); // interaktif kalau bukan auto-backup senyap
+      uploadedToCloud = true;
+      BACKUP_META.lastCloudError = null; // upload kali ini sukses, hapus jejak error lama
+    }catch(err){
+      console.error('Gagal upload ke Dropbox, tetap simpan Lokal:', err);
+      if(!silent) toast('Gagal upload ke Dropbox — backup tetap tersimpan di HP');
+      // Jejaknya disimpan supaya tampil sebagai peringatan di layar Pengaturan,
+      // walau backup keseluruhan tetap dianggap sukses (karena Lokal berhasil).
+      BACKUP_META.lastCloudError = { at: new Date().toISOString(), msg: (err && err.message) || String(err) };
+    }
+
+    // tetap tawarkan share/unduh manual (kecuali auto-backup silent)
     if(!silent){
       await saveOrShareBlob(blob, 'backup-loghm-'+todayIso()+'.json');
     }
+
+    if(tier==='tahunan'){
+      BACKUP_META.rotasi.tahunan.lastYear = new Date().getFullYear();
+    } else {
+      const rot = BACKUP_META.rotasi[tier];
+      rot.lastDate = todayIso();
+      rot.idx = (rot.idx + 1) % BACKUP_SLOTS_PER_TIER;
+    }
     BACKUP_META.lastBackupAt = new Date().toISOString();
-    BACKUP_META.lastMethod = method;
-    BACKUP_META.lastFileUri = uriPersisten;
+    BACKUP_META.lastMethod = tier;
+    BACKUP_META.lastFileName = filename;
     BACKUP_META.uploadedToCloud = uploadedToCloud;
+    BACKUP_META.lastKnownDataCount = jumlahSekarang;
     BACKUP_META.lastBackupError = null; // backup kali ini sukses, hapus jejak error lama
     await saveBackupMeta();
-    const labelMetode = uploadedToCloud ? 'Dropbox' : 'Lokal';
-    const gagalCloud = method==='cloud' && !uploadedToCloud;
+    const labelTier = {harian:'Harian', mingguan:'Mingguan', bulanan:'Bulanan', tahunan:'Tahunan'}[tier] || tier;
     toast(silent
-      ? (gagalCloud ? 'Backup otomatis tersimpan di HP — upload ke Dropbox gagal' : ('Backup otomatis bulanan berhasil dibuat ('+labelMetode+')'))
-      : (gagalCloud ? 'Backup tersimpan di HP — upload ke Dropbox gagal' : 'Backup berhasil dibuat ('+labelMetode+')'));
+      ? ('Backup otomatis ('+labelTier+') berhasil'+(uploadedToCloud?' - HP + Dropbox':' - tersimpan di HP'))
+      : (uploadedToCloud ? 'Backup berhasil dibuat (HP + Dropbox)' : 'Backup tersimpan di HP — upload Dropbox gagal'));
   }catch(err){
     console.error('Gagal membuat backup:', err);
-    toast('Gagal membuat backup');
+    if(!silent) toast('Gagal membuat backup');
     // Simpan jejaknya (bukan cuma toast sekilas) supaya kelihatan di layar Pengaturan
     // walau user tidak sempat lihat toast-nya — terutama untuk backup otomatis senyap.
     BACKUP_META.lastBackupError = { at: new Date().toISOString(), msg: (err && err.message) || String(err) };
@@ -580,7 +637,9 @@ async function buatBackupSekarang(method, silent){
   }
 }
 async function bagikanUlangBackup(){
-  const base64 = await bacaBackupFilePersisten();
+  const filename = BACKUP_META.lastFileName;
+  if(!filename){ toast('Belum ada file backup di HP ini'); return; }
+  const base64 = await bacaBackupFileBernama(filename);
   if(!base64){ toast('File backup tidak ditemukan di HP ini'); return; }
   try{
     const blob = await (await fetch('data:application/json;base64,'+base64)).blob();

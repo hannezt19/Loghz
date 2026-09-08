@@ -247,10 +247,18 @@ function renderBeranda(){
   const svcInterval = serviceIntervalForBt(bt);
   ({statusColor, statusText, svcPct} = svcStatusInfo(svc, svcInterval));
 
+  const cmSkip = BACKUP_META.lastSkippedBackup;
+  const cmLast = BACKUP_META.lastBackupAt;
+  const statusBackupHtml = cmSkip
+    ? `<div style="font-size:11px;margin-top:6px;color:#FFE0DC;">${ic('warning',12)} Auto-backup ${labelTierBackup(cmSkip.tier)} dilewati - data anjlok, cek Pengaturan</div>`
+    : (cmLast
+        ? `<div style="font-size:11px;margin-top:6px;color:rgba(255,255,255,.7);">Backup terakhir: ${labelTierBackup(BACKUP_META.lastMethod)} &middot; ${new Date(cmLast).toLocaleDateString('id-ID',{day:'numeric',month:'short'})} &middot; ${BACKUP_META.uploadedToCloud?'HP+Dropbox':'HP saja'}</div>`
+        : `<div style="font-size:11px;margin-top:6px;color:rgba(255,255,255,.7);">Belum pernah backup</div>`);
   host.innerHTML = `
     <div class="card" style="background:var(--primary);color:#fff;border:none;">
       <div class="field-sub" style="color:rgba(255,255,255,.85);">${fmtLabel(todayIso())}</div>
       <div style="font-size:18px;font-weight:800;margin-top:2px;">${escapeHtml(USER.name||'Halo!')}</div>
+      ${statusBackupHtml}
     </div>
 
     ${belumIsiHariIni ? `
