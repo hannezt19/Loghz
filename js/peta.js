@@ -391,8 +391,23 @@ function getExportRows(){
     const wlog = getWeatherLogForDate(e.date);
     return {
       'Tanggal': fmtLabel(e.date), 'No Unit': btLabel(e.btId), 'Jenis Layanan': e.jenisLayanan||'-', 'Detail': detail||'-', 'Lokasi': lokasi||'-',
-      'Absen Berangkat': e.absenBerangkat||'-', 'Absen Pulang': e.absenPulang||'-', 'Istirahat': e.istirahat?'':'Lembur',
-      'HM Awal': e.hmAwal||'-', 'HM Akhir': e.hmAkhir||'-', 'HM Terpakai': hmTerpakai, 'BBM (L)': fmtLiterID((parseFloat(e.bbmLiter)||0)/1000), 'Lembur (j)': e.lembur||'0', 'Lembur Final': computeLemburFinal(e).toFixed(1),
+      /* FIX: rumus lama `e.istirahat?'':'Lembur'` KEBALIK (harusnya tampilkan
+       * jam istirahat kalau memang istirahat, bukan malah dikosongkan) DAN
+       * tidak memperhitungkan entri tambahan (isSecondary) sama sekali - entri
+       * tambahan tidak punya konsep istirahat sendiri (dibuat tanpa field
+       * istirahat/istMulai/istSelesai), jadi e.istirahat selalu undefined lalu
+       * kena cabang else dan ikut tertulis "Lembur" walau tidak relevan sama
+       * sekali. Sekarang: entri tambahan -> "-", entri utama istirahat -> jam
+       * istirahatnya, entri utama non-istirahat -> "Lembur" (seperti maksud
+       * awal). */
+      'Absen Berangkat': e.absenBerangkat||'-', 'Absen Pulang': e.absenPulang||'-',
+      'Istirahat': e.isSecondary ? '-' : (e.istirahat ? ((e.istMulai||'-')+'-'+(e.istSelesai||'-')) : 'Lembur'),
+      'HM Awal': e.hmAwal||'-', 'HM Akhir': e.hmAkhir||'-', 'HM Terpakai': hmTerpakai, 'BBM (L)': fmtLiterID((parseFloat(e.bbmLiter)||0)/1000),
+      // FIX: entri tambahan tidak punya kolom Jam Lembur sama sekali di form Hari
+      // Ini (e.lembur selalu kosong), jadi dulu tampil "0" / "0.0" yang menyesatkan
+      // (seolah memang 0 jam lembur, padahal memang tidak berlaku/tidak diisi).
+      'Lembur (j)': e.isSecondary ? '-' : (e.lembur||'0'),
+      'Lembur Final': e.isSecondary ? '-' : computeLemburFinal(e).toFixed(1),
       'BU/TU': cuacaCellText(wlog && wlog.utara), 'BS/TS': cuacaCellText(wlog && wlog.selatan),
       'Catatan': e.catatan||'',
       _dateIso: e.date /* dipakai untuk highlight Minggu/libur nasional di PDF & penanda di Excel — bukan kolom cetak */

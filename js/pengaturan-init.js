@@ -304,6 +304,7 @@ function blobToBase64(blob){
     reader.readAsDataURL(blob);
   });
 }
+let _shareInProgress = false; // FIX: 2 pemanggilan Share.share() bersamaan (mis. backup manual + export PDF hampir berbarengan) bikin Android menolak yang kedua dengan pesan mentah "Can't share while sharing is in progress" - dicegah + dikasih pesan yang lebih ramah.
 async function saveOrShareBlob(blob, filename){
   if(isNativeApp() && window.Capacitor.Plugins && window.Capacitor.Plugins.Filesystem){
     try{
@@ -311,13 +312,26 @@ async function saveOrShareBlob(blob, filename){
       const base64 = await blobToBase64(blob);
       const written = await Filesystem.writeFile({ path: filename, data: base64, directory: 'CACHE', recursive: true });
       if(window.Capacitor.Plugins.Share){
-        await window.Capacitor.Plugins.Share.share({ title: filename, url: written.uri, dialogTitle: 'Simpan atau bagikan file' });
-        return 'shared';
+        if(_shareInProgress){
+          toast('Masih ada proses "bagikan file" lain yang berjalan - tunggu sebentar lalu coba lagi');
+          return 'busy';
+        }
+        _shareInProgress = true;
+        try{
+          await window.Capacitor.Plugins.Share.share({ title: filename, url: written.uri, dialogTitle: 'Simpan atau bagikan file' });
+          return 'shared';
+        } finally {
+          _shareInProgress = false;
+        }
       }
       return 'saved-native';
     }catch(err){
       const msg = err && err.message ? err.message : JSON.stringify(err);
-      if(!/cancel/i.test(msg)) alert('Gagal simpan: '+msg);
+      if(/sharing is in progress/i.test(msg)){
+        toast('Masih ada proses "bagikan file" lain yang berjalan - tunggu sebentar lalu coba lagi');
+      } else if(!/cancel/i.test(msg)){
+        alert('Gagal simpan: '+msg);
+      }
     }
   }
   try{
