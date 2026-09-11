@@ -101,6 +101,23 @@ function addPkRencanaRow(){
   renderProker();
   openPkRencanaEdit(r.id);
 }
+/* Ubah Tanggal Mulai/Sampai KHUSUS 1 baris Program ini - dipakai persis untuk
+ * kasus "jadwal 7-12, tapi tanggal 9 ada sopir tambahan baru": tambahkan baris
+ * lewat "+ Tambah" seperti biasa (defaultnya ikut rentang filter atas), lalu
+ * di sini sempit-kan sendiri jadi 9-12 supaya tidak ikut kepakai di tanggal
+ * 7-8 yang sebenarnya belum butuh sopir ini - baris/sopir lain sama sekali
+ * tidak ikut berubah. */
+function updatePkRencanaTanggalModal(rowId, field, val){
+  const r = PROGRAM_RENCANA.find(x=>x.id===rowId);
+  if(!r || !val) return;
+  const mulaiBaru = field==='tanggalMulai' ? val : r.tanggalMulai;
+  const sampaiBaru = field==='tanggalSampai' ? val : r.tanggalSampai;
+  if(sampaiBaru < mulaiBaru){ toast('Tanggal Sampai tidak boleh sebelum Tanggal Mulai'); renderPkRencanaEditModal(rowId); return; }
+  r[field] = val;
+  saveProgramRencana();
+  renderProker();
+  renderPkRencanaEditModal(rowId);
+}
 function updatePkRencanaField(rowId, field, val){
   const r = PROGRAM_RENCANA.find(x=>x.id===rowId);
   if(!r) return;
@@ -165,7 +182,11 @@ function renderPkRencanaEditModal(rowId){
   const driverSelectVal = r.isInti ? ((DRIVER_LIST.find(d=>d.nama===r.sopir)||{}).id || '') : '__LAINNYA__';
   openModal(`
     <div class="mhead"><h2>Edit Program</h2><button class="mclose" onclick="closeModal()">&times;</button></div>
-    <div class="field-sub" style="margin-bottom:8px;">Berlaku: ${fmtLabel(r.tanggalMulai)}${r.tanggalSampai!==r.tanggalMulai ? ' &ndash; '+fmtLabel(r.tanggalSampai) : ''} &middot; ubah rentang tanggal lewat Tanggal Mulai/Sampai di atas tabel Program.</div>
+    <div class="field-sub" style="margin-bottom:4px;">Berlaku untuk baris ini saja (tidak ikut berubah kalau baris lain diedit):</div>
+    <div class="grid2" style="margin-bottom:10px;">
+      <div><label class="flabel" style="font-weight:400;">Tanggal Mulai</label><input type="date" value="${r.tanggalMulai}" onchange="updatePkRencanaTanggalModal('${r.id}','tanggalMulai',this.value)"></div>
+      <div><label class="flabel" style="font-weight:400;">Tanggal Sampai</label><input type="date" value="${r.tanggalSampai}" onchange="updatePkRencanaTanggalModal('${r.id}','tanggalSampai',this.value)"></div>
+    </div>
     <label class="flabel">No Unit</label>
     <select onchange="updatePkRencanaFieldModal('${r.id}','unitId',this.value)">
       <option value="">- Pilih -</option>
