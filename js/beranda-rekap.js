@@ -485,10 +485,21 @@ function missingDays(){
   }
   return days;
 }
+/* FIX: dulu cuma cocokkan tanggal+unit, jadi 2 entri unit sama di hari yang
+ * sama tapi LAYANANNYA BEDA (mis. prevatone vs antagonis - dua pekerjaan sah
+ * yang memang dilakukan hari itu juga) ikut ditandai "duplikat", padahal
+ * bukan kesalahan sama sekali. Sekarang ikut membandingkan jenisLayanan -
+ * cuma ditandai kalau tanggal+unit+layanan-nya SAMA PERSIS (baru itu memang
+ * terlihat seperti entri yang kebetulan/tidak sengaja terulang). */
 function findDuplicateDates(){
   const count = {};
-  ENTRIES.forEach(e=>{ const k=e.date+'|'+e.btId; count[k]=(count[k]||0)+1; });
-  return new Set(Object.keys(count).filter(k=>count[k]>1));
+  ENTRIES.forEach(e=>{ const k=e.date+'|'+e.btId+'|'+(e.jenisLayanan||''); count[k]=(count[k]||0)+1; });
+  const dup = new Set();
+  ENTRIES.forEach(e=>{
+    const k = e.date+'|'+e.btId+'|'+(e.jenisLayanan||'');
+    if(count[k] > 1) dup.add(e.date+'|'+e.btId+'|'+e.id);
+  });
+  return dup;
 }
 function openBackfill(dateIso){
   if(!USER.mainBt || UNITS.length===0){ toast('Isi Pengaturan Akun & Kelola No Unit dulu'); return; }
@@ -537,7 +548,7 @@ function renderRekapPribadiHtml(){
     <div class="section-eyebrow section-eyebrow-row">Riwayat Lengkap<button class="pill-btn sm" onclick="openBackfill(todayIso())">+ Tambah</button></div>
     ${sorted.length===0 ? '<div class="card"><div class="empty-note">Belum ada riwayat.</div></div>' :
       sorted.map(e=>{
-        const isDup = dupDates.has(e.date+'|'+e.btId);
+        const isDup = dupDates.has(e.date+'|'+e.btId+'|'+e.id);
         return `
         <div class="card" style="${isDup?'border-color:var(--danger);':''}">
           <div style="display:flex;justify-content:space-between;align-items:center;gap:10px;">
