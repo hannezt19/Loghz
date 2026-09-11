@@ -419,16 +419,33 @@ function renderPkAktualTab(){
     <div class="chk-row"><input type="checkbox" id="pk-tandaLL" ${pkTandaLiburLembur(pkAktualTanggal)?'checked':''} onchange="togglePkTandaLiburLembur('${pkAktualTanggal}', this.checked)"><label for="pk-tandaLL" style="margin-left:6px;">Tanggal Libur/Lembur (dipakai filter Rekap)</label></div>
   `;
   if(programHariIni.length===0){
-    return header + `<div class="card"><div class="empty-note">Belum ada Program yang berlaku di tanggal ini. Isi Program dulu di sub-tab Program.</div></div>`;
+    return header + `<div class="card"><div class="empty-note">Belum ada Program yang berlaku di tanggal ini.</div></div>
+      <button class="btn-block" style="width:100%;margin-top:10px;" onclick="addPkRencanaRowForAktualDate()">${ic('plus')} Tambah Unit &amp; Sopir untuk ${fmtLabel(pkAktualTanggal)}</button>`;
   }
   return header + `
-    <div class="section-eyebrow">Aktual ${fmtLabel(pkAktualTanggal)}</div>
+    <div class="section-eyebrow section-eyebrow-row">Aktual ${fmtLabel(pkAktualTanggal)}<button class="pill-btn sm" onclick="addPkRencanaRowForAktualDate()">+ Tambah</button></div>
     <div class="pk-table">
       <div class="pk-row pk-row-head pk-row-aktual"><span>No Unit</span><span>Sopir</span><span>Layanan</span><span>OT</span><span></span></div>
       ${programHariIni.map(r=>renderPkAktualRowCompact(r, pkAktualTanggal)).join('')}
     </div>
     <div class="field-sub">Tap baris untuk mengoreksi realisasi hari ini &middot; kalau tidak disentuh, dianggap sesuai Program.</div>
   `;
+}
+/* Tambah unit+sopir baru langsung dari tab Aktual, TANPA perlu ke tab Program
+ * dulu - cocok untuk kebutuhan dadakan/dinamis di 1 hari saja (mis. sopir
+ * tambahan yang cuma dibutuhkan hari ini). Di baliknya tetap membuat 1 baris
+ * Program biasa (karena Aktual memang selalu diturunkan dari Program), tapi
+ * rentang tanggalnya otomatis cuma HARI INI SAJA (tanggalMulai=tanggalSampai=
+ * tanggal Aktual yang sedang dibuka) - kalau ternyata perlu diperpanjang ke
+ * beberapa hari lagi, tinggal ubah Tanggal Sampai di modal Edit Program yang
+ * langsung kebuka (sudah bisa diedit per-baris sejak perbaikan sebelumnya). */
+function addPkRencanaRowForAktualDate(){
+  const tgl = pkAktualTanggal;
+  const r = {id:uid(), tanggalMulai:tgl, tanggalSampai:tgl, unitId:'', sopir:'', isInti:true, layanan:'', tipe:''};
+  PROGRAM_RENCANA.push(r);
+  saveProgramRencana();
+  renderProker();
+  openPkRencanaEdit(r.id);
 }
 
 /* ----- Sub-tab: REKAP (dalam modul Program Kerja) ----- */
