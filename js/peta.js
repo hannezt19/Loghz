@@ -379,18 +379,32 @@ function getExportRows(){
   }
   rows.sort((a,b)=>a.date.localeCompare(b.date));
   const headers = getSelectedColumns();
+  const detailUntukLayanan = (e, jenis, suffix) => {
+    const fk = (name)=>name+suffix;
+    if(jenis==='Antar/Jemput Tenaga') return [e[fk('tipeAntar')], e[fk('kegiatan')]].filter(Boolean).join(' / ');
+    if(jenis==='Muat Tebu') return [e[fk('muatTipe')], e[fk('tonaseKg')]?e[fk('tonaseKg')]+' kg':''].filter(Boolean).join(' / ');
+    if(jenis==='Drone') return e[fk('droneJenis')]||'';
+    if(jenis==='Operator') return e[fk('shift')]||'';
+    return '';
+  };
+  const lokasiUntukLayanan = (e, jenis, suffix) => {
+    const fk = (name)=>name+suffix;
+    return jenis==='Muat Tebu' ? [e[fk('lokasiMuat')],e[fk('lokasiBongkar')]].filter(Boolean).join(' -> ') : (e[fk('lokasi')]||'');
+  };
   const data = rows.map(e=>{
-    let detail = '';
-    if(e.jenisLayanan==='Antar/Jemput Tenaga') detail = [e.tipeAntar, e.kegiatan].filter(Boolean).join(' / ');
-    else if(e.jenisLayanan==='Muat Tebu') detail = [e.muatTipe, e.tonaseKg?e.tonaseKg+' kg':''].filter(Boolean).join(' / ');
-    else if(e.jenisLayanan==='Drone') detail = e.droneJenis||'';
-    else if(e.jenisLayanan==='Operator') detail = e.shift||'';
-    const lokasi = e.jenisLayanan==='Muat Tebu' ? [e.lokasiMuat,e.lokasiBongkar].filter(Boolean).join(' -> ') : (e.lokasi||'');
+    /* Kalau entri ini punya Jenis Layanan ke-2 (unit sama, hari sama - mis.
+     * semprot 2 bahan berbeda), kolom Jenis Layanan/Detail/Lokasi dibuat 2
+     * baris (dipisah \n) - jspdf-autotable & Excel dua-duanya render \n
+     * sebagai baris baru DALAM 1 sel yang sama, bukan baris tabel terpisah. */
+    const jenisList = (e.adaLayanan2 && e.jenisLayanan2) ? [e.jenisLayanan, e.jenisLayanan2] : [e.jenisLayanan];
+    const jenisLayananCol = jenisList.map(j=>j||'-').join('\n');
+    const detailCol = jenisList.map((j,i)=>detailUntukLayanan(e, j, i===0?'':'2')||'-').join('\n');
+    const lokasiCol = jenisList.map((j,i)=>lokasiUntukLayanan(e, j, i===0?'':'2')||'-').join('\n');
     const ha=parseFloat(e.hmAwal), hb=parseFloat(e.hmAkhir);
     const hmTerpakai = (!isNaN(ha)&&!isNaN(hb)&&hb>=ha) ? (hb-ha).toFixed(1) : '-';
     const wlog = getWeatherLogForDate(e.date);
     return {
-      'Tanggal': fmtLabel(e.date), 'No Unit': btLabel(e.btId), 'Jenis Layanan': e.jenisLayanan||'-', 'Detail': detail||'-', 'Lokasi': lokasi||'-',
+      'Tanggal': fmtLabel(e.date), 'No Unit': btLabel(e.btId), 'Jenis Layanan': jenisLayananCol, 'Detail': detailCol, 'Lokasi': lokasiCol,
       /* FIX: rumus lama `e.istirahat?'':'Lembur'` KEBALIK (harusnya tampilkan
        * jam istirahat kalau memang istirahat, bukan malah dikosongkan) DAN
        * tidak memperhitungkan entri tambahan (isSecondary) sama sekali - entri
@@ -525,6 +539,16 @@ async function doExport(fmt){
           const raw = data.row.raw || {};
           if(raw._dateIso && isHolidayHighlightDate(raw._dateIso, holidaySet)){
             data.cell.styles.fillColor = [211,242,211];
+          }
+          // Kalau tanggal baris ini SAMA dengan baris sebelumnya (mis. beberapa
+          // unit dicatat di hari yang sama), garis pembatas ATAS dihilangkan
+          // di semua kolom - supaya grup 1 hari itu terlihat menyatu sampai
+          // kolom Catatan, bukan kelihatan seperti baris-baris terpisah.
+          const prevRaw = rows[data.row.index - 1];
+          if(prevRaw && raw._dateIso && prevRaw._dateIso === raw._dateIso){
+            const lw = data.cell.styles.lineWidth;
+            const d = (typeof lw==='number') ? lw : 0.1;
+            data.cell.styles.lineWidth = { top:0, right:d, bottom:d, left:d };
           }
         }
       }

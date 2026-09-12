@@ -208,16 +208,77 @@ function handleSelectCustom(fieldKey, val){
   if(val==='__custom__'){
     const typed = prompt('Ketik nilai baru:');
     if(!typed){ renderHari(); return; }
-    if(fieldKey==='jenisLayanan'){ if(!JENIS_LAYANAN_LIST.includes(typed)){ JENIS_LAYANAN_LIST.push(typed); saveJenisList(); } }
-    else if(fieldKey==='tipeAntar'){ if(!TIPE_ANTAR_LIST.includes(typed)){ TIPE_ANTAR_LIST.push(typed); saveTipeAntarList(); } }
-    else if(fieldKey==='kegiatan'){ if(!KEGIATAN_LIST.includes(typed)){ KEGIATAN_LIST.push(typed); saveKegiatanList(); } }
-    else if(fieldKey==='muatTipe'){ if(!MUAT_TIPE_LIST.includes(typed)){ MUAT_TIPE_LIST.push(typed); saveMuatTipeList(); } }
-    else if(fieldKey==='droneJenis'){ if(!DRONE_JENIS_LIST.includes(typed)){ DRONE_JENIS_LIST.push(typed); saveDroneJenisList(); } }
-    else if(fieldKey==='shift'){ if(!SHIFT_LIST.includes(typed)){ SHIFT_LIST.push(typed); saveShiftList(); } }
+    const baseKey = fieldKey.endsWith('2') ? fieldKey.slice(0,-1) : fieldKey; // dukung field Jenis Layanan ke-2 (mis. 'jenisLayanan2') supaya tetap dikenali sebagai jenis yang sama
+    if(baseKey==='jenisLayanan'){ if(!JENIS_LAYANAN_LIST.includes(typed)){ JENIS_LAYANAN_LIST.push(typed); saveJenisList(); } }
+    else if(baseKey==='tipeAntar'){ if(!TIPE_ANTAR_LIST.includes(typed)){ TIPE_ANTAR_LIST.push(typed); saveTipeAntarList(); } }
+    else if(baseKey==='kegiatan'){ if(!KEGIATAN_LIST.includes(typed)){ KEGIATAN_LIST.push(typed); saveKegiatanList(); } }
+    else if(baseKey==='muatTipe'){ if(!MUAT_TIPE_LIST.includes(typed)){ MUAT_TIPE_LIST.push(typed); saveMuatTipeList(); } }
+    else if(baseKey==='droneJenis'){ if(!DRONE_JENIS_LIST.includes(typed)){ DRONE_JENIS_LIST.push(typed); saveDroneJenisList(); } }
+    else if(baseKey==='shift'){ if(!SHIFT_LIST.includes(typed)){ SHIFT_LIST.push(typed); saveShiftList(); } }
     quickSave(fieldKey, typed);
   } else {
     quickSave(fieldKey, val);
   }
+  renderHari();
+}
+/* Field detail Jenis Layanan yang sama dipakai di 2 tempat (entri utama &
+ * entri tambahan) DAN 2 slot (layanan pertama, opsional layanan ke-2 kalau
+ * unit yang sama dapat 2 pekerjaan di hari yang sama - mis. semprot prevatone
+ * + antagonis). Dibuat 1 fungsi supaya tidak dobel-tulis 4x. `e.isSecondary`
+ * menentukan dipakai quickSave (entri utama, implisit "hari ini") atau
+ * quickSaveEntry (entri tambahan, eksplisit per id). */
+function renderJenisLayananFields(e, suffix){
+  const isSec = !!e.isSecondary;
+  const fk = (name)=>name+suffix;
+  const jenis = e[fk('jenisLayanan')];
+  const sel = (field, list) => isSec ? selectWithCustomHari(e.id, fk(field), list, e[fk(field)]) : selectWithCustom(fk(field), list, e[fk(field)]);
+  const chg = (field) => isSec ? `quickSaveEntry('${e.id}','${fk(field)}', this.value)` : `quickSave('${fk(field)}', this.value)`;
+  const lokasiInput = (field) => `<input type="text" list="lokasiSuggest" oninput="onLokasiInput(this)" onfocus="onLokasiFocus(this)" value="${escapeHtml(e[fk(field)]||'')}" onchange="${chg(field)}">`;
+  return `
+    ${sel('jenisLayanan', JENIS_LAYANAN_LIST)}
+    ${jenis==='Antar/Jemput Tenaga' ? `
+      <div class="grid2" style="margin-top:8px;">
+        <div><label class="flabel">Tipe</label>${sel('tipeAntar', TIPE_ANTAR_LIST)}</div>
+        <div><label class="flabel">Kegiatan</label>${sel('kegiatan', KEGIATAN_LIST)}</div>
+      </div>
+      <label class="flabel">Lokasi</label>${lokasiInput('lokasi')}
+    ` : ''}
+    ${jenis==='Muat Tebu' ? `
+      <div style="margin-top:8px;"><label class="flabel">Tipe</label>${sel('muatTipe', MUAT_TIPE_LIST)}</div>
+      ${e[fk('muatTipe')]==='Produksi' ? `
+        <label class="flabel">Tonase (kg)</label><input type="text" inputmode="numeric" value="${escapeHtml(fmtThousandsLive(e[fk('tonaseKg')]||''))}" oninput="this.value=fmtThousandsLive(this.value)" onchange="${isSec?`quickSaveEntry('${e.id}','${fk('tonaseKg')}', stripDots(this.value))`:`quickSave('${fk('tonaseKg')}', stripDots(this.value))`}">
+        <label class="flabel">Lokasi</label>${lokasiInput('lokasi')}
+      ` : ''}
+      ${e[fk('muatTipe')]==='Bibit' ? `
+      <div class="grid2">
+        <div><label class="flabel">Lokasi Muat</label>${lokasiInput('lokasiMuat')}</div>
+        <div><label class="flabel">Lokasi Bongkar</label>${lokasiInput('lokasiBongkar')}</div>
+      </div>` : ''}
+    ` : ''}
+    ${jenis==='Drone' ? `
+      <div style="margin-top:8px;"><label class="flabel">Jenis Drone</label>${sel('droneJenis', DRONE_JENIS_LIST)}</div>
+      <label class="flabel">Lokasi</label>${lokasiInput('lokasi')}
+    ` : ''}
+    ${jenis==='Operator' ? `
+      <div style="margin-top:8px;"><label class="flabel">Shift</label>${sel('shift', SHIFT_LIST)}</div>
+      <label class="flabel">Lokasi</label>${lokasiInput('lokasi')}
+    ` : ''}
+    ${jenis && !['Antar/Jemput Tenaga','Muat Tebu','Drone','Operator'].includes(jenis) ? `
+      <label class="flabel">Lokasi</label>${lokasiInput('lokasi')}
+    ` : ''}
+  `;
+}
+const LAYANAN2_FIELDS = ['jenisLayanan2','tipeAntar2','kegiatan2','muatTipe2','tonaseKg2','lokasi2','lokasiMuat2','lokasiBongkar2','droneJenis2','shift2'];
+/* Tambah/hapus Jenis Layanan ke-2 - KHUSUS unit yang sama, hari yang sama
+ * (mis. semprot 2 bahan berbeda). Kalau perlu pekerjaan di UNIT lain di hari
+ * yang sama, itu tetap pakai "+ Tambah Unit" (Entri Tambahan) seperti biasa,
+ * bukan ini. Dibatasi maksimal 2 (tidak ada Jenis Layanan ke-3). */
+function toggleJenisLayanan2(entryId){
+  const e = entryId ? ENTRIES.find(x=>x.id===entryId) : getTodayEntry();
+  if(!e) return;
+  e.adaLayanan2 = !e.adaLayanan2;
+  if(!e.adaLayanan2){ LAYANAN2_FIELDS.forEach(k=>{ delete e[k]; }); }
+  saveEntries();
   renderHari();
 }
 function renderHari(){
@@ -227,7 +288,6 @@ function renderHari(){
     return;
   }
   const e = getTodayEntry();
-  const jenis = e.jenisLayanan;
   if(isSystemUnitId(e.btId)){
     // Mode Libur/Standby: tidak ada form kerja sama sekali. Cukup pilih
     // No Unit = Libur/Standby sebagai penanda hari itu tidak bekerja —
@@ -264,48 +324,16 @@ function renderHari(){
     <div class="section-eyebrow">Jenis Layanan</div>
     <div class="card">
       <label class="flabel">Jenis Layanan</label>
-      ${selectWithCustom('jenisLayanan', JENIS_LAYANAN_LIST, jenis)}
-
-      ${jenis==='Antar/Jemput Tenaga' ? `
-        <div class="grid2" style="margin-top:8px;">
-          <div><label class="flabel">Tipe</label>${selectWithCustom('tipeAntar', TIPE_ANTAR_LIST, e.tipeAntar)}</div>
-          <div><label class="flabel">Kegiatan</label>${selectWithCustom('kegiatan', KEGIATAN_LIST, e.kegiatan)}</div>
-        </div>
-        <label class="flabel">Lokasi</label>
-        <input type="text" list="lokasiSuggest" oninput="onLokasiInput(this)" onfocus="onLokasiFocus(this)" value="${escapeHtml(e.lokasi)}" onchange="quickSave('lokasi', this.value)" placeholder="mis. Blok 14 BU 31">
-      ` : ''}
-
-      ${jenis==='Muat Tebu' ? `
-        <div style="margin-top:8px;"><label class="flabel">Tipe</label>${selectWithCustom('muatTipe', MUAT_TIPE_LIST, e.muatTipe)}</div>
-        ${e.muatTipe==='Produksi' ? `
-          <label class="flabel">Tonase (kg)</label><input type="text" inputmode="numeric" value="${escapeHtml(fmtThousandsLive(e.tonaseKg))}" oninput="this.value=fmtThousandsLive(this.value)" onchange="quickSave('tonaseKg', stripDots(this.value))">
-          <label class="flabel">Lokasi</label>
-          <input type="text" list="lokasiSuggest" oninput="onLokasiInput(this)" onfocus="onLokasiFocus(this)" value="${escapeHtml(e.lokasi)}" onchange="quickSave('lokasi', this.value)">
-        ` : ''}
-        ${e.muatTipe==='Bibit' ? `
-        <div class="grid2">
-          <div><label class="flabel">Lokasi Muat</label><input type="text" list="lokasiSuggest" oninput="onLokasiInput(this)" onfocus="onLokasiFocus(this)" value="${escapeHtml(e.lokasiMuat)}" onchange="quickSave('lokasiMuat', this.value)"></div>
-          <div><label class="flabel">Lokasi Bongkar</label><input type="text" list="lokasiSuggest" oninput="onLokasiInput(this)" onfocus="onLokasiFocus(this)" value="${escapeHtml(e.lokasiBongkar)}" onchange="quickSave('lokasiBongkar', this.value)"></div>
-        </div>` : ''}
-      ` : ''}
-
-      ${jenis==='Drone' ? `
-        <div style="margin-top:8px;"><label class="flabel">Jenis Drone</label>${selectWithCustom('droneJenis', DRONE_JENIS_LIST, e.droneJenis)}</div>
-        <label class="flabel">Lokasi</label>
-        <input type="text" list="lokasiSuggest" oninput="onLokasiInput(this)" onfocus="onLokasiFocus(this)" value="${escapeHtml(e.lokasi)}" onchange="quickSave('lokasi', this.value)">
-      ` : ''}
-
-      ${jenis==='Operator' ? `
-        <div style="margin-top:8px;"><label class="flabel">Shift</label>${selectWithCustom('shift', SHIFT_LIST, e.shift)}</div>
-        <label class="flabel">Lokasi</label>
-        <input type="text" list="lokasiSuggest" oninput="onLokasiInput(this)" onfocus="onLokasiFocus(this)" value="${escapeHtml(e.lokasi)}" onchange="quickSave('lokasi', this.value)">
-      ` : ''}
-      ${jenis && !['Antar/Jemput Tenaga','Muat Tebu','Drone','Operator'].includes(jenis) ? `
-        <label class="flabel">Lokasi</label>
-        <input type="text" list="lokasiSuggest" oninput="onLokasiInput(this)" onfocus="onLokasiFocus(this)" value="${escapeHtml(e.lokasi)}" onchange="quickSave('lokasi', this.value)">
-      ` : ''}
-      
+      ${renderJenisLayananFields(e, '')}
     </div>
+    ${e.adaLayanan2 ? `
+    <div class="card" style="margin-top:8px;">
+      <div class="section-eyebrow-row" style="margin:0 0 6px;"><label class="flabel" style="margin:0;">Jenis Layanan ke-2 (unit sama, hari sama)</label><button class="icon-btn" style="color:var(--secondary);" onclick="toggleJenisLayanan2()">${ic('trash')}</button></div>
+      ${renderJenisLayananFields(e, '2')}
+    </div>
+    ` : `
+    <button class="pill-btn sm outline" style="margin-top:8px;" onclick="toggleJenisLayanan2()">${ic('plus')} Tambah Jenis Layanan (unit sama, hari sama)</button>
+    `}
 
     <div class="section-eyebrow">Absen &amp; Istirahat</div>
     <div class="card">
@@ -346,6 +374,10 @@ function getSecondaryUnitsToday(){
   return ENTRIES.filter(x=>x.date===todayIso() && x.isSecondary);
 }
 function addSecondaryUnit(){
+  // Maksimal 3 unit per hari (1 unit utama + 2 unit tambahan) - sesuai
+  // pengalaman lapangan, tidak pernah lebih dari itu dalam 1 hari.
+  const totalUnitHariIni = 1 + getSecondaryUnitsToday().length;
+  if(totalUnitHariIni >= 3){ toast('Maksimal 3 unit per hari'); return; }
   const e = {id:uid(), date:todayIso(), btId:'', hmAwal:'', hmAkhir:'', bbmLiter:'', lembur:'', catatan:'', sopir:'',
     jenisLayanan:'', tipeAntar:'', kegiatan:'', muatTipe:'', tonaseKg:'', lokasi:'', lokasiMuat:'', lokasiBongkar:'',
     droneJenis:'', shift:'', isSecondary:true};
@@ -391,12 +423,13 @@ function handleSelectCustomHari(entryId, fieldKey, val){
   if(val==='__custom__'){
     const typed = prompt('Ketik nilai baru:');
     if(!typed){ renderHari(); return; }
-    if(fieldKey==='jenisLayanan'){ if(!JENIS_LAYANAN_LIST.includes(typed)){ JENIS_LAYANAN_LIST.push(typed); saveJenisList(); } }
-    else if(fieldKey==='tipeAntar'){ if(!TIPE_ANTAR_LIST.includes(typed)){ TIPE_ANTAR_LIST.push(typed); saveTipeAntarList(); } }
-    else if(fieldKey==='kegiatan'){ if(!KEGIATAN_LIST.includes(typed)){ KEGIATAN_LIST.push(typed); saveKegiatanList(); } }
-    else if(fieldKey==='muatTipe'){ if(!MUAT_TIPE_LIST.includes(typed)){ MUAT_TIPE_LIST.push(typed); saveMuatTipeList(); } }
-    else if(fieldKey==='droneJenis'){ if(!DRONE_JENIS_LIST.includes(typed)){ DRONE_JENIS_LIST.push(typed); saveDroneJenisList(); } }
-    else if(fieldKey==='shift'){ if(!SHIFT_LIST.includes(typed)){ SHIFT_LIST.push(typed); saveShiftList(); } }
+    const baseKey = fieldKey.endsWith('2') ? fieldKey.slice(0,-1) : fieldKey;
+    if(baseKey==='jenisLayanan'){ if(!JENIS_LAYANAN_LIST.includes(typed)){ JENIS_LAYANAN_LIST.push(typed); saveJenisList(); } }
+    else if(baseKey==='tipeAntar'){ if(!TIPE_ANTAR_LIST.includes(typed)){ TIPE_ANTAR_LIST.push(typed); saveTipeAntarList(); } }
+    else if(baseKey==='kegiatan'){ if(!KEGIATAN_LIST.includes(typed)){ KEGIATAN_LIST.push(typed); saveKegiatanList(); } }
+    else if(baseKey==='muatTipe'){ if(!MUAT_TIPE_LIST.includes(typed)){ MUAT_TIPE_LIST.push(typed); saveMuatTipeList(); } }
+    else if(baseKey==='droneJenis'){ if(!DRONE_JENIS_LIST.includes(typed)){ DRONE_JENIS_LIST.push(typed); saveDroneJenisList(); } }
+    else if(baseKey==='shift'){ if(!SHIFT_LIST.includes(typed)){ SHIFT_LIST.push(typed); saveShiftList(); } }
     quickSaveEntry(entryId, fieldKey, typed);
   } else {
     quickSaveEntry(entryId, fieldKey, val);
@@ -413,7 +446,6 @@ function checkHmWarning2(entryId){
   if(warnEl) warnEl.innerHTML = bad ? '<div class="field-sub" style="color:var(--danger);">'+ic('warning')+' HM Akhir lebih kecil dari HM Awal.</div>' : '';
 }
 function renderSecondaryUnitCard(e, idx){
-  const jenis = e.jenisLayanan;
   if(isSystemUnitId(e.btId)){
     return `
       <div class="section-eyebrow section-eyebrow-row">Unit Tambahan #${idx} &middot; ${e.btId===UNIT_LIBUR_ID?'Libur':'Standby'}<button class="icon-btn" onclick="deleteSecondaryUnit('${e.id}')">${ic('trash')}</button></div>
@@ -437,46 +469,16 @@ function renderSecondaryUnitCard(e, idx){
       </select>
 
       <label class="flabel" style="margin-top:8px;">Jenis Layanan</label>
-      ${selectWithCustomHari(e.id,'jenisLayanan', JENIS_LAYANAN_LIST, jenis)}
+      ${renderJenisLayananFields(e, '')}
 
-      ${jenis==='Antar/Jemput Tenaga' ? `
-        <div class="grid2" style="margin-top:8px;">
-          <div><label class="flabel">Tipe</label>${selectWithCustomHari(e.id,'tipeAntar', TIPE_ANTAR_LIST, e.tipeAntar)}</div>
-          <div><label class="flabel">Kegiatan</label>${selectWithCustomHari(e.id,'kegiatan', KEGIATAN_LIST, e.kegiatan)}</div>
-        </div>
-        <label class="flabel">Lokasi</label>
-        <input type="text" list="lokasiSuggest" oninput="onLokasiInput(this)" onfocus="onLokasiFocus(this)" value="${escapeHtml(e.lokasi)}" onchange="quickSaveEntry('${e.id}','lokasi', this.value)">
-      ` : ''}
-
-      ${jenis==='Muat Tebu' ? `
-        <div style="margin-top:8px;"><label class="flabel">Tipe</label>${selectWithCustomHari(e.id,'muatTipe', MUAT_TIPE_LIST, e.muatTipe)}</div>
-        ${e.muatTipe==='Produksi' ? `
-          <label class="flabel">Tonase (kg)</label><input type="text" inputmode="numeric" value="${escapeHtml(fmtThousandsLive(e.tonaseKg))}" oninput="this.value=fmtThousandsLive(this.value)" onchange="quickSaveEntry('${e.id}','tonaseKg', stripDots(this.value))">
-          <label class="flabel">Lokasi</label>
-          <input type="text" list="lokasiSuggest" oninput="onLokasiInput(this)" onfocus="onLokasiFocus(this)" value="${escapeHtml(e.lokasi)}" onchange="quickSaveEntry('${e.id}','lokasi', this.value)">
-        ` : ''}
-        ${e.muatTipe==='Bibit' ? `
-        <div class="grid2">
-          <div><label class="flabel">Lokasi Muat</label><input type="text" list="lokasiSuggest" oninput="onLokasiInput(this)" onfocus="onLokasiFocus(this)" value="${escapeHtml(e.lokasiMuat)}" onchange="quickSaveEntry('${e.id}','lokasiMuat', this.value)"></div>
-          <div><label class="flabel">Lokasi Bongkar</label><input type="text" list="lokasiSuggest" oninput="onLokasiInput(this)" onfocus="onLokasiFocus(this)" value="${escapeHtml(e.lokasiBongkar)}" onchange="quickSaveEntry('${e.id}','lokasiBongkar', this.value)"></div>
-        </div>` : ''}
-      ` : ''}
-
-      ${jenis==='Drone' ? `
-        <div style="margin-top:8px;"><label class="flabel">Jenis Drone</label>${selectWithCustomHari(e.id,'droneJenis', DRONE_JENIS_LIST, e.droneJenis)}</div>
-        <label class="flabel">Lokasi</label>
-        <input type="text" list="lokasiSuggest" oninput="onLokasiInput(this)" onfocus="onLokasiFocus(this)" value="${escapeHtml(e.lokasi)}" onchange="quickSaveEntry('${e.id}','lokasi', this.value)">
-      ` : ''}
-
-      ${jenis==='Operator' ? `
-        <div style="margin-top:8px;"><label class="flabel">Shift</label>${selectWithCustomHari(e.id,'shift', SHIFT_LIST, e.shift)}</div>
-        <label class="flabel">Lokasi</label>
-        <input type="text" list="lokasiSuggest" oninput="onLokasiInput(this)" onfocus="onLokasiFocus(this)" value="${escapeHtml(e.lokasi)}" onchange="quickSaveEntry('${e.id}','lokasi', this.value)">
-      ` : ''}
-      ${jenis && !['Antar/Jemput Tenaga','Muat Tebu','Drone','Operator'].includes(jenis) ? `
-        <label class="flabel">Lokasi</label>
-        <input type="text" list="lokasiSuggest" oninput="onLokasiInput(this)" onfocus="onLokasiFocus(this)" value="${escapeHtml(e.lokasi)}" onchange="quickSaveEntry('${e.id}','lokasi', this.value)">
-      ` : ''}
+      ${e.adaLayanan2 ? `
+      <div style="border-top:1px solid var(--outline-variant);margin-top:10px;padding-top:10px;">
+        <div class="section-eyebrow-row" style="margin:0 0 6px;"><label class="flabel" style="margin:0;">Jenis Layanan ke-2 (unit sama, hari sama)</label><button class="icon-btn" style="color:var(--secondary);" onclick="toggleJenisLayanan2('${e.id}')">${ic('trash')}</button></div>
+        ${renderJenisLayananFields(e, '2')}
+      </div>
+      ` : `
+      <button class="pill-btn sm outline" style="margin-top:8px;" onclick="toggleJenisLayanan2('${e.id}')">${ic('plus')} Tambah Jenis Layanan (unit sama, hari sama)</button>
+      `}
 
       <div class="grid2" style="margin-top:8px;">
         <div><label class="flabel">HM Awal</label><input type="text" inputmode="numeric" value="${escapeHtml(e.hmAwal)}" oninput="this.value=fmtHmLive(this.value)" onchange="quickSaveEntry('${e.id}','hmAwal', this.value);checkHmWarning2('${e.id}')" id="qf2-hmA-${e.id}"></div>
@@ -490,13 +492,21 @@ function renderSecondaryUnitCard(e, idx){
       <textarea rows="2" onchange="quickSaveEntry('${e.id}','catatan', this.value)">${escapeHtml(e.catatan)}</textarea>
     </div>`;
 }
+function entryTipeSingleLabel(jenis, e, suffix){
+  const fk = (name)=>name+suffix;
+  if(!jenis) return '';
+  if(jenis==='Antar/Jemput Tenaga') return e[fk('tipeAntar')] || jenis;
+  if(jenis==='Muat Tebu') return e[fk('muatTipe')] || jenis;
+  if(jenis==='Drone') return e[fk('droneJenis')] || jenis;
+  if(jenis==='Operator') return e[fk('shift')] || jenis;
+  return jenis;
+}
 function entryTipeLabel(e){
-  if(!e.jenisLayanan) return '-';
-  if(e.jenisLayanan==='Antar/Jemput Tenaga') return e.tipeAntar || e.jenisLayanan;
-  if(e.jenisLayanan==='Muat Tebu') return e.muatTipe || e.jenisLayanan;
-  if(e.jenisLayanan==='Drone') return e.droneJenis || e.jenisLayanan;
-  if(e.jenisLayanan==='Operator') return e.shift || e.jenisLayanan;
-  return e.jenisLayanan;
+  const utama = entryTipeSingleLabel(e.jenisLayanan, e, '');
+  if(!utama) return '-';
+  if(!e.adaLayanan2 || !e.jenisLayanan2) return utama;
+  const kedua = entryTipeSingleLabel(e.jenisLayanan2, e, '2');
+  return kedua ? (utama+' + '+kedua) : utama;
 }
 function lokasiSuggestions(){
   const set = new Set();
