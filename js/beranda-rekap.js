@@ -414,12 +414,13 @@ function handleEditSelectCustom(entryId, fieldKey, val){
   if(val==='__custom__'){
     const typed = prompt('Ketik nilai baru:');
     if(!typed){ expandedRowId=entryId; renderRekap(); return; }
-    if(fieldKey==='jenisLayanan'){ if(!JENIS_LAYANAN_LIST.includes(typed)){ JENIS_LAYANAN_LIST.push(typed); saveJenisList(); } }
-    else if(fieldKey==='tipeAntar'){ if(!TIPE_ANTAR_LIST.includes(typed)){ TIPE_ANTAR_LIST.push(typed); saveTipeAntarList(); } }
-    else if(fieldKey==='kegiatan'){ if(!KEGIATAN_LIST.includes(typed)){ KEGIATAN_LIST.push(typed); saveKegiatanList(); } }
-    else if(fieldKey==='muatTipe'){ if(!MUAT_TIPE_LIST.includes(typed)){ MUAT_TIPE_LIST.push(typed); saveMuatTipeList(); } }
-    else if(fieldKey==='droneJenis'){ if(!DRONE_JENIS_LIST.includes(typed)){ DRONE_JENIS_LIST.push(typed); saveDroneJenisList(); } }
-    else if(fieldKey==='shift'){ if(!SHIFT_LIST.includes(typed)){ SHIFT_LIST.push(typed); saveShiftList(); } }
+    const baseKey = fieldKey.endsWith('2') ? fieldKey.slice(0,-1) : fieldKey;
+    if(baseKey==='jenisLayanan'){ if(!JENIS_LAYANAN_LIST.includes(typed)){ JENIS_LAYANAN_LIST.push(typed); saveJenisList(); } }
+    else if(baseKey==='tipeAntar'){ if(!TIPE_ANTAR_LIST.includes(typed)){ TIPE_ANTAR_LIST.push(typed); saveTipeAntarList(); } }
+    else if(baseKey==='kegiatan'){ if(!KEGIATAN_LIST.includes(typed)){ KEGIATAN_LIST.push(typed); saveKegiatanList(); } }
+    else if(baseKey==='muatTipe'){ if(!MUAT_TIPE_LIST.includes(typed)){ MUAT_TIPE_LIST.push(typed); saveMuatTipeList(); } }
+    else if(baseKey==='droneJenis'){ if(!DRONE_JENIS_LIST.includes(typed)){ DRONE_JENIS_LIST.push(typed); saveDroneJenisList(); } }
+    else if(baseKey==='shift'){ if(!SHIFT_LIST.includes(typed)){ SHIFT_LIST.push(typed); saveShiftList(); } }
     editEntryField(entryId, fieldKey, typed);
   } else {
     editEntryField(entryId, fieldKey, val);
@@ -580,46 +581,15 @@ function renderRekapPribadiHtml(){
 
             <div class="section-eyebrow" style="margin-top:8px;">Jenis Layanan</div>
             <label class="flabel">Jenis Layanan</label>
-            ${selectWithCustomEdit(e.id,'jenisLayanan', JENIS_LAYANAN_LIST, e.jenisLayanan)}
-
-            ${e.jenisLayanan==='Antar/Jemput Tenaga' ? `
-              <div class="grid2" style="margin-top:8px;">
-                <div><label class="flabel">Tipe</label>${selectWithCustomEdit(e.id,'tipeAntar', TIPE_ANTAR_LIST, e.tipeAntar)}</div>
-                <div><label class="flabel">Kegiatan</label>${selectWithCustomEdit(e.id,'kegiatan', KEGIATAN_LIST, e.kegiatan)}</div>
-              </div>
-              <label class="flabel">Lokasi</label>
-              <input type="text" list="lokasiSuggest" oninput="onLokasiInput(this)" onfocus="onLokasiFocus(this)" value="${escapeHtml(e.lokasi)}" onchange="editEntryField('${e.id}','lokasi',this.value)">
-            ` : ''}
-
-            ${e.jenisLayanan==='Muat Tebu' ? `
-              <div style="margin-top:8px;"><label class="flabel">Tipe</label>${selectWithCustomEdit(e.id,'muatTipe', MUAT_TIPE_LIST, e.muatTipe)}</div>
-              ${e.muatTipe==='Produksi' ? `
-                <label class="flabel">Tonase (kg)</label><input type="text" inputmode="numeric" value="${escapeHtml(fmtThousandsLive(e.tonaseKg))}" oninput="this.value=fmtThousandsLive(this.value)" onchange="editEntryField('${e.id}','tonaseKg',stripDots(this.value))">
-                <label class="flabel">Lokasi</label>
-                <input type="text" list="lokasiSuggest" oninput="onLokasiInput(this)" onfocus="onLokasiFocus(this)" value="${escapeHtml(e.lokasi)}" onchange="editEntryField('${e.id}','lokasi',this.value)">
-              ` : ''}
-              ${e.muatTipe==='Bibit' ? `
-              <div class="grid2">
-                <div><label class="flabel">Lokasi Muat</label><input type="text" list="lokasiSuggest" oninput="onLokasiInput(this)" onfocus="onLokasiFocus(this)" value="${escapeHtml(e.lokasiMuat)}" onchange="editEntryField('${e.id}','lokasiMuat',this.value)"></div>
-                <div><label class="flabel">Lokasi Bongkar</label><input type="text" list="lokasiSuggest" oninput="onLokasiInput(this)" onfocus="onLokasiFocus(this)" value="${escapeHtml(e.lokasiBongkar)}" onchange="editEntryField('${e.id}','lokasiBongkar',this.value)"></div>
-              </div>` : ''}
-            ` : ''}
-
-            ${e.jenisLayanan==='Drone' ? `
-              <div style="margin-top:8px;"><label class="flabel">Jenis Drone</label>${selectWithCustomEdit(e.id,'droneJenis', DRONE_JENIS_LIST, e.droneJenis)}</div>
-              <label class="flabel">Lokasi</label>
-              <input type="text" list="lokasiSuggest" oninput="onLokasiInput(this)" onfocus="onLokasiFocus(this)" value="${escapeHtml(e.lokasi)}" onchange="editEntryField('${e.id}','lokasi',this.value)">
-            ` : ''}
-
-            ${e.jenisLayanan==='Operator' ? `
-              <div style="margin-top:8px;"><label class="flabel">Shift</label>${selectWithCustomEdit(e.id,'shift', SHIFT_LIST, e.shift)}</div>
-              <label class="flabel">Lokasi</label>
-              <input type="text" list="lokasiSuggest" oninput="onLokasiInput(this)" onfocus="onLokasiFocus(this)" value="${escapeHtml(e.lokasi)}" onchange="editEntryField('${e.id}','lokasi',this.value)">
-            ` : ''}
-            ${e.jenisLayanan && !['Antar/Jemput Tenaga','Muat Tebu','Drone','Operator'].includes(e.jenisLayanan) ? `
-              <label class="flabel">Lokasi</label>
-              <input type="text" list="lokasiSuggest" oninput="onLokasiInput(this)" onfocus="onLokasiFocus(this)" value="${escapeHtml(e.lokasi)}" onchange="editEntryField('${e.id}','lokasi',this.value)">
-            ` : ''}
+            ${renderJenisLayananFields(e, '', 'edit')}
+            ${e.adaLayanan2 ? `
+            <div style="border-top:1px solid var(--outline-variant);margin-top:10px;padding-top:10px;">
+              <div class="section-eyebrow-row" style="margin:0 0 6px;"><label class="flabel" style="margin:0;">Jenis Layanan ke-2 (unit sama, hari sama)</label><button class="icon-btn" style="color:var(--secondary);" onclick="toggleJenisLayanan2('${e.id}');expandedRowId='${e.id}';renderRekap();">${ic('trash')}</button></div>
+              ${renderJenisLayananFields(e, '2', 'edit')}
+            </div>
+            ` : `
+            <button class="pill-btn sm outline" style="margin-top:8px;" onclick="toggleJenisLayanan2('${e.id}');expandedRowId='${e.id}';renderRekap();">${ic('plus')} Tambah Jenis Layanan (unit sama, hari sama)</button>
+            `}
 
             ${!e.isSecondary ? `
             <div class="section-eyebrow" style="margin-top:8px;">Absen &amp; Istirahat</div>

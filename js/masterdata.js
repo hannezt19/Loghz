@@ -227,12 +227,26 @@ function handleSelectCustom(fieldKey, val){
  * + antagonis). Dibuat 1 fungsi supaya tidak dobel-tulis 4x. `e.isSecondary`
  * menentukan dipakai quickSave (entri utama, implisit "hari ini") atau
  * quickSaveEntry (entri tambahan, eksplisit per id). */
-function renderJenisLayananFields(e, suffix){
-  const isSec = !!e.isSecondary;
+function renderJenisLayananFields(e, suffix, mode){
+  // mode: 'today' (entri utama hari ini, quickSave), 'secondary' (unit
+  // tambahan hari ini, quickSaveEntry), atau 'edit' (edit baris dari Rekap ->
+  // Riwayat Lengkap, editEntryField). Default ditebak dari e.isSecondary
+  // untuk kompatibel dengan pemanggilan lama, tapi Rekap SELALU harus kirim
+  // 'edit' eksplisit (isSecondary saja tidak cukup membedakan Hari Ini vs Rekap).
+  mode = mode || (e.isSecondary ? 'secondary' : 'today');
   const fk = (name)=>name+suffix;
   const jenis = e[fk('jenisLayanan')];
-  const sel = (field, list) => isSec ? selectWithCustomHari(e.id, fk(field), list, e[fk(field)]) : selectWithCustom(fk(field), list, e[fk(field)]);
-  const chg = (field) => isSec ? `quickSaveEntry('${e.id}','${fk(field)}', this.value)` : `quickSave('${fk(field)}', this.value)`;
+  const sel = (field, list) => {
+    if(mode==='edit') return selectWithCustomEdit(e.id, fk(field), list, e[fk(field)]);
+    if(mode==='secondary') return selectWithCustomHari(e.id, fk(field), list, e[fk(field)]);
+    return selectWithCustom(fk(field), list, e[fk(field)]);
+  };
+  const chgRaw = (field, valExpr) => {
+    if(mode==='edit') return `editEntryField('${e.id}','${fk(field)}', ${valExpr})`;
+    if(mode==='secondary') return `quickSaveEntry('${e.id}','${fk(field)}', ${valExpr})`;
+    return `quickSave('${fk(field)}', ${valExpr})`;
+  };
+  const chg = (field) => chgRaw(field, 'this.value');
   const lokasiInput = (field) => `<input type="text" list="lokasiSuggest" oninput="onLokasiInput(this)" onfocus="onLokasiFocus(this)" value="${escapeHtml(e[fk(field)]||'')}" onchange="${chg(field)}">`;
   return `
     ${sel('jenisLayanan', JENIS_LAYANAN_LIST)}
@@ -246,7 +260,7 @@ function renderJenisLayananFields(e, suffix){
     ${jenis==='Muat Tebu' ? `
       <div style="margin-top:8px;"><label class="flabel">Tipe</label>${sel('muatTipe', MUAT_TIPE_LIST)}</div>
       ${e[fk('muatTipe')]==='Produksi' ? `
-        <label class="flabel">Tonase (kg)</label><input type="text" inputmode="numeric" value="${escapeHtml(fmtThousandsLive(e[fk('tonaseKg')]||''))}" oninput="this.value=fmtThousandsLive(this.value)" onchange="${isSec?`quickSaveEntry('${e.id}','${fk('tonaseKg')}', stripDots(this.value))`:`quickSave('${fk('tonaseKg')}', stripDots(this.value))`}">
+        <label class="flabel">Tonase (kg)</label><input type="text" inputmode="numeric" value="${escapeHtml(fmtThousandsLive(e[fk('tonaseKg')]||''))}" oninput="this.value=fmtThousandsLive(this.value)" onchange="${chgRaw('tonaseKg','stripDots(this.value)')}">
         <label class="flabel">Lokasi</label>${lokasiInput('lokasi')}
       ` : ''}
       ${e[fk('muatTipe')]==='Bibit' ? `
