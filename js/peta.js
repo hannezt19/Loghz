@@ -324,6 +324,10 @@ function openExportSheet(){
       <label class="flabel">Dari tanggal</label><input type="date" id="exp-dateFrom">
       <label class="flabel">Sampai tanggal</label><input type="date" id="exp-dateTo">
     </div>
+    <div class="section-eyebrow" style="margin-top:14px;">Jenis Catatan</div>
+    <div class="chk-row"><input type="checkbox" id="exp-catatan-biasa" checked><label for="exp-catatan-biasa" style="margin-left:6px;">Catatan Biasa</label></div>
+    <div class="chk-row"><input type="checkbox" id="exp-catatan-khusus" checked><label for="exp-catatan-khusus" style="margin-left:6px;">Catatan Khusus</label></div>
+    <div class="field-sub">Centang salah satu saja untuk cuma cetak entri dengan jenis catatan itu. Ini menyaring BARIS yang dicetak, bukan cuma kolomnya.</div>
     <div class="section-eyebrow section-eyebrow-row" style="margin-top:14px;">Kolom yang Dicetak
       <button class="pill-btn sm" type="button" onclick="toggleAllExportCols()">Pilih/Batal Semua</button>
     </div>
@@ -378,6 +382,16 @@ function getExportRows(){
     rows = ENTRIES.filter(e=>e.date.startsWith(mk));
   }
   rows.sort((a,b)=>a.date.localeCompare(b.date));
+  // Filter Jenis Catatan (biasa/khusus) - lihat checkbox di openExportSheet().
+  // Kalau dua-duanya (atau tidak ada satupun karena elemen belum sempat
+  // dirender) tidak jadi masalah - default aman-nya tampilkan semua.
+  const chkBiasa = document.getElementById('exp-catatan-biasa');
+  const chkKhusus = document.getElementById('exp-catatan-khusus');
+  const includeBiasa = chkBiasa ? chkBiasa.checked : true;
+  const includeKhusus = chkKhusus ? chkKhusus.checked : true;
+  if(!(includeBiasa && includeKhusus)){
+    rows = rows.filter(e => e.catatanKhusus ? includeKhusus : includeBiasa);
+  }
   const headers = getSelectedColumns();
   const detailUntukLayanan = (e, jenis, suffix) => {
     const fk = (name)=>name+suffix;
@@ -424,7 +438,8 @@ function getExportRows(){
       'Lembur Final': e.isSecondary ? '-' : computeLemburFinal(e).toFixed(1),
       'BU/TU': cuacaCellText(wlog && wlog.utara), 'BS/TS': cuacaCellText(wlog && wlog.selatan),
       'Catatan': e.catatan||'',
-      _dateIso: e.date /* dipakai untuk highlight Minggu/libur nasional di PDF & penanda di Excel — bukan kolom cetak */
+      _dateIso: e.date, /* dipakai untuk highlight Minggu/libur nasional di PDF & penanda di Excel — bukan kolom cetak */
+      _catatanKhusus: !!e.catatanKhusus /* dipakai untuk sorot kuning baris Catatan Khusus di PDF — bukan kolom cetak */
     };
   });
   const totalHm = rows.reduce((s,e)=>{ const a=parseFloat(e.hmAwal), b=parseFloat(e.hmAkhir); return s+((!isNaN(a)&&!isNaN(b)&&b>=a)?(b-a):0); },0);
@@ -539,6 +554,10 @@ async function doExport(fmt){
           const raw = data.row.raw || {};
           if(raw._dateIso && isHolidayHighlightDate(raw._dateIso, holidaySet)){
             data.cell.styles.fillColor = [211,242,211];
+          } else if(raw._catatanKhusus){
+            // Sorot kuning lembut untuk baris Catatan Khusus - cuma kalau baris
+            // itu tidak sedang disorot hijau (libur/Minggu) supaya tidak rebutan warna.
+            data.cell.styles.fillColor = [255,244,197];
           }
           // Kalau tanggal baris ini SAMA dengan baris sebelumnya (mis. beberapa
           // unit dicatat di hari yang sama), garis pembatas ATAS dihilangkan

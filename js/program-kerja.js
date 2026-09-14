@@ -7,9 +7,11 @@ let pkSubTab = 'program';         // 'program' | 'aktual' | 'rekap'
 let pkTanggalMulai = todayIso();  // rentang berlaku untuk baris Program yang mau ditambah/dilihat
 let pkTanggalSampai = todayIso();
 let pkAktualTanggal = todayIso(); // Aktual selalu per 1 tanggal spesifik (realisasi harian)
-let pkRekapMode = 'bulan';        // 'bulan' | 'tahun'
+let pkRekapMode = 'bulan';        // 'bulan' | 'tahun' | 'custom'
 let pkRekapBulan = todayIso().slice(0,7);
 let pkRekapTahun = todayIso().slice(0,4);
+let pkRekapCustomMulai = todayIso();
+let pkRekapCustomSampai = todayIso();
 let pkRekapHanyaLL = false;
 let pkRekapExpandedDrivers = new Set(); // accordion: nama driver yang sedang dibuka di "Total Jam per Driver"
 let pkRekapExpandedDates = new Set();   // accordion: tanggal yang sedang dibuka di "Rincian per Tanggal"
@@ -464,28 +466,47 @@ function pkDatesInPeriode(prefix){
   });
   return Array.from(dates).sort();
 }
+/* Sama seperti pkDatesInPeriode() tapi untuk rentang tanggal bebas (bukan
+ * cuma per-bulan/per-tahun) - dipakai mode "Rentang Tanggal Custom" di Rekap. */
+function pkDatesInRange(mulai, sampai){
+  const dates = new Set();
+  PROGRAM_RENCANA.forEach(r=>{
+    pkExpandDates(r.tanggalMulai, r.tanggalSampai).forEach(dt=>{ if(dt>=mulai && dt<=sampai) dates.add(dt); });
+  });
+  return Array.from(dates).sort();
+}
 function pkRekapRows(){
-  const prefix = pkRekapMode==='bulan' ? pkRekapBulan : String(pkRekapTahun);
+  let dates;
+  if(pkRekapMode==='bulan') dates = pkDatesInPeriode(pkRekapBulan);
+  else if(pkRekapMode==='tahun') dates = pkDatesInPeriode(String(pkRekapTahun));
+  else dates = pkDatesInRange(pkRekapCustomMulai, pkRekapCustomSampai);
   let rows = [];
-  pkDatesInPeriode(prefix).forEach(d=>{ rows = rows.concat(pkEffectiveRowsForDate(d)); });
+  dates.forEach(d=>{ rows = rows.concat(pkEffectiveRowsForDate(d)); });
   if(pkRekapHanyaLL) rows = rows.filter(r=>r.tandaLiburLembur);
   return rows;
 }
 function setPkRekapMode(m){ pkRekapMode=m; renderProker(); }
 function setPkRekapBulan(v){ pkRekapBulan=v; renderProker(); }
 function setPkRekapTahun(v){ pkRekapTahun=v; renderProker(); }
+function setPkRekapCustomMulai(v){ if(v>pkRekapCustomSampai) pkRekapCustomSampai=v; pkRekapCustomMulai=v; renderProker(); }
+function setPkRekapCustomSampai(v){ if(v<pkRekapCustomMulai) pkRekapCustomMulai=v; pkRekapCustomSampai=v; renderProker(); }
 function setPkRekapHanyaLL(v){ pkRekapHanyaLL=v; renderProker(); }
 /* Bagian filter Rekap yang di-sticky-kan (dipanggil dari renderProgramKerjaHtml) —
- * radio Per Bulan/Tahun, dropdown periode, checkbox Hanya Libur & Lembur, tombol export. */
+ * radio Per Bulan/Tahun/Custom, dropdown periode, checkbox Hanya Libur & Lembur, tombol export. */
 function renderPkRekapFilters(){
   return `
     <div style="display:flex;gap:10px;align-items:flex-start;">
       <div style="flex:1;min-width:0;">
         <div class="chk-row"><input type="radio" name="pk-rekap-mode" ${pkRekapMode==='bulan'?'checked':''} onchange="setPkRekapMode('bulan')"><label style="margin-left:6px;">Per Bulan</label></div>
         <div class="chk-row"><input type="radio" name="pk-rekap-mode" ${pkRekapMode==='tahun'?'checked':''} onchange="setPkRekapMode('tahun')"><label style="margin-left:6px;">Per Tahun</label></div>
-        ${pkRekapMode==='bulan'
-          ? `<input type="month" value="${pkRekapBulan}" onchange="setPkRekapBulan(this.value)">`
-          : `<input type="number" inputmode="numeric" value="${pkRekapTahun}" onchange="setPkRekapTahun(this.value)">`}
+        <div class="chk-row"><input type="radio" name="pk-rekap-mode" ${pkRekapMode==='custom'?'checked':''} onchange="setPkRekapMode('custom')"><label style="margin-left:6px;">Rentang Tanggal Custom</label></div>
+        ${pkRekapMode==='bulan' ? `<input type="month" value="${pkRekapBulan}" onchange="setPkRekapBulan(this.value)">` : ''}
+        ${pkRekapMode==='tahun' ? `<input type="number" inputmode="numeric" value="${pkRekapTahun}" onchange="setPkRekapTahun(this.value)">` : ''}
+        ${pkRekapMode==='custom' ? `
+        <div class="grid2">
+          <div><label class="flabel" style="font-weight:400;">Mulai</label><input type="date" value="${pkRekapCustomMulai}" onchange="setPkRekapCustomMulai(this.value)"></div>
+          <div><label class="flabel" style="font-weight:400;">Sampai</label><input type="date" value="${pkRekapCustomSampai}" onchange="setPkRekapCustomSampai(this.value)"></div>
+        </div>` : ''}
         <div class="chk-row"><input type="checkbox" id="pk-rekap-ll" ${pkRekapHanyaLL?'checked':''} onchange="setPkRekapHanyaLL(this.checked)"><label for="pk-rekap-ll" style="margin-left:6px;">Hanya Libur &amp; Lembur</label></div>
       </div>
       <button title="Export / Cetak" onclick="openPkPrintFilterModal()" style="flex-shrink:0;background:var(--surface-container);border:none;border-radius:12px;width:46px;height:46px;display:flex;align-items:center;justify-content:center;cursor:pointer;color:var(--on-surface);margin-top:2px;">${ic('document',22)}</button>

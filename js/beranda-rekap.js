@@ -556,9 +556,9 @@ function renderRekapPribadiHtml(){
             <button class="icon-btn" style="flex-shrink:0;padding:4px;" onclick="toggleEditRow('${e.id}')" aria-label="Edit">
               <svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 20h9"/><path d="M16.5 3.5a2.12 2.12 0 0 1 3 3L7 19l-4 1 1-4Z"/></svg>
             </button>
-            <div style="flex:1;min-width:0;">
-              <div style="font-weight:800;">${fmtLabel(e.date)}</div>
+            <div style="flex:1;min-width:0;"><div style="font-weight:800;">${fmtLabel(e.date)}</div>
               <div class="field-sub">${escapeHtml(btLabel(e.btId))}${e.jenisLayanan?' &middot; '+escapeHtml(entryTipeLabel(e)):''} &middot; HM ${escapeHtml(e.hmAwal||'-')}&rarr;${escapeHtml(e.hmAkhir||'-')} &middot; ${escapeHtml(fmtThousandsLive(e.bbmLiter||'0'))} ml</div>
+              ${e.catatanKhusus?'<div style="display:inline-block;margin-top:2px;color:var(--secondary);font-weight:700;font-size:10px;border:1px solid var(--secondary);border-radius:100px;padding:1px 7px;">Catatan Khusus</div>':''}
               ${isDup?'<div class="field-sub" style="color:var(--danger);font-weight:700;">'+ic('warning')+' Ada entri lain di tanggal &amp; unit yang sama</div>':''}
             </div>
           </div>
@@ -621,6 +621,7 @@ function renderRekapPribadiHtml(){
             </div>
             <label class="flabel">Catatan</label>
             <textarea rows="2" onchange="editEntryField('${e.id}','catatan',this.value)">${escapeHtml(e.catatan)}</textarea>
+            <div class="chk-row" style="margin-top:4px;"><input type="checkbox" id="chk-khusus-${e.id}" ${e.catatanKhusus?'checked':''} onchange="editEntryField('${e.id}','catatanKhusus', this.checked)"><label for="chk-khusus-${e.id}" style="margin-left:6px;">Tandai sebagai Catatan Khusus</label></div>
             <div style="display:flex;gap:8px;margin-top:8px;">
               <button class="btn-block" style="flex:1;" onclick="toggleEditRow('${e.id}')">Selesai</button>
               <button class="pill-btn outline" onclick="deleteRow('${e.id}')">Hapus</button>

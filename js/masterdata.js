@@ -379,6 +379,7 @@ function renderHari(){
       </div>
       <label class="flabel">Catatan (opsional)</label>
       <textarea rows="2" onchange="quickSave('catatan', this.value)">${escapeHtml(e.catatan)}</textarea>
+      <div class="chk-row" style="margin-top:4px;"><input type="checkbox" id="chk-khusus-${e.id}" ${e.catatanKhusus?'checked':''} onchange="quickSave('catatanKhusus', this.checked)"><label for="chk-khusus-${e.id}" style="margin-left:6px;">Tandai sebagai Catatan Khusus</label></div>
     </div>
 
     ${getSecondaryUnitsToday().map((se,i)=>renderSecondaryUnitCard(se, i+1)).join('')}
@@ -504,6 +505,7 @@ function renderSecondaryUnitCard(e, idx){
       <div class="field-sub" style="margin:-4px 0 8px;">Tanpa absen otomatis, supaya lembur tidak terhitung dobel dengan unit utama.</div>
       <label class="flabel">Catatan (opsional)</label>
       <textarea rows="2" onchange="quickSaveEntry('${e.id}','catatan', this.value)">${escapeHtml(e.catatan)}</textarea>
+      <div class="chk-row" style="margin-top:4px;"><input type="checkbox" id="chk-khusus-${e.id}" ${e.catatanKhusus?'checked':''} onchange="quickSaveEntry('${e.id}','catatanKhusus', this.checked)"><label for="chk-khusus-${e.id}" style="margin-left:6px;">Tandai sebagai Catatan Khusus</label></div>
     </div>`;
 }
 function entryTipeSingleLabel(jenis, e, suffix){
