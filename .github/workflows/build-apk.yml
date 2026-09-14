@@ -8,14 +8,42 @@ on:
 jobs:
   build:
     runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      actions: write   # perlu ini supaya GITHUB_TOKEN bisa menghapus artifact lama di step terakhir
     steps:
       - name: Ambil kode dari repo
         uses: actions/checkout@v4
 
+      # FIX: sebelumnya step hapus artifact lama ditaruh SETELAH upload -
+      # jadi kalau kuota penyimpanan Actions sudah penuh duluan (500MB di
+      # akun gratis), upload APK yang baru gagal duluan ("Artifact storage
+      # quota has been hit") SEBELUM sempat sampai ke step pembersihan.
+      # Sekarang dipindah ke PALING AWAL, sebelum proses build sama sekali -
+      # jadi kuota sudah dikosongkan duluan sebelum APK baru dicoba diupload.
+      # Disisakan 2 (bukan 3) di sini, karena upload di akhir job ini akan
+      # menambah 1 lagi -> totalnya pas 3 setelah job ini selesai.
+      - name: Hapus artifact APK lama (sisakan 2, agar jadi 3 setelah upload baru)
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const owner = context.repo.owner;
+            const repo = context.repo.repo;
+            const { data } = await github.rest.actions.listArtifactsForRepo({ owner, repo, per_page: 100 });
+            const milikKita = data.artifacts
+              .filter(a => a.name === 'log-hz-apk')
+              .sort((a, b) => new Date(b.created_at) - new Date(a.created_at));
+            const dihapus = milikKita.slice(2);
+            for (const artifact of dihapus) {
+              console.log('Menghapus artifact lama: id ' + artifact.id + ' (dibuat ' + artifact.created_at + ')');
+              await github.rest.actions.deleteArtifact({ owner, repo, artifact_id: artifact.id });
+            }
+            console.log('Sisa sebelum upload baru: ' + Math.min(milikKita.length, 2));
+
       - name: Siapkan Node.js
         uses: actions/setup-node@v4
         with:
-          node-version: '20'
+          node-version: '22'
 
       - name: Siapkan Java (JDK 21)
         uses: actions/setup-java@v4
