@@ -75,8 +75,16 @@ function renderBbmDetailModal(){
         ${t.sumber==='susulan'?`<button class="icon-btn" onclick="hapusBbmSusulan('${t.id}');renderBbmDetailModal()">${ic('trash')}</button>`:''}
       </div>
     `).join('')}
-    <button class="pill-btn outline" style="width:100%;margin-top:6px;" onclick="window._bbmShowSusulanForm=true;renderBbmDetailModal()">+ Tambah Data Susulan</button>
-    ${window._bbmShowSusulanForm ? renderSusulanForm() : ''}
+    ${window._bbmShowSusulanForm ? `
+    <div style="position:sticky;bottom:0;background:var(--surface);padding-top:8px;">
+      <button class="pill-btn sm outline" onclick="window._bbmShowSusulanForm=false;window._susulanDraft=null;renderBbmDetailModal()">${ic('undo',14)} Batal</button>
+    </div>
+    ${renderSusulanForm()}
+    ` : `
+    <div style="position:sticky;bottom:0;background:var(--surface);padding-top:8px;margin-top:2px;">
+      <button class="pill-btn outline" style="width:100%;" onclick="window._bbmShowSusulanForm=true;renderBbmDetailModal()">+ Tambah Data Susulan</button>
+    </div>
+    `}
   `);
 }
 function renderSusulanForm(){
