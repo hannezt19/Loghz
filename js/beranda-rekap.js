@@ -60,12 +60,18 @@ function renderBbmDetailModal(){
   list.forEach(u=>{
     totalBulanByUnit[u.id] = getTimelineIsiBBM(u.id).filter(t=>t.tanggal.startsWith(monthKey)).reduce((s,t)=>s+t.bbmMl,0)/1000;
   });
+  const formTerbuka = !!window._bbmShowSusulanForm;
   openModal(`
     <div class="mhead"><h2>Detail BBM</h2><button class="mclose" onclick="closeModal()">&times;</button></div>
     <div style="display:flex;gap:6px;overflow-x:auto;padding-bottom:8px;margin-bottom:8px;">
       <button class="pill-btn sm ${!filterBt?'':'outline'}" onclick="window._bbmFilterBt='';renderBbmDetailModal()">Semua</button>
       ${list.map(u=>`<button class="pill-btn sm ${filterBt===u.id?'':'outline'}" style="display:flex;flex-direction:column;align-items:center;gap:2px;line-height:1.15;flex-shrink:0;" onclick="window._bbmFilterBt='${u.id}';renderBbmDetailModal()"><span style="text-transform:uppercase;white-space:nowrap;">${escapeHtml(u.kode)}</span><span style="font-size:9px;font-weight:600;opacity:.85;white-space:nowrap;">${totalBulanByUnit[u.id]>0?totalBulanByUnit[u.id].toFixed(0)+' L':'-'}</span></button>`).join('')}
     </div>
+    ${formTerbuka ? `
+    <button class="pill-btn sm outline" onclick="window._bbmShowSusulanForm=false;window._susulanDraft=null;renderBbmDetailModal()">${ic('undo',14)} Batal</button>
+    ${renderSusulanForm()}
+    ` : `
+    <button class="pill-btn outline" style="width:100%;margin-bottom:10px;" onclick="window._bbmShowSusulanForm=true;renderBbmDetailModal()">+ Tambah Data Susulan</button>
     ${sorted.length===0 ? `<div class="empty-note">Belum ada data isi BBM.</div>` : sorted.map(t=>`
       <div class="card" style="margin-bottom:8px;padding:12px 14px;display:flex;justify-content:space-between;align-items:flex-start;">
         <div>
@@ -75,21 +81,15 @@ function renderBbmDetailModal(){
         ${t.sumber==='susulan'?`<button class="icon-btn" onclick="hapusBbmSusulan('${t.id}');renderBbmDetailModal()">${ic('trash')}</button>`:''}
       </div>
     `).join('')}
-    ${window._bbmShowSusulanForm ? `
-    <div style="position:sticky;bottom:0;background:var(--surface);padding-top:8px;">
-      <button class="pill-btn sm outline" onclick="window._bbmShowSusulanForm=false;window._susulanDraft=null;renderBbmDetailModal()">${ic('undo',14)} Batal</button>
-    </div>
-    ${renderSusulanForm()}
-    ` : `
-    <div style="position:sticky;bottom:0;background:var(--surface);padding-top:8px;margin-top:2px;">
-      <button class="pill-btn outline" style="width:100%;" onclick="window._bbmShowSusulanForm=true;renderBbmDetailModal()">+ Tambah Data Susulan</button>
-    </div>
     `}
   `);
 }
 function renderSusulanForm(){
   const list = unitsForSelect().filter(u=>!u.isSystem);
-  const d = window._susulanDraft || (window._susulanDraft = {btId:list[0]?list[0].id:'', tanggal:todayIso(), hm:'', bbmMl:''});
+  // Kalau lagi menyaring 1 unit tertentu (bukan chip "Semua"), form otomatis
+  // ikut unit itu sebagai default - tidak perlu pilih ulang dari awal.
+  const defaultBt = window._bbmFilterBt || (list[0] ? list[0].id : '');
+  const d = window._susulanDraft || (window._susulanDraft = {btId:defaultBt, tanggal:todayIso(), hm:'', bbmMl:''});
   return `
     <div class="card" style="margin-top:10px;">
       <div style="font-weight:700;margin-bottom:8px;">Data Susulan</div>
