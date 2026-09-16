@@ -301,7 +301,7 @@ function deletePetaBlock(id){
   renderPeta();
   toast('Blok dihapus');
 }
-const ALL_EXPORT_HEADERS = ['Tanggal','No Unit','Jenis Layanan','Detail','Lokasi','Absen Berangkat','Absen Pulang','Istirahat','HM Awal','HM Akhir','HM Terpakai','BBM (L)','Lembur (j)','Lembur Final','BU/TU','BS/TS','Catatan'];
+const ALL_EXPORT_HEADERS = ['Tanggal','No Unit','Jenis Layanan','Detail','Lokasi','Absen Berangkat','Absen Pulang','Istirahat','HM Awal','HM Akhir','HM Terpakai','BBM (L)','Lembur (j)','Lembur Final','BU/TU','BS/TS','Catatan','Catatan Khusus'];
 function slugCol(h){ return h.toLowerCase().replace(/[^a-z0-9]+/g,'-'); }
 /* Grup checklist kolom cetak: kolom cuaca (BU/TU + BS/TS) digabung jadi 1 ceklis "Cuaca" */
 function buildExportCheckGroups(){
@@ -324,10 +324,6 @@ function openExportSheet(){
       <label class="flabel">Dari tanggal</label><input type="date" id="exp-dateFrom">
       <label class="flabel">Sampai tanggal</label><input type="date" id="exp-dateTo">
     </div>
-    <div class="section-eyebrow" style="margin-top:14px;">Jenis Catatan</div>
-    <div class="chk-row"><input type="checkbox" id="exp-catatan-biasa" checked><label for="exp-catatan-biasa" style="margin-left:6px;">Catatan Biasa</label></div>
-    <div class="chk-row"><input type="checkbox" id="exp-catatan-khusus" checked><label for="exp-catatan-khusus" style="margin-left:6px;">Catatan Khusus</label></div>
-    <div class="field-sub">Centang salah satu saja untuk cuma cetak entri dengan jenis catatan itu. Ini menyaring BARIS yang dicetak, bukan cuma kolomnya.</div>
     <div class="section-eyebrow section-eyebrow-row" style="margin-top:14px;">Kolom yang Dicetak
       <button class="pill-btn sm" type="button" onclick="toggleAllExportCols()">Pilih/Batal Semua</button>
     </div>
@@ -382,16 +378,6 @@ function getExportRows(){
     rows = ENTRIES.filter(e=>e.date.startsWith(mk));
   }
   rows.sort((a,b)=>a.date.localeCompare(b.date));
-  // Filter Jenis Catatan (biasa/khusus) - lihat checkbox di openExportSheet().
-  // Kalau dua-duanya (atau tidak ada satupun karena elemen belum sempat
-  // dirender) tidak jadi masalah - default aman-nya tampilkan semua.
-  const chkBiasa = document.getElementById('exp-catatan-biasa');
-  const chkKhusus = document.getElementById('exp-catatan-khusus');
-  const includeBiasa = chkBiasa ? chkBiasa.checked : true;
-  const includeKhusus = chkKhusus ? chkKhusus.checked : true;
-  if(!(includeBiasa && includeKhusus)){
-    rows = rows.filter(e => e.catatanKhusus ? includeKhusus : includeBiasa);
-  }
   const headers = getSelectedColumns();
   const detailUntukLayanan = (e, jenis, suffix) => {
     const fk = (name)=>name+suffix;
@@ -437,7 +423,7 @@ function getExportRows(){
       'Lembur (j)': e.isSecondary ? '-' : (e.lembur||'0'),
       'Lembur Final': e.isSecondary ? '-' : computeLemburFinal(e).toFixed(1),
       'BU/TU': cuacaCellText(wlog && wlog.utara), 'BS/TS': cuacaCellText(wlog && wlog.selatan),
-      'Catatan': e.catatan||'',
+      'Catatan': e.catatan||'', 'Catatan Khusus': e.catatanKhusus||'',
       _dateIso: e.date, /* dipakai untuk highlight Minggu/libur nasional di PDF & penanda di Excel — bukan kolom cetak */
       _catatanKhusus: !!e.catatanKhusus /* dipakai untuk sorot kuning baris Catatan Khusus di PDF — bukan kolom cetak */
     };

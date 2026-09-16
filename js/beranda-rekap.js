@@ -629,7 +629,8 @@ function renderRekapPribadiHtml(){
             </div>
             <label class="flabel">Catatan</label>
             <textarea rows="2" onchange="editEntryField('${e.id}','catatan',this.value)">${escapeHtml(e.catatan)}</textarea>
-            <div class="chk-row" style="margin-top:4px;"><input type="checkbox" id="chk-khusus-${e.id}" ${e.catatanKhusus?'checked':''} onchange="editEntryField('${e.id}','catatanKhusus', this.checked)"><label for="chk-khusus-${e.id}" style="margin-left:6px;">Tandai sebagai Catatan Khusus</label></div>
+            <label class="flabel" style="margin-top:8px;">Catatan Khusus (opsional)</label>
+            <textarea rows="2" onchange="editEntryField('${e.id}','catatanKhusus',this.value)">${escapeHtml(e.catatanKhusus)}</textarea>
             <div style="display:flex;gap:8px;margin-top:8px;">
               <button class="btn-block" style="flex:1;" onclick="toggleEditRow('${e.id}')">Selesai</button>
               <button class="pill-btn outline" onclick="deleteRow('${e.id}')">Hapus</button>
