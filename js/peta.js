@@ -222,8 +222,12 @@ function undoPetaPoint(){
 }
 function finishPetaDraw(){
   if(petaDrawPoints.length < 3){ toast('Minimal 3 titik untuk membentuk area'); return; }
-  const label = prompt('Nama blok ini?');
-  if(!label){ return; }
+  const typed = prompt('Nama blok ini?');
+  if(!typed){ return; }
+  // Auto-rapikan format (2 angka + 2 huruf kapital + 2 angka, mis. "20 BS 12")
+  // - sama seperti field Lokasi di Hari Ini - supaya nama blok konsisten dan
+  // bisa dicocokkan dengan akurat untuk fitur Riwayat.
+  const label = fmtBlokKode(typed);
   PETA_BLOCKS.push({id:uid(), label, points: petaDrawPoints.slice(), date: todayIso()});
   savePetaBlocks();
   if(!BLOKS.some(b=>b.kode.toLowerCase()===label.toLowerCase())){
@@ -258,28 +262,56 @@ function handlePetaTap(evt){
   }
 }
 let _petaActiveBlockId = null;
+/* Blok punya Riwayat HANYA kalau namanya format "2 angka + 2 huruf kapital +
+ * 2 angka" (mis. "20 BS 12") - format ganjil (mis. "23/10U") dilewati saja,
+ * tidak dipaksa dicocokkan. */
+function isBlokFormatValid(label){
+  return /^\d{2} [A-Z]{2} \d{2}$/.test(label||'');
+}
+/* Riwayat 1 blok = semua entri Hari Ini yang field Lokasi/Lokasi Muat/Lokasi
+ * Bongkar-nya SAMA PERSIS dengan nama blok ini (case-sensitive, karena sudah
+ * dirapikan konsisten lewat fmtBlokKode di kedua sisi - Hari Ini maupun waktu
+ * blok dibuat/diedit). Terbaru dulu. */
+function riwayatUntukBlok(label){
+  return ENTRIES
+    .filter(e => e.lokasi===label || e.lokasiMuat===label || e.lokasiBongkar===label)
+    .sort((a,b)=>b.date.localeCompare(a.date))
+    .map(e=>({date:e.date, btId:e.btId, jenis:e.jenisLayanan}));
+}
+function fmtTglSingkat(iso){
+  const d = new Date(iso+'T00:00:00');
+  return d.toLocaleDateString('id-ID',{day:'numeric',month:'short',year:'numeric'});
+}
 function showPetaBlock(id){
   const b = PETA_BLOCKS.find(x=>x.id===id);
   if(!b) return;
   _petaActiveBlockId = id;
+  const formatValid = isBlokFormatValid(b.label);
+  const riwayat = formatValid ? riwayatUntukBlok(b.label) : [];
   openModal(`
     <div class="mhead"><h2>${ic('map')} ${escapeHtml(b.label)}</h2><button class="mclose" onclick="closeModal()">&times;</button></div>
-    <div class="field-sub" style="margin-bottom:16px;">Ditandai: ${fmtLabel(b.date)}</div>
-    <button class="btn-block" onclick="usePetaBlockAsLokasi('${b.id}')">Jadikan Lokasi Hari Ini</button>
-    <button class="pill-btn outline" style="margin-top:8px;width:100%;justify-content:center;" onclick="editPetaBlockName('${b.id}')">${ic('edit')} Edit Nama</button>
-    <button class="pill-btn outline" style="margin-top:8px;width:100%;justify-content:center;" onclick="deletePetaBlock('${b.id}');closeModal();">Hapus Blok</button>
+    <button class="pill-btn" style="margin-bottom:14px;" onclick="usePetaBlockAsLokasi('${b.id}')">+ Lokasi Hari Ini</button>
+    ${formatValid ? `
+    <div class="section-eyebrow">Riwayat</div>
+    <div style="max-height:110px;overflow-y:auto;border:1px solid var(--outline-variant);border-radius:12px;padding:6px 12px;margin-bottom:16px;">
+      ${riwayat.length===0 ? '' : riwayat.map(r=>`<div style="font-size:11px;color:var(--on-surface-variant);padding:4px 0;border-bottom:1px solid var(--outline-variant);">${fmtTglSingkat(r.date)} &middot; ${escapeHtml(btLabel(r.btId))} &middot; ${escapeHtml(r.jenis||'-')}</div>`).join('')}
+    </div>
+    ` : ''}
+    <div style="display:flex;gap:8px;">
+      <button class="pill-btn outline" style="flex:2;justify-content:center;" onclick="editPetaBlockName('${b.id}')">${ic('edit')} Edit Nama</button>
+      <button class="pill-btn outline" style="flex:1;justify-content:center;color:var(--secondary);border-color:var(--secondary);" onclick="deletePetaBlock('${b.id}');closeModal();">Hapus</button>
+    </div>
   `);
 }
 function editPetaBlockName(id){
   const b = PETA_BLOCKS.find(x=>x.id===id);
   if(!b) return;
-  const newLabel = prompt('Ganti nama blok:', b.label);
-  if(!newLabel) return;
-  b.label = newLabel;
+  const typed = prompt('Ganti nama blok:', b.label);
+  if(!typed) return;
+  b.label = fmtBlokKode(typed); // auto-rapikan format, sama seperti waktu blok dibuat
   savePetaBlocks();
   toast('Nama blok diperbarui');
-  closeModal();
-  renderPeta();
+  showPetaBlock(id);
 }
 function usePetaBlockAsLokasi(id){
   const b = PETA_BLOCKS.find(x=>x.id===id);
