@@ -248,6 +248,19 @@ function renderJenisLayananFields(e, suffix, mode){
   };
   const chg = (field) => chgRaw(field, 'this.value');
   const lokasiInput = (field) => `<input type="text" list="lokasiSuggest" oninput="onLokasiInput(this)" onfocus="onLokasiFocus(this)" value="${escapeHtml(e[fk(field)]||'')}" onchange="${chg(field)}">`;
+  // Field "Lokasi" (BUKAN Lokasi Muat/Bongkar milik Muat Tebu, itu tetap 1
+  // seperti biasa) bisa diisi LEBIH DARI 1 kalau 1 kegiatan mencakup beberapa
+  // blok sekaligus - disimpan sebagai array `lokasiArr`(+suffix). Data lama
+  // (field `lokasi` tunggal) otomatis ikut tampil lewat lokasiArrGetForDisplay().
+  const lokasiMultiInput = (field) => {
+    const arr = lokasiArrGetForDisplay(e, fk(field));
+    return `
+      <div style="display:flex;flex-wrap:wrap;gap:6px;">
+        ${arr.map((val,idx)=>`<input type="text" list="lokasiSuggest" style="flex:1 1 44%;min-width:0;" oninput="onLokasiInput(this)" onfocus="onLokasiFocus(this)" value="${escapeHtml(val||'')}" onchange="lokasiArrChange('${e.id}','${mode}','${fk(field)}',${idx},this.value)">`).join('')}
+      </div>
+      <button type="button" class="pill-btn sm outline" style="margin-top:6px;" onclick="lokasiArrTambah('${e.id}','${mode}','${fk(field)}')">${ic('plus',12)} Tambah Lokasi</button>
+    `;
+  };
   return `
     ${sel('jenisLayanan', JENIS_LAYANAN_LIST)}
     ${jenis==='Antar/Jemput Tenaga' ? `
@@ -255,7 +268,7 @@ function renderJenisLayananFields(e, suffix, mode){
         <div><label class="flabel">Tipe</label>${sel('tipeAntar', TIPE_ANTAR_LIST)}</div>
         <div><label class="flabel">Kegiatan</label>${sel('kegiatan', KEGIATAN_LIST)}</div>
       </div>
-      <label class="flabel">Lokasi</label>${lokasiInput('lokasi')}
+      <label class="flabel">Lokasi</label>${lokasiMultiInput('lokasi')}
     ` : ''}
     ${jenis==='Muat Tebu' ? `
       <div style="margin-top:8px;"><label class="flabel">Tipe</label>${sel('muatTipe', MUAT_TIPE_LIST)}</div>
@@ -271,18 +284,45 @@ function renderJenisLayananFields(e, suffix, mode){
     ` : ''}
     ${jenis==='Drone' ? `
       <div style="margin-top:8px;"><label class="flabel">Jenis Drone</label>${sel('droneJenis', DRONE_JENIS_LIST)}</div>
-      <label class="flabel">Lokasi</label>${lokasiInput('lokasi')}
+      <label class="flabel">Lokasi</label>${lokasiMultiInput('lokasi')}
     ` : ''}
     ${jenis==='Operator' ? `
       <div style="margin-top:8px;"><label class="flabel">Shift</label>${sel('shift', SHIFT_LIST)}</div>
-      <label class="flabel">Lokasi</label>${lokasiInput('lokasi')}
+      <label class="flabel">Lokasi</label>${lokasiMultiInput('lokasi')}
     ` : ''}
     ${jenis && !['Antar/Jemput Tenaga','Muat Tebu','Drone','Operator'].includes(jenis) ? `
-      <label class="flabel">Lokasi</label>${lokasiInput('lokasi')}
+      <label class="flabel">Lokasi</label>${lokasiMultiInput('lokasi')}
     ` : ''}
   `;
 }
-const LAYANAN2_FIELDS = ['jenisLayanan2','tipeAntar2','kegiatan2','muatTipe2','tonaseKg2','lokasi2','lokasiMuat2','lokasiBongkar2','droneJenis2','shift2'];
+/* Ambil daftar lokasi (array) untuk 1 field - migrasi otomatis dari field
+ * lama yang cuma 1 string kalau array-nya belum pernah diisi, supaya data
+ * lama tetap tampil & tetap ketemu di Riwayat Blok (Peta). */
+function lokasiArrGetForDisplay(e, fieldBase){
+  const arrField = fieldBase+'Arr';
+  if(Array.isArray(e[arrField]) && e[arrField].length) return e[arrField];
+  return e[fieldBase] ? [e[fieldBase]] : [''];
+}
+function lokasiArrChange(entryId, mode, fieldBase, idx, value){
+  const e = ENTRIES.find(x=>x.id===entryId);
+  if(!e) return;
+  const arr = lokasiArrGetForDisplay(e, fieldBase).slice();
+  arr[idx] = value;
+  e[fieldBase+'Arr'] = arr;
+  e[fieldBase] = arr[0]||''; // field lama tetap disinkronkan ke lokasi PERTAMA - dipakai versi cetak & tempat lain yang cuma butuh 1 lokasi wakil
+  saveEntries();
+  if(mode==='edit'){ expandedRowId=entryId; renderRekap(); } else renderHari();
+}
+function lokasiArrTambah(entryId, mode, fieldBase){
+  const e = ENTRIES.find(x=>x.id===entryId);
+  if(!e) return;
+  const arr = lokasiArrGetForDisplay(e, fieldBase).slice();
+  arr.push('');
+  e[fieldBase+'Arr'] = arr;
+  saveEntries();
+  if(mode==='edit'){ expandedRowId=entryId; renderRekap(); } else renderHari();
+}
+const LAYANAN2_FIELDS = ['jenisLayanan2','tipeAntar2','kegiatan2','muatTipe2','tonaseKg2','lokasi2','lokasiArr2','lokasiMuat2','lokasiBongkar2','droneJenis2','shift2'];
 /* Tambah/hapus Jenis Layanan ke-2 - KHUSUS unit yang sama, hari yang sama
  * (mis. semprot 2 bahan berbeda). Kalau perlu pekerjaan di UNIT lain di hari
  * yang sama, itu tetap pakai "+ Tambah Unit" (Entri Tambahan) seperti biasa,
@@ -528,7 +568,11 @@ function entryTipeLabel(e){
 }
 function lokasiSuggestions(){
   const set = new Set();
-  ENTRIES.forEach(e=>{ [e.lokasi,e.lokasiMuat,e.lokasiBongkar].forEach(l=>{ if(l) set.add(l); }); });
+  ENTRIES.forEach(e=>{
+    [e.lokasi,e.lokasiMuat,e.lokasiBongkar,e.lokasi2,e.lokasiMuat2,e.lokasiBongkar2].forEach(l=>{ if(l) set.add(l); });
+    (e.lokasiArr||[]).forEach(l=>{ if(l) set.add(l); });
+    (e.lokasiArr2||[]).forEach(l=>{ if(l) set.add(l); });
+  });
   PETA_BLOCKS.forEach(b=>{ if(b.label) set.add(b.label); });
   BLOKS.forEach(b=>{ if(b.kode) set.add(b.kode); });
   return Array.from(set);

@@ -274,7 +274,12 @@ function isBlokFormatValid(label){
  * blok dibuat/diedit). Terbaru dulu. */
 function riwayatUntukBlok(label){
   return ENTRIES
-    .filter(e => e.lokasi===label || e.lokasiMuat===label || e.lokasiBongkar===label)
+    .filter(e =>
+      lokasiArrGetForDisplay(e,'lokasi').includes(label) ||
+      lokasiArrGetForDisplay(e,'lokasi2').includes(label) ||
+      e.lokasiMuat===label || e.lokasiBongkar===label ||
+      e.lokasiMuat2===label || e.lokasiBongkar2===label
+    )
     .sort((a,b)=>b.date.localeCompare(a.date))
     .map(e=>({date:e.date, btId:e.btId, jenis:e.jenisLayanan}));
 }
@@ -321,8 +326,15 @@ function usePetaBlockAsLokasi(id){
     if(!e.lokasiMuat){ quickSave('lokasiMuat', b.label); toast('Lokasi Muat diisi: '+b.label); }
     else { quickSave('lokasiBongkar', b.label); toast('Lokasi Bongkar diisi: '+b.label); }
   } else {
-    quickSave('lokasi', b.label);
-    toast('Lokasi diisi: '+b.label);
+    // Ditambahkan ke daftar (boleh lebih dari 1 blok per kegiatan), BUKAN
+    // menimpa lokasi yang sudah ada - slot kosong dibuang dulu supaya tidak
+    // menumpuk baris kosong tiap kali tombol ini ditekan berkali-kali.
+    const arr = lokasiArrGetForDisplay(e, 'lokasi').filter(v=>v);
+    arr.push(b.label);
+    e.lokasiArr = arr;
+    e.lokasi = arr[0]||'';
+    saveEntries();
+    toast('Lokasi ditambahkan: '+b.label);
   }
   closeModal();
 }
@@ -421,7 +433,10 @@ function getExportRows(){
   };
   const lokasiUntukLayanan = (e, jenis, suffix) => {
     const fk = (name)=>name+suffix;
-    return jenis==='Muat Tebu' ? [e[fk('lokasiMuat')],e[fk('lokasiBongkar')]].filter(Boolean).join(' -> ') : (e[fk('lokasi')]||'');
+    if(jenis==='Muat Tebu') return [e[fk('lokasiMuat')],e[fk('lokasiBongkar')]].filter(Boolean).join(' -> ');
+    // Kalau lokasinya lebih dari 1 (1 kegiatan mencakup beberapa blok), yang
+    // dicetak cuma yang PERTAMA sebagai wakil - biar laporan tetap ringkas.
+    return lokasiArrGetForDisplay(e, fk('lokasi'))[0] || '';
   };
   const data = rows.map(e=>{
     /* Kalau entri ini punya Jenis Layanan ke-2 (unit sama, hari sama - mis.
