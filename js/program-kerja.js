@@ -253,7 +253,7 @@ function ensurePkAktualRow(rencanaId, tanggal){
   if(!a){
     const r = PROGRAM_RENCANA.find(x=>x.id===rencanaId);
     if(!r) return null;
-    a = {id:uid(), rencanaId, tanggal, unitId:r.unitId, sopir:r.sopir, isInti:r.isInti, layanan:r.layanan, tipe:r.tipe||'', overtimeJam:pkJamOtomatis(r.layanan, r.tipe), overtimeManual:null, lanjutLayanan:'', lanjutTipe:'', lanjutUnitId:''};
+    a = {id:uid(), rencanaId, tanggal, unitId:r.unitId, sopir:r.sopir, isInti:r.isInti, layanan:r.layanan, tipe:r.tipe||'', overtimeJam:pkJamOtomatis(r.layanan, r.tipe), overtimeManual:null, lanjutLayanan:'', lanjutTipe:'', lanjutUnitId:'', dihapus:false};
     PROGRAM_AKTUAL.push(a);
   }
   return a;
@@ -266,7 +266,7 @@ function prunePkAktualIfSameAsProgram(rencanaId, tanggal){
   if(!r) return;
   const sama = a.unitId===r.unitId && a.sopir===r.sopir && a.isInti===r.isInti && a.layanan===r.layanan && (a.tipe||'')===(r.tipe||'') &&
     (a.overtimeManual===null || a.overtimeManual===undefined || a.overtimeManual===pkJamOtomatis(r.layanan, r.tipe)) &&
-    !a.lanjutLayanan && !a.lanjutUnitId; // Program (rencana) tidak punya konsep "Pekerjaan Selanjutnya" - kalau salah satu ini diisi, baris Aktual WAJIB tetap ada walau field lain sama persis dengan Program, supaya isian ini tidak ikut hilang.
+    !a.lanjutLayanan && !a.lanjutUnitId && !a.dihapus; // dihapus=true WAJIB tetap tersimpan sebagai baris Aktual walau field lain "kebetulan" sama dengan Program - itu satu-satunya jejak bahwa tanggal ini sengaja dikecualikan.
   if(sama) PROGRAM_AKTUAL.splice(idx,1);
 }
 function updatePkAktual(rencanaId, tanggal, field, val){
@@ -412,17 +412,76 @@ function renderPkAktualEditModal(rencanaId, tanggal){
       </select>
       ` : ''}
     </div>
+    <div style="border-top:1px solid var(--outline-variant);margin-top:12px;padding-top:12px;">
+      <label class="flabel" style="margin-top:0;color:var(--secondary);font-weight:700;">Zona Bahaya</label>
+      <div class="field-sub" style="margin-bottom:8px;">Untuk sopir/unit yang direncanakan sampai ${fmtLabel(r.tanggalSampai)} tapi ternyata sudah tidak dipakai mulai tanggal ini. Program aslinya (${fmtLabel(r.tanggalMulai)}${r.tanggalSampai!==r.tanggalMulai?' - '+fmtLabel(r.tanggalSampai):''}) dan tanggal lain SAMA SEKALI TIDAK ikut berubah - cuma tanggal ${fmtLabel(tanggal)} ini yang dikecualikan dari Aktual.</div>
+      <button class="icon-btn" style="width:100%;justify-content:center;color:var(--secondary);border:1px solid var(--secondary);" onclick="openHapusPkAktualConfirm('${r.id}','${tanggal}')">${ic('trash')} Hapus untuk Tanggal Ini Saja</button>
+    </div>
   `);
 }
+/* Dialog konfirmasi kustom (bukan confirm() bawaan) sebelum mengecualikan 1
+ * baris Program dari Aktual di 1 tanggal tertentu - lihat penjelasan lengkap
+ * di hapusPkAktualUntukTanggal() di bawah. */
+function openHapusPkAktualConfirm(rencanaId, tanggal){
+  const r = PROGRAM_RENCANA.find(x=>x.id===rencanaId);
+  if(!r) return;
+  openModal(`
+    <div class="mhead"><h2>Hapus untuk ${fmtLabel(tanggal)}?</h2><button class="mclose" onclick="closeModal()">&times;</button></div>
+    <div class="field-sub" style="margin-bottom:16px;">${escapeHtml(r.sopir||'-')} (${escapeHtml(btLabel(r.unitId))}) tidak akan lagi tercatat di Aktual tanggal ${fmtLabel(tanggal)} - tanggal lain dalam rentang Program ini (${fmtLabel(r.tanggalMulai)} - ${fmtLabel(r.tanggalSampai)}) tidak ikut berubah. Bisa dibatalkan lagi kapan saja lewat tombol "Tampilkan Lagi" di tab Aktual.</div>
+    <button class="icon-btn" style="width:100%;justify-content:center;color:var(--secondary);border:1px solid var(--secondary);" onclick="hapusPkAktualUntukTanggal('${rencanaId}','${tanggal}')">${ic('trash')} Ya, Hapus untuk Tanggal Ini</button>
+  `);
+}
+/* Mengecualikan 1 baris Program dari Aktual HANYA di 1 tanggal tertentu -
+ * dipakai untuk kasus: Program direncanakan mis. tgl 1-7 untuk 1 sopir
+ * non-inti, tapi ternyata sopir itu sudah tidak dipakai sejak tgl 6. Dulu
+ * satu-satunya cara "menghapus" adalah mengedit/menghapus baris Program itu
+ * sendiri - yang otomatis ikut menghapus jejak tgl 1-5 yang sebenarnya sudah
+ * benar. Sekarang: Program (rencana) SAMA SEKALI TIDAK disentuh (tetap
+ * tercatat 1-7 sebagai rencana awal), cuma baris Aktual tanggal ini yang
+ * ditandai `dihapus` - jadi tidak lagi muncul di tab Aktual/Rekap/Export
+ * untuk tanggal itu saja, sementara tanggal lain & Program aslinya utuh. */
+function hapusPkAktualUntukTanggal(rencanaId, tanggal){
+  const a = ensurePkAktualRow(rencanaId, tanggal);
+  if(!a) return;
+  a.dihapus = true;
+  saveProgramAktual();
+  closeModal();
+  toast('Dihapus untuk tanggal ini');
+  renderProker();
+}
+function batalkanHapusPkAktual(rencanaId, tanggal){
+  const a = ensurePkAktualRow(rencanaId, tanggal);
+  if(!a) return;
+  a.dihapus = false;
+  prunePkAktualIfSameAsProgram(rencanaId, tanggal);
+  saveProgramAktual();
+  toast('Ditampilkan lagi');
+  renderProker();
+}
 function renderPkAktualTab(){
-  const programHariIni = pkProgramRowsForDate(pkAktualTanggal);
+  const programSemua = pkProgramRowsForDate(pkAktualTanggal);
+  // Pisahkan baris yang sudah ditandai "dihapus untuk tanggal ini" - tetap
+  // ditampilkan (dipendekkan, dicoret) di bagian bawah supaya kelihatan
+  // jejaknya dan gampang dikembalikan, tidak sekadar lenyap tanpa bekas.
+  const programHariIni = programSemua.filter(r=>!(getPkAktualFor(r.id, pkAktualTanggal)||{}).dihapus);
+  const programDihapus = programSemua.filter(r=>(getPkAktualFor(r.id, pkAktualTanggal)||{}).dihapus);
   const header = `
     <label class="flabel">Tanggal</label><input type="date" value="${pkAktualTanggal}" onchange="setPkAktualTanggal(this.value)">
     <div class="chk-row"><input type="checkbox" id="pk-tandaLL" ${pkTandaLiburLembur(pkAktualTanggal)?'checked':''} onchange="togglePkTandaLiburLembur('${pkAktualTanggal}', this.checked)"><label for="pk-tandaLL" style="margin-left:6px;">Tanggal Libur/Lembur (dipakai filter Rekap)</label></div>
   `;
+  const bagianDihapus = programDihapus.length>0 ? `
+    <div class="field-sub" style="margin-top:14px;">Dihapus untuk tanggal ini (Program aslinya tidak berubah):</div>
+    ${programDihapus.map(r=>`
+      <div class="card card-flat" style="margin-top:6px;opacity:.65;display:flex;justify-content:space-between;align-items:center;">
+        <span style="text-decoration:line-through;">${escapeHtml(btLabel(r.unitId))} &middot; ${escapeHtml(r.sopir||'-')}</span>
+        <button class="pill-btn sm outline" onclick="batalkanHapusPkAktual('${r.id}','${pkAktualTanggal}')">Tampilkan Lagi</button>
+      </div>
+    `).join('')}
+  ` : '';
   if(programHariIni.length===0){
     return header + `<div class="card"><div class="empty-note">Belum ada Program yang berlaku di tanggal ini.</div></div>
-      <button class="btn-block" style="width:100%;margin-top:10px;" onclick="addPkRencanaRowForAktualDate()">${ic('plus')} Tambah Unit &amp; Sopir untuk ${fmtLabel(pkAktualTanggal)}</button>`;
+      <button class="btn-block" style="width:100%;margin-top:10px;" onclick="addPkRencanaRowForAktualDate()">${ic('plus')} Tambah Unit &amp; Sopir untuk ${fmtLabel(pkAktualTanggal)}</button>
+      ${bagianDihapus}`;
   }
   return header + `
     <div class="section-eyebrow section-eyebrow-row">Aktual ${fmtLabel(pkAktualTanggal)}<button class="pill-btn sm" onclick="addPkRencanaRowForAktualDate()">+ Tambah</button></div>
@@ -431,6 +490,7 @@ function renderPkAktualTab(){
       ${programHariIni.map(r=>renderPkAktualRowCompact(r, pkAktualTanggal)).join('')}
     </div>
     <div class="field-sub">Tap baris untuk mengoreksi realisasi hari ini &middot; kalau tidak disentuh, dianggap sesuai Program.</div>
+    ${bagianDihapus}
   `;
 }
 /* Tambah unit+sopir baru langsung dari tab Aktual, TANPA perlu ke tab Program
@@ -453,7 +513,9 @@ function addPkRencanaRowForAktualDate(){
 /* ----- Sub-tab: REKAP (dalam modul Program Kerja) ----- */
 function pkEffectiveRowsForDate(tanggal){
   const tandaLL = pkTandaLiburLembur(tanggal);
-  return pkProgramRowsForDate(tanggal).map(r=>{
+  return pkProgramRowsForDate(tanggal)
+    .filter(r=>!(getPkAktualFor(r.id, tanggal)||{}).dihapus) // baris yang ditandai "dihapus untuk tanggal ini" dikecualikan dari Rekap & Export juga
+    .map(r=>{
     const a = getPkAktualFor(r.id, tanggal);
     if(a) return {tanggal, unitId:a.unitId, sopir:a.sopir, isInti:a.isInti, layanan:a.layanan, tipe:a.tipe||'', overtimeJam:(a.overtimeManual!=null?a.overtimeManual:pkJamOtomatis(a.layanan, a.tipe)), tandaLiburLembur:tandaLL, lanjutLayanan:a.lanjutLayanan||'', lanjutTipe:a.lanjutTipe||'', lanjutUnitId:a.lanjutUnitId||''};
     return {tanggal, unitId:r.unitId, sopir:r.sopir, isInti:r.isInti, layanan:r.layanan, tipe:r.tipe||'', overtimeJam:pkJamOtomatis(r.layanan, r.tipe), tandaLiburLembur:tandaLL, lanjutLayanan:'', lanjutTipe:'', lanjutUnitId:''};
