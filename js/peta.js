@@ -275,22 +275,27 @@ function isBlokFormatValid(label){
 function riwayatUntukBlok(label){
   return ENTRIES
     .filter(e =>
-      lokasiArrGetForDisplay(e,'lokasi').includes(label) ||
-      lokasiArrGetForDisplay(e,'lokasi2').includes(label) ||
+      pasanganArrGetForDisplay(e,'lokasi','nama').some(p=>p.lokasi===label) ||
+      pasanganArrGetForDisplay(e,'lokasi2','nama2').some(p=>p.lokasi===label) ||
       e.lokasiMuat===label || e.lokasiBongkar===label ||
       e.lokasiMuat2===label || e.lokasiBongkar2===label
     )
     .sort((a,b)=>b.date.localeCompare(a.date))
     .map(e=>{
+      const pasanganUtama = pasanganArrGetForDisplay(e,'lokasi','nama').filter(p=>p.lokasi===label);
+      const pasanganKedua = pasanganArrGetForDisplay(e,'lokasi2','nama2').filter(p=>p.lokasi===label);
       // Tentukan slot mana (layanan utama/kedua) yang BENAR-BENAR cocok
       // dengan blok ini, supaya jenis layanan & detail (mis. tonase) yang
       // ditampilkan sesuai layanan yang tepat, bukan asal ambil yang pertama.
-      const cocokUtama = lokasiArrGetForDisplay(e,'lokasi').includes(label) || e.lokasiMuat===label || e.lokasiBongkar===label;
+      const cocokUtama = pasanganUtama.length>0 || e.lokasiMuat===label || e.lokasiBongkar===label;
       const jenis = cocokUtama ? e.jenisLayanan : (e.jenisLayanan2||e.jenisLayanan);
       const tonase = cocokUtama ? e.tonaseKg : e.tonaseKg2;
       const detail = (jenis==='Muat Tebu' && tonase) ? (fmtThousandsLive(String(tonase))+' kg') : '';
-      const namaGabungan = [...lokasiArrGetForDisplay(e,'nama'), ...lokasiArrGetForDisplay(e,'nama2')].filter(Boolean);
-      return {date:e.date, btId:e.btId, jenis, detail, nama:namaGabungan.join(', ')};
+      // Nama yang ditampilkan HANYA yang benar-benar BERPASANGAN dengan lokasi
+      // ini - bukan gabungan semua nama di entri itu - supaya tidak tertukar
+      // kalau entrinya punya beberapa lokasi sekaligus.
+      const namaCocok = [...pasanganUtama, ...pasanganKedua].map(p=>p.nama).filter(Boolean);
+      return {date:e.date, btId:e.btId, jenis, detail, nama:namaCocok.join(', ')};
     });
 }
 function fmtTglSingkat(iso){
@@ -360,13 +365,16 @@ function terapkanLokasiKeEntry(blockId, entryId){
     else { e.lokasiBongkar = b.label; toast('Lokasi Bongkar diisi: '+b.label); }
     saveEntries();
   } else {
-    // Ditambahkan ke daftar (boleh lebih dari 1 blok per kegiatan), BUKAN
-    // menimpa lokasi yang sudah ada - slot kosong dibuang dulu supaya tidak
-    // menumpuk baris kosong tiap kali tombol ini ditekan berkali-kali.
-    const arr = lokasiArrGetForDisplay(e, 'lokasi').filter(v=>v);
-    arr.push(b.label);
-    e.lokasiArr = arr;
-    e.lokasi = arr[0]||'';
+    // Ditambahkan sebagai pasangan baru {lokasi, nama:''} - BUKAN menimpa
+    // yang sudah ada. Nama-nya dikosongkan dulu (bisa diisi manual di Hari
+    // Ini kalau memang ada vendor/mandor tertentu di lokasi ini) - pasangan
+    // kosong yang belum terisi apa pun tidak ikut disimpan supaya tidak
+    // menumpuk baris kosong tiap tombol ini ditekan berkali-kali.
+    const arr = pasanganArrGetForDisplay(e, 'lokasi', 'nama').filter(p=>p.lokasi||p.nama);
+    arr.push({lokasi:b.label, nama:''});
+    e.lokasiPasanganArr = arr;
+    e.lokasi = arr[0].lokasi||'';
+    e.nama = arr[0].nama||'';
     saveEntries();
     toast('Lokasi ditambahkan: '+b.label);
   }

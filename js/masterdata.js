@@ -249,28 +249,25 @@ function renderJenisLayananFields(e, suffix, mode){
   const chg = (field) => chgRaw(field, 'this.value');
   const lokasiInput = (field) => `<input type="text" list="lokasiSuggest" oninput="onLokasiInput(this)" onfocus="onLokasiFocus(this)" value="${escapeHtml(e[fk(field)]||'')}" onchange="${chg(field)}">`;
   // Field "Lokasi" (BUKAN Lokasi Muat/Bongkar milik Muat Tebu, itu tetap 1
-  // seperti biasa) bisa diisi LEBIH DARI 1 kalau 1 kegiatan mencakup beberapa
-  // blok sekaligus - disimpan sebagai array `lokasiArr`(+suffix). Data lama
-  // (field `lokasi` tunggal) otomatis ikut tampil lewat lokasiArrGetForDisplay().
-  const lokasiMultiInput = (field) => {
-    const arr = lokasiArrGetForDisplay(e, fk(field));
+  // seperti biasa) BERPASANGAN dengan "Nama" - 1 baris = 1 lokasi + 1 nama
+  // yang mengerjakannya di situ, supaya waktu ada beberapa lokasi sekaligus
+  // tidak tertukar siapa mengerjakan yang mana. Disimpan sebagai array
+  // pasangan `lokasiPasanganArr`(+suffix): [{lokasi,nama}, ...]. Data lama
+  // (dari sebelum digabung, waktu Lokasi & Nama masih 2 daftar terpisah, atau
+  // dari sebelum itu lagi waktu keduanya masih 1 field tunggal) otomatis
+  // dipasangkan lewat pasanganArrGetForDisplay().
+  const lokasiNamaPairInput = (lokasiFieldBase) => {
+    const lokasiField = fk(lokasiFieldBase);
+    const namaField = fk('nama');
+    const arr = pasanganArrGetForDisplay(e, lokasiField, namaField);
     return `
-      <div style="display:flex;flex-wrap:wrap;gap:6px;">
-        ${arr.map((val,idx)=>`<input type="text" list="lokasiSuggest" style="flex:1 1 44%;min-width:0;" oninput="onLokasiInput(this)" onfocus="onLokasiFocus(this)" value="${escapeHtml(val||'')}" onchange="lokasiArrChange('${e.id}','${mode}','${fk(field)}',${idx},this.value)">`).join('')}
-      </div>
-      <button type="button" class="pill-btn sm outline" style="margin-top:6px;" onclick="lokasiArrTambah('${e.id}','${mode}','${fk(field)}')">${ic('plus',12)} Tambah Lokasi</button>
-    `;
-  };
-  // Field "Nama" (vendor/operator/mandor yang terlibat) - pola persis sama
-  // dengan Lokasi (boleh lebih dari 1), tapi pakai daftar Kelola Nama sebagai
-  // saran (bukan hasil scan ENTRIES), dan tanpa auto-rapikan format blok.
-  const namaMultiInput = (field) => {
-    const arr = lokasiArrGetForDisplay(e, fk(field));
-    return `
-      <div style="display:flex;flex-wrap:wrap;gap:6px;">
-        ${arr.map((val,idx)=>`<input type="text" list="namaSuggest" style="flex:1 1 44%;min-width:0;" onfocus="onNamaFocus(this)" value="${escapeHtml(val||'')}" onchange="lokasiArrChange('${e.id}','${mode}','${fk(field)}',${idx},this.value)">`).join('')}
-      </div>
-      <button type="button" class="pill-btn sm outline" style="margin-top:6px;" onclick="lokasiArrTambah('${e.id}','${mode}','${fk(field)}')">${ic('plus',12)} Tambah Nama</button>
+      ${arr.map((p,idx)=>`
+        <div style="display:flex;gap:6px;margin-bottom:6px;">
+          <input type="text" list="lokasiSuggest" placeholder="Lokasi" style="flex:1;min-width:0;" oninput="onLokasiInput(this)" onfocus="onLokasiFocus(this)" value="${escapeHtml(p.lokasi||'')}" onchange="pasanganArrChange('${e.id}','${mode}','${lokasiField}','${namaField}',${idx},'lokasi',this.value)">
+          <input type="text" list="namaSuggest" placeholder="Nama (opsional)" style="flex:1;min-width:0;" onfocus="onNamaFocus(this)" value="${escapeHtml(p.nama||'')}" onchange="pasanganArrChange('${e.id}','${mode}','${lokasiField}','${namaField}',${idx},'nama',this.value)">
+        </div>
+      `).join('')}
+      <button type="button" class="pill-btn sm outline" onclick="pasanganArrTambah('${e.id}','${mode}','${lokasiField}','${namaField}')">${ic('plus',12)} Tambah Lokasi &amp; Nama</button>
     `;
   };
   return `
@@ -280,8 +277,7 @@ function renderJenisLayananFields(e, suffix, mode){
         <div><label class="flabel">Tipe</label>${sel('tipeAntar', TIPE_ANTAR_LIST)}</div>
         <div><label class="flabel">Kegiatan</label>${sel('kegiatan', KEGIATAN_LIST)}</div>
       </div>
-      <label class="flabel">Lokasi</label>${lokasiMultiInput('lokasi')}
-      <label class="flabel" style="margin-top:8px;">Nama <span style="font-weight:400;color:var(--on-surface-variant);">(vendor/mandor, opsional)</span></label>${namaMultiInput('nama')}
+      <label class="flabel">Lokasi &amp; Nama <span style="font-weight:400;color:var(--on-surface-variant);">(vendor/mandor, opsional)</span></label>${lokasiNamaPairInput('lokasi')}
     ` : ''}
     ${jenis==='Muat Tebu' ? `
       <div style="margin-top:8px;"><label class="flabel">Tipe</label>${sel('muatTipe', MUAT_TIPE_LIST)}</div>
@@ -297,18 +293,53 @@ function renderJenisLayananFields(e, suffix, mode){
     ` : ''}
     ${jenis==='Drone' ? `
       <div style="margin-top:8px;"><label class="flabel">Jenis Drone</label>${sel('droneJenis', DRONE_JENIS_LIST)}</div>
-      <label class="flabel">Lokasi</label>${lokasiMultiInput('lokasi')}
-      <label class="flabel" style="margin-top:8px;">Nama <span style="font-weight:400;color:var(--on-surface-variant);">(opsional)</span></label>${namaMultiInput('nama')}
+      <label class="flabel">Lokasi &amp; Nama <span style="font-weight:400;color:var(--on-surface-variant);">(opsional)</span></label>${lokasiNamaPairInput('lokasi')}
     ` : ''}
     ${jenis==='Operator' ? `
       <div style="margin-top:8px;"><label class="flabel">Shift</label>${sel('shift', SHIFT_LIST)}</div>
-      <label class="flabel">Lokasi</label>${lokasiMultiInput('lokasi')}
-      <label class="flabel" style="margin-top:8px;">Nama <span style="font-weight:400;color:var(--on-surface-variant);">(opsional)</span></label>${namaMultiInput('nama')}
+      <label class="flabel">Lokasi &amp; Nama <span style="font-weight:400;color:var(--on-surface-variant);">(opsional)</span></label>${lokasiNamaPairInput('lokasi')}
     ` : ''}
     ${jenis && !['Antar/Jemput Tenaga','Muat Tebu','Drone','Operator'].includes(jenis) ? `
-      <label class="flabel">Lokasi</label>${lokasiMultiInput('lokasi')}
+      <label class="flabel">Lokasi</label>${lokasiInput('lokasi')}
     ` : ''}
   `;
+}
+/* Ambil daftar PASANGAN {lokasi, nama} untuk 1 baris field - migrasi otomatis
+ * dari bentuk lama (2 daftar terpisah lokasiArr/namaArr, atau field tunggal
+ * lokasi/nama) kalau pasangannya sendiri belum pernah diisi. */
+function pasanganArrGetForDisplay(e, lokasiField, namaField){
+  const key = lokasiField+'PasanganArr';
+  if(Array.isArray(e[key]) && e[key].length) return e[key];
+  const lok = lokasiArrGetForDisplay(e, lokasiField);
+  const nama = lokasiArrGetForDisplay(e, namaField);
+  const n = Math.max(lok.length, nama.length, 1);
+  const out = [];
+  for(let i=0;i<n;i++) out.push({lokasi: lok[i]||'', nama: nama[i]||''});
+  return out;
+}
+function pasanganArrChange(entryId, mode, lokasiField, namaField, idx, key, value){
+  const e = ENTRIES.find(x=>x.id===entryId);
+  if(!e) return;
+  const arrKey = lokasiField+'PasanganArr';
+  const arr = pasanganArrGetForDisplay(e, lokasiField, namaField).map(p=>({lokasi:p.lokasi, nama:p.nama}));
+  arr[idx][key] = value;
+  e[arrKey] = arr;
+  // Field lama (lokasi/nama tunggal) disinkronkan ke pasangan PERTAMA - dipakai
+  // versi cetak & tempat lain yang cuma butuh 1 nilai wakil.
+  e[lokasiField] = arr[0].lokasi||'';
+  e[namaField] = arr[0].nama||'';
+  saveEntries();
+  if(mode==='edit'){ expandedRowId=entryId; renderRekap(); } else renderHari();
+}
+function pasanganArrTambah(entryId, mode, lokasiField, namaField){
+  const e = ENTRIES.find(x=>x.id===entryId);
+  if(!e) return;
+  const arrKey = lokasiField+'PasanganArr';
+  const arr = pasanganArrGetForDisplay(e, lokasiField, namaField).map(p=>({lokasi:p.lokasi, nama:p.nama}));
+  arr.push({lokasi:'', nama:''});
+  e[arrKey] = arr;
+  saveEntries();
+  if(mode==='edit'){ expandedRowId=entryId; renderRekap(); } else renderHari();
 }
 /* Ambil daftar lokasi (array) untuk 1 field - migrasi otomatis dari field
  * lama yang cuma 1 string kalau array-nya belum pernah diisi, supaya data
@@ -337,7 +368,7 @@ function lokasiArrTambah(entryId, mode, fieldBase){
   saveEntries();
   if(mode==='edit'){ expandedRowId=entryId; renderRekap(); } else renderHari();
 }
-const LAYANAN2_FIELDS = ['jenisLayanan2','tipeAntar2','kegiatan2','muatTipe2','tonaseKg2','lokasi2','lokasiArr2','lokasiMuat2','lokasiBongkar2','droneJenis2','shift2','nama2','nama2Arr'];
+const LAYANAN2_FIELDS = ['jenisLayanan2','tipeAntar2','kegiatan2','muatTipe2','tonaseKg2','lokasi2','lokasiArr2','lokasi2PasanganArr','lokasiMuat2','lokasiBongkar2','droneJenis2','shift2','nama2','nama2Arr'];
 /* Tambah/hapus Jenis Layanan ke-2 - KHUSUS unit yang sama, hari yang sama
  * (mis. semprot 2 bahan berbeda). Kalau perlu pekerjaan di UNIT lain di hari
  * yang sama, itu tetap pakai "+ Tambah Unit" (Entri Tambahan) seperti biasa,
@@ -587,6 +618,8 @@ function lokasiSuggestions(){
     [e.lokasi,e.lokasiMuat,e.lokasiBongkar,e.lokasi2,e.lokasiMuat2,e.lokasiBongkar2].forEach(l=>{ if(l) set.add(l); });
     (e.lokasiArr||[]).forEach(l=>{ if(l) set.add(l); });
     (e.lokasiArr2||[]).forEach(l=>{ if(l) set.add(l); });
+    (e.lokasiPasanganArr||[]).forEach(p=>{ if(p.lokasi) set.add(p.lokasi); });
+    (e.lokasi2PasanganArr||[]).forEach(p=>{ if(p.lokasi) set.add(p.lokasi); });
   });
   PETA_BLOCKS.forEach(b=>{ if(b.label) set.add(b.label); });
   BLOKS.forEach(b=>{ if(b.kode) set.add(b.kode); });
