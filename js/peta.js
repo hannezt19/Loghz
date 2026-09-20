@@ -281,7 +281,17 @@ function riwayatUntukBlok(label){
       e.lokasiMuat2===label || e.lokasiBongkar2===label
     )
     .sort((a,b)=>b.date.localeCompare(a.date))
-    .map(e=>({date:e.date, btId:e.btId, jenis:e.jenisLayanan}));
+    .map(e=>{
+      // Tentukan slot mana (layanan utama/kedua) yang BENAR-BENAR cocok
+      // dengan blok ini, supaya jenis layanan & detail (mis. tonase) yang
+      // ditampilkan sesuai layanan yang tepat, bukan asal ambil yang pertama.
+      const cocokUtama = lokasiArrGetForDisplay(e,'lokasi').includes(label) || e.lokasiMuat===label || e.lokasiBongkar===label;
+      const jenis = cocokUtama ? e.jenisLayanan : (e.jenisLayanan2||e.jenisLayanan);
+      const tonase = cocokUtama ? e.tonaseKg : e.tonaseKg2;
+      const detail = (jenis==='Muat Tebu' && tonase) ? (fmtThousandsLive(String(tonase))+' kg') : '';
+      const namaGabungan = [...lokasiArrGetForDisplay(e,'nama'), ...lokasiArrGetForDisplay(e,'nama2')].filter(Boolean);
+      return {date:e.date, btId:e.btId, jenis, detail, nama:namaGabungan.join(', ')};
+    });
 }
 function fmtTglSingkat(iso){
   const d = new Date(iso+'T00:00:00');
@@ -299,7 +309,7 @@ function showPetaBlock(id){
     ${formatValid ? `
     <div class="section-eyebrow">Riwayat</div>
     <div style="max-height:110px;overflow-y:auto;border:1px solid var(--outline-variant);border-radius:12px;padding:6px 12px;margin-bottom:16px;">
-      ${riwayat.length===0 ? '' : riwayat.map(r=>`<div style="font-size:11px;color:var(--on-surface-variant);padding:4px 0;border-bottom:1px solid var(--outline-variant);">${fmtTglSingkat(r.date)} &middot; ${escapeHtml(btLabel(r.btId))} &middot; ${escapeHtml(r.jenis||'-')}</div>`).join('')}
+      ${riwayat.length===0 ? '' : riwayat.map(r=>`<div style="font-size:11px;color:var(--on-surface-variant);padding:4px 0;border-bottom:1px solid var(--outline-variant);">${fmtTglSingkat(r.date)} &middot; ${escapeHtml(btLabel(r.btId))} &middot; ${escapeHtml(r.jenis||'-')}${r.detail?' &middot; '+escapeHtml(r.detail):''}${r.nama?' &middot; '+escapeHtml(r.nama):''}</div>`).join('')}
     </div>
     ` : ''}
     <div style="display:flex;gap:8px;">
@@ -318,13 +328,37 @@ function editPetaBlockName(id){
   toast('Nama blok diperbarui');
   showPetaBlock(id);
 }
+/* Kalau hari ini cuma ada 1 unit, langsung terapkan seperti biasa - tidak
+ * perlu tanya apa-apa. Kalau ada lebih dari 1 (unit utama + tambahan), tanya
+ * dulu mau ditambahkan ke unit yang mana - supaya lokasi tidak salah nyasar
+ * ke unit utama padahal pekerjaannya sedang di unit tambahan (bug yang
+ * dilaporkan sebelumnya). */
 function usePetaBlockAsLokasi(id){
-  const b = PETA_BLOCKS.find(x=>x.id===id);
+  const semuaUnit = [getTodayEntry(), ...getSecondaryUnitsToday()];
+  if(semuaUnit.length<=1){ terapkanLokasiKeEntry(id, semuaUnit[0].id); return; }
+  openPetaPilihUnitModal(id, semuaUnit);
+}
+function openPetaPilihUnitModal(blockId, semuaUnit){
+  const b = PETA_BLOCKS.find(x=>x.id===blockId);
   if(!b) return;
-  const e = getTodayEntry();
+  openModal(`
+    <div class="mhead"><h2>Pilih Unit</h2><button class="mclose" onclick="closeModal()">&times;</button></div>
+    <div class="field-sub" style="margin-bottom:12px;">Lokasi "${escapeHtml(b.label)}" mau ditambahkan ke unit mana hari ini?</div>
+    ${semuaUnit.map(e=>`
+      <button class="pill-btn outline" style="width:100%;justify-content:center;margin-bottom:8px;" onclick="terapkanLokasiKeEntry('${blockId}','${e.id}')">
+        ${escapeHtml(btLabel(e.btId)||'(belum pilih unit)')}${e.jenisLayanan?' &middot; '+escapeHtml(e.jenisLayanan):''}
+      </button>
+    `).join('')}
+  `);
+}
+function terapkanLokasiKeEntry(blockId, entryId){
+  const b = PETA_BLOCKS.find(x=>x.id===blockId);
+  const e = ENTRIES.find(x=>x.id===entryId);
+  if(!b || !e) return;
   if(e.jenisLayanan==='Muat Tebu' && e.muatTipe==='Bibit'){
-    if(!e.lokasiMuat){ quickSave('lokasiMuat', b.label); toast('Lokasi Muat diisi: '+b.label); }
-    else { quickSave('lokasiBongkar', b.label); toast('Lokasi Bongkar diisi: '+b.label); }
+    if(!e.lokasiMuat){ e.lokasiMuat = b.label; toast('Lokasi Muat diisi: '+b.label); }
+    else { e.lokasiBongkar = b.label; toast('Lokasi Bongkar diisi: '+b.label); }
+    saveEntries();
   } else {
     // Ditambahkan ke daftar (boleh lebih dari 1 blok per kegiatan), BUKAN
     // menimpa lokasi yang sudah ada - slot kosong dibuang dulu supaya tidak

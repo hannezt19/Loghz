@@ -400,6 +400,7 @@ async function bootApp(){
     USER = LS.get('v2_user', {name:'', mainBt:''});
     UNITS = LS.get('v2_units', []);
     BLOKS = LS.get('v2_bloks', []);
+    NAMA_LIST = LS.get('v2_nama_list', []);
     ENTRIES = LS.get('v2_entries', []);
     SERVIS = LS.get('v2_servis', []);
     HM_RESETS = LS.get('v2_hmresets', []);

@@ -261,6 +261,18 @@ function renderJenisLayananFields(e, suffix, mode){
       <button type="button" class="pill-btn sm outline" style="margin-top:6px;" onclick="lokasiArrTambah('${e.id}','${mode}','${fk(field)}')">${ic('plus',12)} Tambah Lokasi</button>
     `;
   };
+  // Field "Nama" (vendor/operator/mandor yang terlibat) - pola persis sama
+  // dengan Lokasi (boleh lebih dari 1), tapi pakai daftar Kelola Nama sebagai
+  // saran (bukan hasil scan ENTRIES), dan tanpa auto-rapikan format blok.
+  const namaMultiInput = (field) => {
+    const arr = lokasiArrGetForDisplay(e, fk(field));
+    return `
+      <div style="display:flex;flex-wrap:wrap;gap:6px;">
+        ${arr.map((val,idx)=>`<input type="text" list="namaSuggest" style="flex:1 1 44%;min-width:0;" onfocus="onNamaFocus(this)" value="${escapeHtml(val||'')}" onchange="lokasiArrChange('${e.id}','${mode}','${fk(field)}',${idx},this.value)">`).join('')}
+      </div>
+      <button type="button" class="pill-btn sm outline" style="margin-top:6px;" onclick="lokasiArrTambah('${e.id}','${mode}','${fk(field)}')">${ic('plus',12)} Tambah Nama</button>
+    `;
+  };
   return `
     ${sel('jenisLayanan', JENIS_LAYANAN_LIST)}
     ${jenis==='Antar/Jemput Tenaga' ? `
@@ -269,6 +281,7 @@ function renderJenisLayananFields(e, suffix, mode){
         <div><label class="flabel">Kegiatan</label>${sel('kegiatan', KEGIATAN_LIST)}</div>
       </div>
       <label class="flabel">Lokasi</label>${lokasiMultiInput('lokasi')}
+      <label class="flabel" style="margin-top:8px;">Nama <span style="font-weight:400;color:var(--on-surface-variant);">(vendor/mandor, opsional)</span></label>${namaMultiInput('nama')}
     ` : ''}
     ${jenis==='Muat Tebu' ? `
       <div style="margin-top:8px;"><label class="flabel">Tipe</label>${sel('muatTipe', MUAT_TIPE_LIST)}</div>
@@ -285,10 +298,12 @@ function renderJenisLayananFields(e, suffix, mode){
     ${jenis==='Drone' ? `
       <div style="margin-top:8px;"><label class="flabel">Jenis Drone</label>${sel('droneJenis', DRONE_JENIS_LIST)}</div>
       <label class="flabel">Lokasi</label>${lokasiMultiInput('lokasi')}
+      <label class="flabel" style="margin-top:8px;">Nama <span style="font-weight:400;color:var(--on-surface-variant);">(opsional)</span></label>${namaMultiInput('nama')}
     ` : ''}
     ${jenis==='Operator' ? `
       <div style="margin-top:8px;"><label class="flabel">Shift</label>${sel('shift', SHIFT_LIST)}</div>
       <label class="flabel">Lokasi</label>${lokasiMultiInput('lokasi')}
+      <label class="flabel" style="margin-top:8px;">Nama <span style="font-weight:400;color:var(--on-surface-variant);">(opsional)</span></label>${namaMultiInput('nama')}
     ` : ''}
     ${jenis && !['Antar/Jemput Tenaga','Muat Tebu','Drone','Operator'].includes(jenis) ? `
       <label class="flabel">Lokasi</label>${lokasiMultiInput('lokasi')}
@@ -322,7 +337,7 @@ function lokasiArrTambah(entryId, mode, fieldBase){
   saveEntries();
   if(mode==='edit'){ expandedRowId=entryId; renderRekap(); } else renderHari();
 }
-const LAYANAN2_FIELDS = ['jenisLayanan2','tipeAntar2','kegiatan2','muatTipe2','tonaseKg2','lokasi2','lokasiArr2','lokasiMuat2','lokasiBongkar2','droneJenis2','shift2'];
+const LAYANAN2_FIELDS = ['jenisLayanan2','tipeAntar2','kegiatan2','muatTipe2','tonaseKg2','lokasi2','lokasiArr2','lokasiMuat2','lokasiBongkar2','droneJenis2','shift2','nama2','nama2Arr'];
 /* Tambah/hapus Jenis Layanan ke-2 - KHUSUS unit yang sama, hari yang sama
  * (mis. semprot 2 bahan berbeda). Kalau perlu pekerjaan di UNIT lain di hari
  * yang sama, itu tetap pakai "+ Tambah Unit" (Entri Tambahan) seperti biasa,
@@ -610,6 +625,22 @@ function onLokasiInput(el){
 }
 function onLokasiFocus(el){
   refreshLokasiDatalist(el.value);
+  setTimeout(()=>{ el.scrollIntoView({behavior:'smooth', block:'center'}); }, 250);
+}
+/* Saran untuk field "Nama" (Vendor/Operator/Mandor) - beda dari Lokasi,
+ * sumbernya CUMA daftar Kelola Nama (NAMA_LIST), bukan hasil scan ENTRIES,
+ * karena ini memang daftar terkelola sendiri (bisa dihapus kalau vendor
+ * berganti/operator pensiun), bukan teks bebas yang menumpuk otomatis. */
+function refreshNamaDatalist(filterText){
+  const q = String(filterText||'').toLowerCase().trim();
+  let matches = NAMA_LIST.map(n=>n.nama);
+  if(q) matches = matches.filter(n=>n.toLowerCase().includes(q));
+  matches = matches.slice(0,7);
+  const dl = document.getElementById('namaSuggest');
+  if(dl) dl.innerHTML = matches.map(n=>`<option value="${escapeHtml(n)}">`).join('');
+}
+function onNamaFocus(el){
+  refreshNamaDatalist(el.value);
   setTimeout(()=>{ el.scrollIntoView({behavior:'smooth', block:'center'}); }, 250);
 }
 function stripDots(v){ return v==null?'':String(v).replace(/\./g,''); }

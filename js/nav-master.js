@@ -1,4 +1,11 @@
 /* ================= NAVIGATION ================= */
+/* Daftar nama Vendor/Operator/Mandor digabung jadi 1 (bukan dipisah per
+ * kategori) - dari nama itu sendiri Han sudah tahu itu vendor/operator/mandor,
+ * jadi tidak perlu sistem menyimpan kategorinya. Dipakai sebagai saran (mirip
+ * lokasiSuggest) di field "Nama" pada Jenis Layanan Antar/Jemput Tenaga,
+ * Drone, dan Operator. */
+let NAMA_LIST = LS.get('v2_nama_list', []); // [{id, nama}]
+function saveNamaList(){ LS.set('v2_nama_list', NAMA_LIST); }
 const TITLES = {
   beranda:['BERANDA', 'Ringkasan'],
   hari:['HARI INI', ()=>fmtLabel(todayIso())],
@@ -335,6 +342,45 @@ function deleteBlok(id){
   saveBloks();
   renderKelolaBlokModal();
   toast('Blok dihapus');
+}
+/* ================= KELOLA NAMA (Vendor/Operator/Mandor) =================
+ * 1 daftar saja untuk semuanya - lihat catatan di deklarasi NAMA_LIST di
+ * atas kenapa tidak dipisah per kategori. */
+function openKelolaNama(){
+  closeDrawer();
+  renderKelolaNamaModal();
+}
+function renderKelolaNamaModal(){
+  openModal(`
+    <div class="mhead"><h2>Kelola Nama</h2><button class="mclose" onclick="closeModal()">&times;</button></div>
+    <div class="field-sub" style="margin-bottom:10px;">Untuk vendor, operator, atau mandor - satu daftar saja, tidak perlu dipilih kategorinya.</div>
+    <div style="display:flex;gap:8px;margin-bottom:12px;">
+      <input type="text" id="newNamaOrang" placeholder="mis. Budi / Vendor A" style="margin-bottom:0;">
+      <button class="pill-btn" onclick="addNamaOrang()">+ Tambah</button>
+    </div>
+    <div class="card card-flat">
+      ${NAMA_LIST.length===0 ? '<div class="empty-note">Belum ada nama. Tambahkan di atas.</div>' :
+        `<div style="display:grid;grid-template-columns:1fr 1fr;column-gap:14px;">
+          ${NAMA_LIST.map(n=>`<div class="list-row" style="padding:9px 0;"><span style="overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">${escapeHtml(n.nama)}</span><button class="icon-btn" onclick="deleteNamaOrang('${n.id}')">${ic('trash')}</button></div>`).join('')}
+        </div>`}
+    </div>
+  `);
+}
+function addNamaOrang(){
+  const val = document.getElementById('newNamaOrang').value.trim();
+  if(!val){ toast('Isi nama dulu'); return; }
+  if(NAMA_LIST.some(n=>n.nama.toLowerCase()===val.toLowerCase())){ toast('Nama ini sudah ada'); return; }
+  NAMA_LIST.push({id:uid(), nama:val});
+  saveNamaList();
+  renderKelolaNamaModal();
+  toast('Nama ditambahkan');
+}
+function deleteNamaOrang(id){
+  if(!confirm('Hapus nama ini?')) return;
+  NAMA_LIST = NAMA_LIST.filter(n=>n.id!==id);
+  saveNamaList();
+  renderKelolaNamaModal();
+  toast('Nama dihapus');
 }
 function openKelolaJenis(){
   closeDrawer();
