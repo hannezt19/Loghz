@@ -42,6 +42,32 @@ let PETA_BLOCKS = LS.get('v2_peta_blocks', []);  // [{id, label, points:[{x,y},.
 function savePetaBlocks(){ LS.set('v2_peta_blocks', PETA_BLOCKS); }
 let petaDrawing = false;
 let petaDrawPoints = [];
+/* ----- Cari Nama di Peta: highlight poligon merah + akses ke Cetak Riwayat
+ * per Nama. Kolom pencarian ini TERPISAH TOTAL dari kolom Nama di modal
+ * Cetak (disepakati supaya tidak saling memengaruhi/membingungkan) - cuma 1
+ * nama per pencarian (bukan daftar dipisah koma seperti di Cetak). ----- */
+let petaCariNamaAktif = false;
+let petaCariNamaQuery = '';
+function togglePetaCariNama(){
+  petaCariNamaAktif = !petaCariNamaAktif;
+  if(!petaCariNamaAktif) petaCariNamaQuery = '';
+  renderPeta();
+}
+function setPetaCariNamaQuery(v){
+  petaCariNamaQuery = v;
+  renderPeta();
+}
+function blokTerhighlightUntukNama(nama){
+  const set = new Set();
+  if(!nama) return set;
+  const q = nama.toLowerCase();
+  ENTRIES.forEach(e=>{
+    [...pasanganArrGetForDisplay(e,'lokasi','nama'), ...pasanganArrGetForDisplay(e,'lokasi2','nama2')].forEach(p=>{
+      if(p.lokasi && p.nama && p.nama.toLowerCase()===q) set.add(p.lokasi);
+    });
+  });
+  return set;
+}
 function renderPeta(){
   const host = document.getElementById('screen-peta');
   if(!petaImageLoaded){
@@ -58,18 +84,39 @@ function renderPeta(){
     return;
   }
   const svgPoints = petaDrawPoints.map(p=>p.x+','+p.y).join(' ');
+  const highlightSet = petaCariNamaAktif ? blokTerhighlightUntukNama(petaCariNamaQuery) : new Set();
   host.innerHTML = `
     <div id="petaFullWrap" style="position:relative;width:100%;height:100%;overflow:hidden;">
       <div id="petaImgWrap" style="position:relative;width:100%;height:100%;overflow:hidden;touch-action:none;" onclick="handlePetaTap(event)" ontouchstart="petaTouchStart(event)" ontouchmove="petaTouchMove(event)" ontouchend="petaTouchEnd(event)">
         <div id="petaImgInner" style="transform-origin:0 0;position:relative;">
           <img src="${PETA_IMAGE}" style="width:100%;display:block;pointer-events:none;" id="petaImgEl">
           <svg viewBox="0 0 100 100" preserveAspectRatio="none" style="position:absolute;top:0;left:0;width:100%;height:100%;pointer-events:none;">
-            ${PETA_BLOCKS.map(b=>`<polygon points="${b.points.map(p=>p.x+','+p.y).join(' ')}" fill="rgba(46,125,50,0.14)" stroke="#2E7D32" stroke-width="0.15" vector-effect="non-scaling-stroke"></polygon>`).join('')}
+            ${PETA_BLOCKS.map(b=>{
+              const on = highlightSet.has(b.label);
+              return `<polygon points="${b.points.map(p=>p.x+','+p.y).join(' ')}" fill="${on?'rgba(211,47,47,0.38)':'rgba(46,125,50,0.14)'}" stroke="${on?'#D32F2F':'#2E7D32'}" stroke-width="${on?'0.25':'0.15'}" vector-effect="non-scaling-stroke"></polygon>`;
+            }).join('')}
             ${petaDrawing && petaDrawPoints.length>0 ? `<polyline points="${svgPoints}" fill="none" stroke="#1565C0" stroke-width="0.15" stroke-dasharray="1.2,0.8" vector-effect="non-scaling-stroke"></polyline>
               ${petaDrawPoints.map(p=>`<circle class="peta-drawdot" cx="${p.x}" cy="${p.y}" r="0.9" fill="#1565C0" stroke="#fff" stroke-width="0.3" vector-effect="non-scaling-stroke"></circle>`).join('')}` : ''}
           </svg>
         </div>
       </div>
+
+      ${petaCariNamaAktif ? `
+      <div style="position:fixed;left:12px;right:12px;top:12px;background:var(--surface);border-radius:14px;padding:8px 12px;box-shadow:0 3px 12px rgba(0,0,0,.3);z-index:45;">
+        <input type="text" list="namaSuggest" placeholder="Ketik nama untuk highlight blok di peta" value="${escapeHtml(petaCariNamaQuery)}" style="margin-bottom:0;" oninput="setPetaCariNamaQuery(this.value)">
+      </div>
+      ` : ''}
+
+      ${!petaDrawing ? `
+      <div style="position:fixed;left:16px;bottom:calc(78px + env(safe-area-inset-bottom, 20px));display:flex;gap:8px;align-items:center;z-index:45;">
+        <button onclick="togglePetaCariNama()" title="${petaCariNamaAktif?'Tutup pencarian':'Cari Nama'}" style="width:56px;height:56px;border-radius:50%;background:${petaCariNamaAktif?'var(--secondary)':'var(--surface)'};color:${petaCariNamaAktif?'#fff':'var(--on-surface)'};border:none;box-shadow:0 3px 10px rgba(0,0,0,.35);display:flex;align-items:center;justify-content:center;">
+          ${petaCariNamaAktif
+            ? '<svg viewBox="0 0 24 24" width="24" height="24" fill="none" stroke="currentColor" stroke-width="2.2"><path d="M6 6l12 12M18 6L6 18"/></svg>'
+            : '<svg viewBox="0 0 24 24" width="24" height="24" fill="none" stroke="currentColor" stroke-width="2.2"><circle cx="11" cy="11" r="7"/><path d="M21 21l-4.3-4.3"/></svg>'}
+        </button>
+        ${petaCariNamaAktif ? `<button class="pill-btn" style="box-shadow:0 3px 10px rgba(0,0,0,.25);" onclick="openPetaCetakModal()">${ic('document',16)} Cetak</button>` : ''}
+      </div>
+      ` : ''}
 
       ${!petaDrawing ? `
       <button onclick="startPetaDraw()" title="Gambar Blok Baru" style="position:fixed;right:16px;bottom:calc(78px + env(safe-area-inset-bottom, 20px));width:56px;height:56px;border-radius:50%;background:var(--primary);color:#fff;border:none;box-shadow:0 3px 10px rgba(0,0,0,.35);display:flex;align-items:center;justify-content:center;z-index:45;">
@@ -386,6 +433,81 @@ function deletePetaBlock(id){
   savePetaBlocks();
   renderPeta();
   toast('Blok dihapus');
+}
+
+/* ----- Cetak Riwayat per Nama - TERPISAH TOTAL dari kolom cari-nama di atas
+ * peta (tidak saling mengisi otomatis, sesuai kesepakatan): periode Semua/
+ * Custom, dan Nama sendiri (kosong = semua nama, boleh isi beberapa dipisah
+ * koma). Hasilnya PDF teks (tabel), bukan gambar peta. ----- */
+function openPetaCetakModal(){
+  openModal(`
+    <div class="mhead"><h2>Cetak Riwayat per Nama</h2><button class="mclose" onclick="closeModal()">&times;</button></div>
+    <div class="section-eyebrow">Periode</div>
+    <div class="chk-row"><input type="radio" name="cnPeriode" value="semua" checked onchange="togglePetaCetakCustomRange(false)"><label style="margin-left:6px;">Semua periode</label></div>
+    <div class="chk-row"><input type="radio" name="cnPeriode" value="custom" onchange="togglePetaCetakCustomRange(true)"><label style="margin-left:6px;">Rentang tanggal custom</label></div>
+    <div id="cnCustomRange" style="display:none;margin:8px 0;">
+      <label class="flabel">Dari tanggal</label><input type="date" id="cnDari" value="${todayIso()}">
+      <label class="flabel">Sampai tanggal</label><input type="date" id="cnSampai" value="${todayIso()}">
+    </div>
+    <div class="section-eyebrow">Nama <span style="font-weight:400;color:var(--on-surface-variant);">(opsional)</span></div>
+    <input type="text" id="cnNama" placeholder="Kosongkan untuk semua nama, atau ketik dipisah koma">
+    <div class="field-sub" style="margin-bottom:14px;">Boleh isi lebih dari 1 nama, dipisah koma (mis. "Budi, Vendor A"). Tidak nyambung dengan kolom pencarian di peta - isi ulang di sini kalau perlu.</div>
+    <button class="btn-block" onclick="cetakRiwayatNama()">${ic('document')} Cetak</button>
+  `);
+}
+function togglePetaCetakCustomRange(show){
+  const el = document.getElementById('cnCustomRange');
+  if(el) el.style.display = show ? 'block' : 'none';
+}
+/* Kumpulkan baris riwayat lintas semua entri, dari pasangan Lokasi&Nama
+ * (layanan utama maupun kedua) - HANYA pasangan yang benar-benar punya Nama
+ * terisi (lokasi tanpa nama tidak relevan untuk laporan "per nama" ini). */
+function namaCetakRows(namaFilterLower, dariIso, sampaiIso){
+  const rows = [];
+  ENTRIES.forEach(e=>{
+    if(dariIso && e.date<dariIso) return;
+    if(sampaiIso && e.date>sampaiIso) return;
+    const cekSlot = (lokasiField, namaField, jenis) => {
+      pasanganArrGetForDisplay(e, lokasiField, namaField).forEach(p=>{
+        if(!p.lokasi || !p.nama) return;
+        if(namaFilterLower.length>0 && !namaFilterLower.includes(p.nama.toLowerCase())) return;
+        rows.push({date:e.date, btId:e.btId, jenis, nama:p.nama, blok:p.lokasi});
+      });
+    };
+    cekSlot('lokasi','nama', e.jenisLayanan);
+    cekSlot('lokasi2','nama2', e.jenisLayanan2||e.jenisLayanan);
+  });
+  rows.sort((a,b)=>a.date.localeCompare(b.date));
+  return rows;
+}
+async function cetakRiwayatNama(){
+  if(!window.jspdf){ toast('Library PDF belum siap'); return; }
+  const mode = document.querySelector('#modalSheet input[name=cnPeriode]:checked').value;
+  const dari = mode==='custom' ? document.getElementById('cnDari').value : null;
+  const sampai = mode==='custom' ? document.getElementById('cnSampai').value : null;
+  const namaRaw = document.getElementById('cnNama').value.trim();
+  const namaFilterLower = namaRaw ? namaRaw.split(',').map(s=>s.trim().toLowerCase()).filter(Boolean) : [];
+  const rows = namaCetakRows(namaFilterLower, dari, sampai);
+  if(rows.length===0){ toast('Tidak ada data yang cocok'); return; }
+  const { jsPDF } = window.jspdf;
+  const doc = new jsPDF({orientation:'portrait'});
+  doc.setFontSize(14); doc.setFont(undefined,'bold');
+  doc.text('Riwayat per Nama', 14, 16);
+  doc.setFontSize(9); doc.setFont(undefined,'normal');
+  const periodeLabel = mode==='custom' ? (fmtLabel(dari)+' - '+fmtLabel(sampai)) : 'Semua periode';
+  const namaLabel = namaFilterLower.length ? namaRaw : 'Semua nama';
+  doc.text('Periode: '+periodeLabel+'  |  Nama: '+namaLabel, 14, 22);
+  doc.autoTable({
+    startY: 28,
+    head: [['Tanggal','No Unit','Jenis Layanan','Nama','Blok']],
+    body: rows.map(r=>[fmtLabel(r.date), btLabel(r.btId), r.jenis||'-', r.nama, r.blok]),
+    styles:{fontSize:8},
+    headStyles:{fillColor:[46,90,166]}
+  });
+  const pdfBlob = doc.output('blob');
+  const result = await saveOrShareBlob(pdfBlob, 'riwayat-nama-'+todayIso()+'.pdf');
+  toast(result==='shared'?'PDF siap dibagikan':'PDF diunduh');
+  closeModal();
 }
 const ALL_EXPORT_HEADERS = ['Tanggal','No Unit','Jenis Layanan','Detail','Lokasi','Absen Berangkat','Absen Pulang','Istirahat','HM Awal','HM Akhir','HM Terpakai','BBM (L)','Lembur (j)','Lembur Final','BU/TU','BS/TS','Catatan','Catatan Khusus'];
 function slugCol(h){ return h.toLowerCase().replace(/[^a-z0-9]+/g,'-'); }
