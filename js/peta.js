@@ -53,9 +53,28 @@ function togglePetaCariNama(){
   if(!petaCariNamaAktif) petaCariNamaQuery = '';
   renderPeta();
 }
-function setPetaCariNamaQuery(v){
-  petaCariNamaQuery = v;
-  renderPeta();
+/* FIX: dulu tiap ketik 1 huruf memanggil renderPeta() penuh (mengganti ulang
+ * SELURUH innerHTML layar Peta, termasuk kotak input itu sendiri) - input-nya
+ * ikut dibuat ulang tiap kali, jadi fokus & keyboard hilang-muncul tiap
+ * huruf. Sekarang cuma warna poligon yang di-update langsung lewat DOM,
+ * kotak input & sisa layar tidak disentuh sama sekali. */
+function onPetaCariNamaInput(el){
+  petaCariNamaQuery = el.value;
+  refreshNamaDatalist(el.value);
+  const highlightSet = blokTerhighlightUntukNama(petaCariNamaQuery);
+  document.querySelectorAll('#petaFullWrap polygon[data-blok]').forEach(poly=>{
+    const on = highlightSet.has(poly.getAttribute('data-blok'));
+    poly.setAttribute('fill', on ? 'rgba(211,47,47,0.38)' : 'rgba(46,125,50,0.14)');
+    poly.setAttribute('stroke', on ? '#D32F2F' : '#2E7D32');
+    poly.setAttribute('stroke-width', on ? '0.25' : '0.15');
+  });
+}
+/* Nama disimpan sebagai 1 field, tapi kadang ditulis beberapa nama sekaligus
+ * dipisah koma dalam 1 kotak yang sama (mis. "Wayan , Karmani") - supaya
+ * pencarian & cetak tetap ketemu tiap nama yang disebut, bukan cuma yang
+ * cocok PERSIS dengan seluruh isi kotak, di sini dipecah dulu per koma. */
+function splitNamaKoma(s){
+  return String(s||'').split(',').map(x=>x.trim()).filter(Boolean);
 }
 function blokTerhighlightUntukNama(nama){
   const set = new Set();
@@ -63,7 +82,7 @@ function blokTerhighlightUntukNama(nama){
   const q = nama.toLowerCase();
   ENTRIES.forEach(e=>{
     [...pasanganArrGetForDisplay(e,'lokasi','nama'), ...pasanganArrGetForDisplay(e,'lokasi2','nama2')].forEach(p=>{
-      if(p.lokasi && p.nama && p.nama.toLowerCase()===q) set.add(p.lokasi);
+      if(p.lokasi && splitNamaKoma(p.nama).some(n=>n.toLowerCase()===q)) set.add(p.lokasi);
     });
   });
   return set;
@@ -93,7 +112,7 @@ function renderPeta(){
           <svg viewBox="0 0 100 100" preserveAspectRatio="none" style="position:absolute;top:0;left:0;width:100%;height:100%;pointer-events:none;">
             ${PETA_BLOCKS.map(b=>{
               const on = highlightSet.has(b.label);
-              return `<polygon points="${b.points.map(p=>p.x+','+p.y).join(' ')}" fill="${on?'rgba(211,47,47,0.38)':'rgba(46,125,50,0.14)'}" stroke="${on?'#D32F2F':'#2E7D32'}" stroke-width="${on?'0.25':'0.15'}" vector-effect="non-scaling-stroke"></polygon>`;
+              return `<polygon data-blok="${escapeHtml(b.label)}" points="${b.points.map(p=>p.x+','+p.y).join(' ')}" fill="${on?'rgba(211,47,47,0.38)':'rgba(46,125,50,0.14)'}" stroke="${on?'#D32F2F':'#2E7D32'}" stroke-width="${on?'0.25':'0.15'}" vector-effect="non-scaling-stroke"></polygon>`;
             }).join('')}
             ${petaDrawing && petaDrawPoints.length>0 ? `<polyline points="${svgPoints}" fill="none" stroke="#1565C0" stroke-width="0.15" stroke-dasharray="1.2,0.8" vector-effect="non-scaling-stroke"></polyline>
               ${petaDrawPoints.map(p=>`<circle class="peta-drawdot" cx="${p.x}" cy="${p.y}" r="0.9" fill="#1565C0" stroke="#fff" stroke-width="0.3" vector-effect="non-scaling-stroke"></circle>`).join('')}` : ''}
@@ -102,8 +121,8 @@ function renderPeta(){
       </div>
 
       ${petaCariNamaAktif ? `
-      <div style="position:fixed;left:12px;right:12px;top:12px;background:var(--surface);border-radius:14px;padding:8px 12px;box-shadow:0 3px 12px rgba(0,0,0,.3);z-index:45;">
-        <input type="text" list="namaSuggest" placeholder="Ketik nama untuk highlight blok di peta" value="${escapeHtml(petaCariNamaQuery)}" style="margin-bottom:0;" oninput="setPetaCariNamaQuery(this.value)">
+      <div style="position:absolute;left:10px;right:10px;top:10px;background:var(--surface);border-radius:12px;padding:5px 10px;box-shadow:0 3px 12px rgba(0,0,0,.3);z-index:45;">
+        <input type="text" list="namaSuggest" placeholder="Ketik nama untuk highlight blok" value="${escapeHtml(petaCariNamaQuery)}" style="margin-bottom:0;height:38px;" oninput="onPetaCariNamaInput(this)" onfocus="refreshNamaDatalist(this.value)">
       </div>
       ` : ''}
 
@@ -470,7 +489,8 @@ function namaCetakRows(namaFilterLower, dariIso, sampaiIso){
     const cekSlot = (lokasiField, namaField, jenis) => {
       pasanganArrGetForDisplay(e, lokasiField, namaField).forEach(p=>{
         if(!p.lokasi || !p.nama) return;
-        if(namaFilterLower.length>0 && !namaFilterLower.includes(p.nama.toLowerCase())) return;
+        const namaDiBaris = splitNamaKoma(p.nama);
+        if(namaFilterLower.length>0 && !namaDiBaris.some(n=>namaFilterLower.includes(n.toLowerCase()))) return;
         rows.push({date:e.date, btId:e.btId, jenis, nama:p.nama, blok:p.lokasi});
       });
     };

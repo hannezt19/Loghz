@@ -668,7 +668,7 @@ function refreshNamaDatalist(filterText){
   const q = String(filterText||'').toLowerCase().trim();
   let matches = NAMA_LIST.map(n=>n.nama);
   if(q) matches = matches.filter(n=>n.toLowerCase().includes(q));
-  matches = matches.slice(0,7);
+  matches = matches.slice(0,6);
   const dl = document.getElementById('namaSuggest');
   if(dl) dl.innerHTML = matches.map(n=>`<option value="${escapeHtml(n)}">`).join('');
 }
