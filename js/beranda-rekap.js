@@ -519,7 +519,7 @@ function openBackfill(dateIso){
   if(alreadyHasEntry){
     e.isSecondary = true;
   } else {
-    e.absenBerangkat = ''; e.absenPulang = ''; e.istirahat = true; e.istMulai = '11.00'; e.istSelesai = '13.30'; e.liburMerah = false;
+    e.absenBerangkat = ''; e.absenPulang = ''; e.istirahat = true; e.istMulai = '11.00'; e.istSelesai = '13.30'; e.liburMerah = false; e.menginap = false;
   }
   ENTRIES.push(e);
   saveEntries();
@@ -567,6 +567,7 @@ function renderRekapPribadiHtml(){
             <div style="flex:1;min-width:0;"><div style="font-weight:800;">${fmtLabel(e.date)}</div>
               <div class="field-sub">${escapeHtml(btLabel(e.btId))}${e.jenisLayanan?' &middot; '+escapeHtml(entryTipeLabel(e)):''} &middot; HM ${escapeHtml(e.hmAwal||'-')}&rarr;${escapeHtml(e.hmAkhir||'-')} &middot; ${escapeHtml(fmtThousandsLive(e.bbmLiter||'0'))} ml</div>
               ${e.catatanKhusus?'<div style="display:inline-block;margin-top:2px;color:var(--secondary);font-weight:700;font-size:10px;border:1px solid var(--secondary);border-radius:100px;padding:1px 7px;">Catatan Khusus</div>':''}
+              ${e.menginap?'<div style="display:inline-block;margin-top:2px;margin-left:4px;color:#2F6FE0;font-weight:700;font-size:10px;border:1px solid #2F6FE0;border-radius:100px;padding:1px 7px;">Menginap</div>':''}
               ${isDup?'<div class="field-sub" style="color:var(--danger);font-weight:700;">'+ic('warning')+' Ada entri lain di tanggal &amp; unit yang sama</div>':''}
             </div>
           </div>
@@ -605,10 +606,12 @@ function renderRekapPribadiHtml(){
               <div><label class="flabel">Absen Berangkat</label><input type="time" value="${escapeHtml(e.absenBerangkat)}" onchange="editEntryField('${e.id}','absenBerangkat',this.value)"></div>
               <div><label class="flabel">Absen Pulang</label><input type="time" value="${escapeHtml(e.absenPulang)}" onchange="editEntryField('${e.id}','absenPulang',this.value)"></div>
             </div>
-            <div style="display:flex;gap:8px;margin-top:4px;">
+            <div style="display:flex;gap:8px;margin-top:4px;flex-wrap:wrap;">
               <button class="chip ${e.istirahat?'active':''}" onclick="editEntryField('${e.id}','istirahat',true)">${ic('coffee')} Istirahat</button>
               <button class="chip ${!e.istirahat?'active':''}" onclick="editEntryField('${e.id}','istirahat',false)">${ic('hourglass')} Lembur</button>
+              <button class="chip ${e.menginap?'active':''}" onclick="editEntryField('${e.id}','menginap',${e.menginap?'false':'true'})">${ic('moon')} Menginap</button>
             </div>
+            ${e.menginap ? `<div class="field-sub" style="margin-top:4px;">Tugas luar kota &middot; kosongkan Absen Berangkat/Pulang di hari yang tidak ada jam - akan tercatat "Menginap" saat dicetak.</div>` : ''}
             ${e.istirahat ? `
             <div class="grid2" style="margin-top:8px;">
               <div><label class="flabel">Istirahat Mulai</label><input type="text" inputmode="numeric" value="${escapeHtml(e.istMulai)}" placeholder="11.00" oninput="this.value=fmtJamTitikLive(this.value)" onchange="editEntryField('${e.id}','istMulai',this.value)"></div>

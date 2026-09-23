@@ -35,7 +35,8 @@ const ICON_PATHS = {
   barchart: '<path d="M4 20V10M10 20V4M16 20v-7"/>',
   people: '<circle cx="9" cy="8" r="3"/><path d="M3 20c0-3 2.5-5 6-5s6 2 6 5"/><circle cx="17" cy="9" r="2.3"/><path d="M15.5 15.2c2.6.3 4.5 2 4.5 4.8"/>',
   plus: '<path d="M12 5v14M5 12h14"/>',
-  chevron: '<path d="M6 9l6 6 6-6"/>'
+  chevron: '<path d="M6 9l6 6 6-6"/>',
+  moon: '<path d="M20 14.5A8.5 8.5 0 1 1 9.5 4a7 7 0 0010.5 10.5z"/>'
 };
 function ic(name, size){
   size = size || 18;

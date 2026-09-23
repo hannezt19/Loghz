@@ -645,7 +645,7 @@ function getExportRows(){
        * sekali. Sekarang: entri tambahan -> "-", entri utama istirahat -> jam
        * istirahatnya, entri utama non-istirahat -> "Lembur" (seperti maksud
        * awal). */
-      'Absen Berangkat': e.absenBerangkat||'-', 'Absen Pulang': e.absenPulang||'-',
+      'Absen Berangkat': e.absenBerangkat||(e.menginap?'Menginap':'-'), 'Absen Pulang': e.absenPulang||(e.menginap?'Menginap':'-'),
       'Istirahat': e.isSecondary ? '-' : (e.istirahat ? ((e.istMulai||'-')+'-'+(e.istSelesai||'-')) : 'Lembur'),
       'HM Awal': e.hmAwal||'-', 'HM Akhir': e.hmAkhir||'-', 'HM Terpakai': hmTerpakai, 'BBM (L)': fmtLiterID((parseFloat(e.bbmLiter)||0)/1000),
       // FIX: entri tambahan tidak punya kolom Jam Lembur sama sekali di form Hari
@@ -656,7 +656,7 @@ function getExportRows(){
       'BU/TU': cuacaCellText(wlog && wlog.utara), 'BS/TS': cuacaCellText(wlog && wlog.selatan),
       'Catatan': e.catatan||'', 'Catatan Khusus': e.catatanKhusus||'',
       _dateIso: e.date, /* dipakai untuk highlight Minggu/libur nasional di PDF & penanda di Excel — bukan kolom cetak */
-      _catatanKhusus: !!e.catatanKhusus /* dipakai untuk sorot kuning baris Catatan Khusus di PDF — bukan kolom cetak */
+      _menginap: !!e.menginap /* dipakai untuk sorot biru baris tugas menginap di PDF — bukan kolom cetak */
     };
   });
   const totalHm = rows.reduce((s,e)=>{ const a=parseFloat(e.hmAwal), b=parseFloat(e.hmAkhir); return s+((!isNaN(a)&&!isNaN(b)&&b>=a)?(b-a):0); },0);
@@ -771,10 +771,10 @@ async function doExport(fmt){
           const raw = data.row.raw || {};
           if(raw._dateIso && isHolidayHighlightDate(raw._dateIso, holidaySet)){
             data.cell.styles.fillColor = [211,242,211];
-          } else if(raw._catatanKhusus){
-            // Sorot kuning lembut untuk baris Catatan Khusus - cuma kalau baris
-            // itu tidak sedang disorot hijau (libur/Minggu) supaya tidak rebutan warna.
-            data.cell.styles.fillColor = [255,244,197];
+          } else if(raw._menginap){
+            // Sorot biru lembut untuk baris tugas menginap (luar kota) - cuma kalau
+            // baris itu tidak sedang disorot hijau (libur/Minggu) supaya tidak rebutan warna.
+            data.cell.styles.fillColor = [206,226,250];
           }
           // Kalau tanggal baris ini SAMA dengan baris sebelumnya (mis. beberapa
           // unit dicatat di hari yang sama), garis pembatas ATAS dihilangkan

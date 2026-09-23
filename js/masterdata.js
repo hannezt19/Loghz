@@ -190,7 +190,7 @@ function getTodayEntry(){
   if(!e){
     e = {id:uid(), date:todayIso(), btId:USER.mainBt||'', hmAwal:'', hmAkhir:'', bbmLiter:'', lembur:'', catatan:'', sopir:'',
       jenisLayanan:'', tipeAntar:'', kegiatan:'', muatTipe:'', tonaseKg:'', lokasi:'', lokasiMuat:'', lokasiBongkar:'',
-      droneJenis:'', shift:'', absenBerangkat:'', absenPulang:'', istirahat:true, istMulai:'11.00', istSelesai:'13.30', liburMerah:false};
+      droneJenis:'', shift:'', absenBerangkat:'', absenPulang:'', istirahat:true, istMulai:'11.00', istSelesai:'13.30', liburMerah:false, menginap:false};
     ENTRIES.push(e);
     saveEntries();
   }
@@ -441,10 +441,12 @@ function renderHari(){
         <div><label class="flabel">Absen Berangkat</label><input type="time" value="${escapeHtml(e.absenBerangkat)}" onchange="quickSave('absenBerangkat', this.value)"></div>
         <div><label class="flabel">Absen Pulang</label><input type="time" value="${escapeHtml(e.absenPulang)}" onchange="quickSave('absenPulang', this.value)"></div>
       </div>
-      <div style="display:flex;gap:8px;margin-top:4px;">
+      <div style="display:flex;gap:8px;margin-top:4px;flex-wrap:wrap;">
         <button class="chip ${e.istirahat?'active':''}" onclick="quickSave('istirahat', true);">${ic('coffee')} Istirahat</button>
         <button class="chip ${!e.istirahat?'active':''}" onclick="quickSave('istirahat', false);">${ic('hourglass')} Lembur</button>
+        <button class="chip ${e.menginap?'active':''}" onclick="quickSave('menginap', ${e.menginap?'false':'true'});">${ic('moon')} Menginap</button>
       </div>
+      ${e.menginap ? `<div class="field-sub" style="margin-top:4px;">Tugas luar kota &middot; kosongkan Absen Berangkat/Pulang di hari yang tidak ada jam - akan tercatat "Menginap" saat dicetak.</div>` : ''}
       ${e.istirahat ? `
       <div class="grid2" style="margin-top:8px;">
         <div><label class="flabel">Istirahat Mulai</label><input type="text" inputmode="numeric" value="${escapeHtml(e.istMulai)}" placeholder="11.00" oninput="this.value=fmtJamTitikLive(this.value)" onchange="quickSave('istMulai', this.value)"></div>
