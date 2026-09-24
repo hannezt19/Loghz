@@ -208,7 +208,7 @@ function handleSelectCustom(fieldKey, val){
   if(val==='__custom__'){
     const typed = prompt('Ketik nilai baru:');
     if(!typed){ renderHari(); return; }
-    const baseKey = fieldKey.endsWith('2') ? fieldKey.slice(0,-1) : fieldKey; // dukung field Jenis Layanan ke-2 (mis. 'jenisLayanan2') supaya tetap dikenali sebagai jenis yang sama
+    const baseKey = (fieldKey.endsWith('2')||fieldKey.endsWith('3')) ? fieldKey.slice(0,-1) : fieldKey; // dukung field Jenis Layanan ke-2/ke-3 (mis. 'jenisLayanan3') supaya tetap dikenali sebagai jenis yang sama
     if(baseKey==='jenisLayanan'){ if(!JENIS_LAYANAN_LIST.includes(typed)){ JENIS_LAYANAN_LIST.push(typed); saveJenisList(); } }
     else if(baseKey==='tipeAntar'){ if(!TIPE_ANTAR_LIST.includes(typed)){ TIPE_ANTAR_LIST.push(typed); saveTipeAntarList(); } }
     else if(baseKey==='kegiatan'){ if(!KEGIATAN_LIST.includes(typed)){ KEGIATAN_LIST.push(typed); saveKegiatanList(); } }
@@ -277,6 +277,12 @@ function renderJenisLayananFields(e, suffix, mode){
         <div><label class="flabel">Tipe</label>${sel('tipeAntar', TIPE_ANTAR_LIST)}</div>
         <div><label class="flabel">Kegiatan</label>${sel('kegiatan', KEGIATAN_LIST)}</div>
       </div>
+      <div class="chk-row" style="margin-top:8px;"><input type="checkbox" id="hsa-${e.id||'today'}${suffix}" ${e[fk('hanyaSatuArah')]?'checked':''} onchange="${chgRaw('hanyaSatuArah','this.checked')}"><label for="hsa-${e.id||'today'}${suffix}" style="margin-left:6px;">Hanya salah satu (bukan dua-duanya)</label></div>
+      ${e[fk('hanyaSatuArah')] ? `
+      <div style="display:flex;gap:8px;margin-top:6px;">
+        <button type="button" class="chip ${e[fk('arahAntarJemput')]!=='jemput'?'active':''}" onclick="${chgRaw('arahAntarJemput',"'antar'")}">Antar</button>
+        <button type="button" class="chip ${e[fk('arahAntarJemput')]==='jemput'?'active':''}" onclick="${chgRaw('arahAntarJemput',"'jemput'")}">Jemput</button>
+      </div>` : ''}
       <label class="flabel">Lokasi &amp; Nama <span style="font-weight:400;color:var(--on-surface-variant);">(vendor/mandor, opsional)</span></label>${lokasiNamaPairInput('lokasi')}
     ` : ''}
     ${jenis==='Muat Tebu' ? `
@@ -300,7 +306,7 @@ function renderJenisLayananFields(e, suffix, mode){
       <label class="flabel">Lokasi &amp; Nama <span style="font-weight:400;color:var(--on-surface-variant);">(opsional)</span></label>${lokasiNamaPairInput('lokasi')}
     ` : ''}
     ${jenis && !['Antar/Jemput Tenaga','Muat Tebu','Drone','Operator'].includes(jenis) ? `
-      <label class="flabel">Lokasi</label>${lokasiInput('lokasi')}
+      <label class="flabel">Lokasi &amp; Nama <span style="font-weight:400;color:var(--on-surface-variant);">(opsional)</span></label>${lokasiNamaPairInput('lokasi')}
     ` : ''}
   `;
 }
@@ -368,16 +374,27 @@ function lokasiArrTambah(entryId, mode, fieldBase){
   saveEntries();
   if(mode==='edit'){ expandedRowId=entryId; renderRekap(); } else renderHari();
 }
-const LAYANAN2_FIELDS = ['jenisLayanan2','tipeAntar2','kegiatan2','muatTipe2','tonaseKg2','lokasi2','lokasiArr2','lokasi2PasanganArr','lokasiMuat2','lokasiBongkar2','droneJenis2','shift2','nama2','nama2Arr'];
-/* Tambah/hapus Jenis Layanan ke-2 - KHUSUS unit yang sama, hari yang sama
- * (mis. semprot 2 bahan berbeda). Kalau perlu pekerjaan di UNIT lain di hari
- * yang sama, itu tetap pakai "+ Tambah Unit" (Entri Tambahan) seperti biasa,
- * bukan ini. Dibatasi maksimal 2 (tidak ada Jenis Layanan ke-3). */
+const LAYANAN2_FIELDS = ['jenisLayanan2','tipeAntar2','kegiatan2','muatTipe2','tonaseKg2','lokasi2','lokasiArr2','lokasi2PasanganArr','lokasiMuat2','lokasiBongkar2','droneJenis2','shift2','nama2','nama2Arr','hanyaSatuArah2','arahAntarJemput2'];
+const LAYANAN3_FIELDS = ['jenisLayanan3','tipeAntar3','kegiatan3','muatTipe3','tonaseKg3','lokasi3','lokasiArr3','lokasi3PasanganArr','lokasiMuat3','lokasiBongkar3','droneJenis3','shift3','nama3','nama3Arr','hanyaSatuArah3','arahAntarJemput3'];
+/* Tambah/hapus Jenis Layanan ke-2/ke-3 - KHUSUS unit yang sama, hari yang sama
+ * (mis. semprot 2 bahan berbeda, atau beberapa kegiatan berbeda dalam 1 hari
+ * dengan unit yang sama - operator siang lalu antar mekanik, dst). Kalau perlu
+ * pekerjaan di UNIT lain di hari yang sama, itu tetap pakai "+ Tambah Unit"
+ * (Entri Tambahan) seperti biasa, bukan ini. Dibatasi maksimal 3 kegiatan/hari
+ * (utama + ke-2 + ke-3) - sesuai kebutuhan lapangan, tidak dibuat tanpa batas. */
 function toggleJenisLayanan2(entryId){
   const e = entryId ? ENTRIES.find(x=>x.id===entryId) : getTodayEntry();
   if(!e) return;
   e.adaLayanan2 = !e.adaLayanan2;
-  if(!e.adaLayanan2){ LAYANAN2_FIELDS.forEach(k=>{ delete e[k]; }); }
+  if(!e.adaLayanan2){ LAYANAN2_FIELDS.forEach(k=>{ delete e[k]; }); e.adaLayanan3 = false; LAYANAN3_FIELDS.forEach(k=>{ delete e[k]; }); }
+  saveEntries();
+  renderHari();
+}
+function toggleJenisLayanan3(entryId){
+  const e = entryId ? ENTRIES.find(x=>x.id===entryId) : getTodayEntry();
+  if(!e) return;
+  e.adaLayanan3 = !e.adaLayanan3;
+  if(!e.adaLayanan3){ LAYANAN3_FIELDS.forEach(k=>{ delete e[k]; }); }
   saveEntries();
   renderHari();
 }
@@ -404,7 +421,7 @@ function renderHari(){
           <button class="pill-btn" style="flex:1;justify-content:center;padding:0;" onclick="addSecondaryUnit()" title="Tambah unit lain untuk hari ini">+</button>
         </div>
       </div>
-      <div class="empty-note">${e.btId===UNIT_LIBUR_ID?'Libur — tidak bekerja hari ini.':'Standby — siaga, tidak ada unit jalan.'}</div>
+      <div class="empty-note">${sysUnitEmptyNote(e.btId)}</div>
       ${getSecondaryUnitsToday().map((se,i)=>renderSecondaryUnitCard(se, i+1)).join('')}
     `;
     return;
@@ -431,6 +448,14 @@ function renderHari(){
       <div class="section-eyebrow-row" style="margin:0 0 6px;"><label class="flabel" style="margin:0;">Jenis Layanan ke-2 (unit sama, hari sama)</label><button class="icon-btn" style="color:var(--secondary);" onclick="toggleJenisLayanan2()">${ic('trash')}</button></div>
       ${renderJenisLayananFields(e, '2')}
     </div>
+    ${e.adaLayanan3 ? `
+    <div class="card" style="margin-top:8px;">
+      <div class="section-eyebrow-row" style="margin:0 0 6px;"><label class="flabel" style="margin:0;">Jenis Layanan ke-3 (unit sama, hari sama)</label><button class="icon-btn" style="color:var(--secondary);" onclick="toggleJenisLayanan3()">${ic('trash')}</button></div>
+      ${renderJenisLayananFields(e, '3')}
+    </div>
+    ` : `
+    <button class="pill-btn sm outline" style="margin-top:8px;" onclick="toggleJenisLayanan3()">${ic('plus')} Tambah Jenis Layanan ke-3 (unit sama, hari sama)</button>
+    `}
     ` : `
     <button class="pill-btn sm outline" style="margin-top:8px;" onclick="toggleJenisLayanan2()">${ic('plus')} Tambah Jenis Layanan (unit sama, hari sama)</button>
     `}
@@ -527,7 +552,7 @@ function handleSelectCustomHari(entryId, fieldKey, val){
   if(val==='__custom__'){
     const typed = prompt('Ketik nilai baru:');
     if(!typed){ renderHari(); return; }
-    const baseKey = fieldKey.endsWith('2') ? fieldKey.slice(0,-1) : fieldKey;
+    const baseKey = (fieldKey.endsWith('2')||fieldKey.endsWith('3')) ? fieldKey.slice(0,-1) : fieldKey; // dukung field Jenis Layanan ke-2/ke-3 (mis. 'jenisLayanan3') supaya tetap dikenali sebagai jenis yang sama
     if(baseKey==='jenisLayanan'){ if(!JENIS_LAYANAN_LIST.includes(typed)){ JENIS_LAYANAN_LIST.push(typed); saveJenisList(); } }
     else if(baseKey==='tipeAntar'){ if(!TIPE_ANTAR_LIST.includes(typed)){ TIPE_ANTAR_LIST.push(typed); saveTipeAntarList(); } }
     else if(baseKey==='kegiatan'){ if(!KEGIATAN_LIST.includes(typed)){ KEGIATAN_LIST.push(typed); saveKegiatanList(); } }
@@ -552,14 +577,14 @@ function checkHmWarning2(entryId){
 function renderSecondaryUnitCard(e, idx){
   if(isSystemUnitId(e.btId)){
     return `
-      <div class="section-eyebrow section-eyebrow-row">Unit Tambahan #${idx} &middot; ${e.btId===UNIT_LIBUR_ID?'Libur':'Standby'}<button class="icon-btn" onclick="deleteSecondaryUnit('${e.id}')">${ic('trash')}</button></div>
+      <div class="section-eyebrow section-eyebrow-row">Unit Tambahan #${idx} &middot; ${sysUnitShortLabel(e.btId)}<button class="icon-btn" onclick="deleteSecondaryUnit('${e.id}')">${ic('trash')}</button></div>
       <div class="card">
         <label class="flabel">No Unit</label>
         <select onchange="quickSaveEntry('${e.id}','btId', this.value)">
           <option value="">- Pilih -</option>
           ${unitsForSelect().map(u=>`<option value="${u.id}" ${e.btId===u.id?'selected':''}>${escapeHtml(u.kode)}</option>`).join('')}
         </select>
-        <div class="empty-note" style="margin-top:8px;">${e.btId===UNIT_LIBUR_ID?'Libur — tidak bekerja.':'Standby — siaga, tidak jalan.'}</div>
+        <div class="empty-note" style="margin-top:8px;">${sysUnitEmptyNote(e.btId)}</div>
       </div>
     `;
   }
@@ -607,21 +632,31 @@ function entryTipeSingleLabel(jenis, e, suffix){
   if(jenis==='Operator') return e[fk('shift')] || jenis;
   return jenis;
 }
+/* Nama Jenis Layanan "Antar/Jemput Tenaga" berubah jadi "Antar Tenaga" atau
+ * "Jemput Tenaga" kalau ceklis "Hanya salah satu" dicentang untuk slot itu -
+ * dipakai di kartu Rekap & di cetak PDF/Excel supaya konsisten. */
+function jenisLayananArahLabel(jenis, e, suffix){
+  const fk = (name)=>name+suffix;
+  if(jenis!=='Antar/Jemput Tenaga' || !e[fk('hanyaSatuArah')]) return jenis;
+  return e[fk('arahAntarJemput')]==='jemput' ? 'Jemput Tenaga' : 'Antar Tenaga';
+}
 function entryTipeLabel(e){
-  const utama = entryTipeSingleLabel(e.jenisLayanan, e, '');
-  if(!utama) return '-';
-  if(!e.adaLayanan2 || !e.jenisLayanan2) return utama;
-  const kedua = entryTipeSingleLabel(e.jenisLayanan2, e, '2');
-  return kedua ? (utama+' + '+kedua) : utama;
+  const parts = [];
+  if(e.jenisLayanan){ const l = entryTipeSingleLabel(e.jenisLayanan, e, ''); if(l) parts.push(l); }
+  if(e.adaLayanan2 && e.jenisLayanan2){ const l = entryTipeSingleLabel(e.jenisLayanan2, e, '2'); if(l) parts.push(l); }
+  if(e.adaLayanan3 && e.jenisLayanan3){ const l = entryTipeSingleLabel(e.jenisLayanan3, e, '3'); if(l) parts.push(l); }
+  return parts.length ? parts.join(' + ') : '-';
 }
 function lokasiSuggestions(){
   const set = new Set();
   ENTRIES.forEach(e=>{
-    [e.lokasi,e.lokasiMuat,e.lokasiBongkar,e.lokasi2,e.lokasiMuat2,e.lokasiBongkar2].forEach(l=>{ if(l) set.add(l); });
+    [e.lokasi,e.lokasiMuat,e.lokasiBongkar,e.lokasi2,e.lokasiMuat2,e.lokasiBongkar2,e.lokasi3,e.lokasiMuat3,e.lokasiBongkar3].forEach(l=>{ if(l) set.add(l); });
     (e.lokasiArr||[]).forEach(l=>{ if(l) set.add(l); });
     (e.lokasiArr2||[]).forEach(l=>{ if(l) set.add(l); });
+    (e.lokasiArr3||[]).forEach(l=>{ if(l) set.add(l); });
     (e.lokasiPasanganArr||[]).forEach(p=>{ if(p.lokasi) set.add(p.lokasi); });
     (e.lokasi2PasanganArr||[]).forEach(p=>{ if(p.lokasi) set.add(p.lokasi); });
+    (e.lokasi3PasanganArr||[]).forEach(p=>{ if(p.lokasi) set.add(p.lokasi); });
   });
   PETA_BLOCKS.forEach(b=>{ if(b.label) set.add(b.label); });
   BLOKS.forEach(b=>{ if(b.kode) set.add(b.kode); });

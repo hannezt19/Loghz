@@ -188,11 +188,25 @@ function saveUnits(){ LS.set('v2_units', UNITS); }
  * terlepas dari urutan penyimpanan aslinya. */
 const UNIT_LIBUR_ID = 'SYS_LIBUR';
 const UNIT_STANDBY_ID = 'SYS_STANDBY';
-function isSystemUnitId(id){ return id===UNIT_LIBUR_ID || id===UNIT_STANDBY_ID; }
+const UNIT_CUTI_ID = 'SYS_CUTI';
+function isSystemUnitId(id){ return id===UNIT_LIBUR_ID || id===UNIT_STANDBY_ID || id===UNIT_CUTI_ID; }
+/* Label singkat untuk 3 unit sistem (Libur/Standby/Cuti) - dipakai di
+ * beberapa tempat form Hari Ini & Rekap supaya tidak diketik ulang. */
+function sysUnitShortLabel(id){
+  if(id===UNIT_LIBUR_ID) return 'Libur';
+  if(id===UNIT_CUTI_ID) return 'Cuti';
+  return 'Standby';
+}
+function sysUnitEmptyNote(id){
+  if(id===UNIT_LIBUR_ID) return 'Libur — tidak bekerja hari ini.';
+  if(id===UNIT_CUTI_ID) return 'Cuti — tidak bekerja hari ini.';
+  return 'Standby — siaga, tidak ada unit jalan.';
+}
 function ensureSystemUnits(){
   let changed = false;
   if(!UNITS.some(u=>u.id===UNIT_LIBUR_ID)){ UNITS.push({id:UNIT_LIBUR_ID, kode:'Libur', isSystem:true}); changed = true; }
   if(!UNITS.some(u=>u.id===UNIT_STANDBY_ID)){ UNITS.push({id:UNIT_STANDBY_ID, kode:'Standby', isSystem:true}); changed = true; }
+  if(!UNITS.some(u=>u.id===UNIT_CUTI_ID)){ UNITS.push({id:UNIT_CUTI_ID, kode:'Cuti', isSystem:true}); changed = true; }
   if(changed) saveUnits();
 }
 /* Daftar unit untuk ditampilkan (dropdown No Unit / list Kelola Unit):

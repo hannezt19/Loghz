@@ -422,7 +422,7 @@ function handleEditSelectCustom(entryId, fieldKey, val){
   if(val==='__custom__'){
     const typed = prompt('Ketik nilai baru:');
     if(!typed){ expandedRowId=entryId; renderRekap(); return; }
-    const baseKey = fieldKey.endsWith('2') ? fieldKey.slice(0,-1) : fieldKey;
+    const baseKey = (fieldKey.endsWith('2')||fieldKey.endsWith('3')) ? fieldKey.slice(0,-1) : fieldKey; // dukung field Jenis Layanan ke-2/ke-3 (mis. 'jenisLayanan3') supaya tetap dikenali sebagai jenis yang sama
     if(baseKey==='jenisLayanan'){ if(!JENIS_LAYANAN_LIST.includes(typed)){ JENIS_LAYANAN_LIST.push(typed); saveJenisList(); } }
     else if(baseKey==='tipeAntar'){ if(!TIPE_ANTAR_LIST.includes(typed)){ TIPE_ANTAR_LIST.push(typed); saveTipeAntarList(); } }
     else if(baseKey==='kegiatan'){ if(!KEGIATAN_LIST.includes(typed)){ KEGIATAN_LIST.push(typed); saveKegiatanList(); } }
@@ -596,6 +596,14 @@ function renderRekapPribadiHtml(){
               <div class="section-eyebrow-row" style="margin:0 0 6px;"><label class="flabel" style="margin:0;">Jenis Layanan ke-2 (unit sama, hari sama)</label><button class="icon-btn" style="color:var(--secondary);" onclick="toggleJenisLayanan2('${e.id}');expandedRowId='${e.id}';renderRekap();">${ic('trash')}</button></div>
               ${renderJenisLayananFields(e, '2', 'edit')}
             </div>
+            ${e.adaLayanan3 ? `
+            <div style="border-top:1px solid var(--outline-variant);margin-top:10px;padding-top:10px;">
+              <div class="section-eyebrow-row" style="margin:0 0 6px;"><label class="flabel" style="margin:0;">Jenis Layanan ke-3 (unit sama, hari sama)</label><button class="icon-btn" style="color:var(--secondary);" onclick="toggleJenisLayanan3('${e.id}');expandedRowId='${e.id}';renderRekap();">${ic('trash')}</button></div>
+              ${renderJenisLayananFields(e, '3', 'edit')}
+            </div>
+            ` : `
+            <button class="pill-btn sm outline" style="margin-top:8px;" onclick="toggleJenisLayanan3('${e.id}');expandedRowId='${e.id}';renderRekap();">${ic('plus')} Tambah Jenis Layanan ke-3 (unit sama, hari sama)</button>
+            `}
             ` : `
             <button class="pill-btn sm outline" style="margin-top:8px;" onclick="toggleJenisLayanan2('${e.id}');expandedRowId='${e.id}';renderRekap();">${ic('plus')} Tambah Jenis Layanan (unit sama, hari sama)</button>
             `}

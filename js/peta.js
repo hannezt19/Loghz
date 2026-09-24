@@ -81,7 +81,7 @@ function blokTerhighlightUntukNama(nama){
   if(!nama) return set;
   const q = nama.toLowerCase();
   ENTRIES.forEach(e=>{
-    [...pasanganArrGetForDisplay(e,'lokasi','nama'), ...pasanganArrGetForDisplay(e,'lokasi2','nama2')].forEach(p=>{
+    [...pasanganArrGetForDisplay(e,'lokasi','nama'), ...pasanganArrGetForDisplay(e,'lokasi2','nama2'), ...pasanganArrGetForDisplay(e,'lokasi3','nama3')].forEach(p=>{
       if(p.lokasi && splitNamaKoma(p.nama).some(n=>n.toLowerCase()===q)) set.add(p.lokasi);
     });
   });
@@ -338,29 +338,30 @@ function isBlokFormatValid(label){
  * Bongkar-nya SAMA PERSIS dengan nama blok ini (case-sensitive, karena sudah
  * dirapikan konsisten lewat fmtBlokKode di kedua sisi - Hari Ini maupun waktu
  * blok dibuat/diedit). Terbaru dulu. */
+const LAYANAN_SUFFIXES = ['','2','3']; // utama, ke-2, ke-3
 function riwayatUntukBlok(label){
   return ENTRIES
-    .filter(e =>
-      pasanganArrGetForDisplay(e,'lokasi','nama').some(p=>p.lokasi===label) ||
-      pasanganArrGetForDisplay(e,'lokasi2','nama2').some(p=>p.lokasi===label) ||
-      e.lokasiMuat===label || e.lokasiBongkar===label ||
-      e.lokasiMuat2===label || e.lokasiBongkar2===label
-    )
+    .filter(e => LAYANAN_SUFFIXES.some(sfx =>
+      pasanganArrGetForDisplay(e,'lokasi'+sfx,'nama'+sfx).some(p=>p.lokasi===label) ||
+      e[sfx?('lokasiMuat'+sfx):'lokasiMuat']===label || e[sfx?('lokasiBongkar'+sfx):'lokasiBongkar']===label
+    ))
     .sort((a,b)=>b.date.localeCompare(a.date))
     .map(e=>{
-      const pasanganUtama = pasanganArrGetForDisplay(e,'lokasi','nama').filter(p=>p.lokasi===label);
-      const pasanganKedua = pasanganArrGetForDisplay(e,'lokasi2','nama2').filter(p=>p.lokasi===label);
-      // Tentukan slot mana (layanan utama/kedua) yang BENAR-BENAR cocok
-      // dengan blok ini, supaya jenis layanan & detail (mis. tonase) yang
-      // ditampilkan sesuai layanan yang tepat, bukan asal ambil yang pertama.
-      const cocokUtama = pasanganUtama.length>0 || e.lokasiMuat===label || e.lokasiBongkar===label;
-      const jenis = cocokUtama ? e.jenisLayanan : (e.jenisLayanan2||e.jenisLayanan);
-      const tonase = cocokUtama ? e.tonaseKg : e.tonaseKg2;
+      // Tentukan slot mana (utama/ke-2/ke-3) yang BENAR-BENAR cocok dengan
+      // blok ini, supaya jenis layanan & detail (mis. tonase) yang ditampilkan
+      // sesuai layanan yang tepat, bukan asal ambil yang pertama.
+      let jenis = e.jenisLayanan, tonase = e.tonaseKg;
+      const pasanganPerSlot = LAYANAN_SUFFIXES.map(sfx=>pasanganArrGetForDisplay(e,'lokasi'+sfx,'nama'+sfx).filter(p=>p.lokasi===label));
+      const slotCocok = LAYANAN_SUFFIXES.find((sfx,i)=> pasanganPerSlot[i].length>0 || e[sfx?('lokasiMuat'+sfx):'lokasiMuat']===label || e[sfx?('lokasiBongkar'+sfx):'lokasiBongkar']===label);
+      if(slotCocok!==undefined && slotCocok!==''){
+        jenis = e['jenisLayanan'+slotCocok] || e.jenisLayanan;
+        tonase = e['tonaseKg'+slotCocok];
+      }
       const detail = (jenis==='Muat Tebu' && tonase) ? (fmtThousandsLive(String(tonase))+' kg') : '';
       // Nama yang ditampilkan HANYA yang benar-benar BERPASANGAN dengan lokasi
       // ini - bukan gabungan semua nama di entri itu - supaya tidak tertukar
       // kalau entrinya punya beberapa lokasi sekaligus.
-      const namaCocok = [...pasanganUtama, ...pasanganKedua].map(p=>p.nama).filter(Boolean);
+      const namaCocok = pasanganPerSlot.flat().map(p=>p.nama).filter(Boolean);
       return {date:e.date, btId:e.btId, jenis, detail, nama:namaCocok.join(', ')};
     });
 }
@@ -496,6 +497,7 @@ function namaCetakRows(namaFilterLower, dariIso, sampaiIso){
     };
     cekSlot('lokasi','nama', e.jenisLayanan);
     cekSlot('lokasi2','nama2', e.jenisLayanan2||e.jenisLayanan);
+    cekSlot('lokasi3','nama3', e.jenisLayanan3||e.jenisLayanan);
   });
   rows.sort((a,b)=>a.date.localeCompare(b.date));
   return rows;
@@ -622,42 +624,63 @@ function getExportRows(){
     // dicetak cuma yang PERTAMA sebagai wakil - biar laporan tetap ringkas.
     return lokasiArrGetForDisplay(e, fk('lokasi'))[0] || '';
   };
-  const data = rows.map(e=>{
-    /* Kalau entri ini punya Jenis Layanan ke-2 (unit sama, hari sama - mis.
-     * semprot 2 bahan berbeda), kolom Jenis Layanan/Detail/Lokasi dibuat 2
-     * baris (dipisah \n) - jspdf-autotable & Excel dua-duanya render \n
-     * sebagai baris baru DALAM 1 sel yang sama, bukan baris tabel terpisah. */
-    const jenisList = (e.adaLayanan2 && e.jenisLayanan2) ? [e.jenisLayanan, e.jenisLayanan2] : [e.jenisLayanan];
-    const jenisLayananCol = jenisList.map(j=>j||'-').join('\n');
-    const detailCol = jenisList.map((j,i)=>detailUntukLayanan(e, j, i===0?'':'2')||'-').join('\n');
-    const lokasiCol = jenisList.map((j,i)=>lokasiUntukLayanan(e, j, i===0?'':'2')||'-').join('\n');
+  /* 1 hari kerja = 1 s/d 3 "kegiatan" (Jenis Layanan utama/ke-2/ke-3, unit
+   * sama). Setiap kegiatan sekarang tercetak sebagai BARIS TABEL SENDIRI
+   * (bukan digabung \n dalam 1 sel seperti sebelumnya) - supaya tiap kegiatan
+   * (mis. Operator siang, Antar Mekanik 3 blok, Jemput Vendor) kebaca jelas
+   * satu-satu. Hari Libur/Cuti/Standby (tidak ada kegiatan sama sekali) tetap
+   * jadi 1 baris kosong (tanda "-"). */
+  const kegiatanUntukEntry = (e) => {
+    if(isSystemUnitId(e.btId)) return [{jenisLabel:'-', detail:'-', lokasi:'-'}];
+    const slots = LAYANAN_SUFFIXES.filter(sfx => sfx==='' ? e.jenisLayanan : (e['adaLayanan'+sfx] && e['jenisLayanan'+sfx]));
+    if(slots.length===0) return [{jenisLabel:'-', detail:'-', lokasi:'-'}];
+    return slots.map(sfx=>{
+      const jenis = e['jenisLayanan'+sfx];
+      return {
+        jenisLabel: jenisLayananArahLabel(jenis, e, sfx) || '-',
+        detail: detailUntukLayanan(e, jenis, sfx) || '-',
+        lokasi: lokasiUntukLayanan(e, jenis, sfx) || '-'
+      };
+    });
+  };
+  /* Kolom yang levelnya "1x per hari" (bukan per kegiatan) - dicetak sama di
+   * setiap baris kegiatan hari itu, lalu baris ke-2/3-nya dikosongkan lewat
+   * loop di bawah supaya TAMPIL menyatu (gaya yang sama seperti kolom Tanggal
+   * yang sudah dari dulu dikosongkan kalau tanggalnya sama dengan baris
+   * sebelumnya) - bukan sungguhan digabung sebagai 1 sel PDF/Excel, tapi
+   * hasilnya di layar terlihat sama seperti sel gabung. */
+  const MERGE_PER_HARI_COLS = ['Absen Berangkat','Absen Pulang','Istirahat','HM Awal','HM Akhir','HM Terpakai','BBM (L)','Lembur (j)','Lembur Final','Catatan','Catatan Khusus','BU/TU','BS/TS'];
+  const data = [];
+  rows.forEach(e=>{
+    const isSys = isSystemUnitId(e.btId);
     const ha=parseFloat(e.hmAwal), hb=parseFloat(e.hmAkhir);
     const hmTerpakai = (!isNaN(ha)&&!isNaN(hb)&&hb>=ha) ? (hb-ha).toFixed(1) : '-';
     const wlog = getWeatherLogForDate(e.date);
-    return {
-      'Tanggal': fmtLabel(e.date), 'No Unit': btLabel(e.btId), 'Jenis Layanan': jenisLayananCol, 'Detail': detailCol, 'Lokasi': lokasiCol,
-      /* FIX: rumus lama `e.istirahat?'':'Lembur'` KEBALIK (harusnya tampilkan
-       * jam istirahat kalau memang istirahat, bukan malah dikosongkan) DAN
-       * tidak memperhitungkan entri tambahan (isSecondary) sama sekali - entri
-       * tambahan tidak punya konsep istirahat sendiri (dibuat tanpa field
-       * istirahat/istMulai/istSelesai), jadi e.istirahat selalu undefined lalu
-       * kena cabang else dan ikut tertulis "Lembur" walau tidak relevan sama
-       * sekali. Sekarang: entri tambahan -> "-", entri utama istirahat -> jam
-       * istirahatnya, entri utama non-istirahat -> "Lembur" (seperti maksud
-       * awal). */
-      'Absen Berangkat': e.absenBerangkat||(e.menginap?'Menginap':'-'), 'Absen Pulang': e.absenPulang||(e.menginap?'Menginap':'-'),
-      'Istirahat': e.isSecondary ? '-' : (e.istirahat ? ((e.istMulai||'-')+'-'+(e.istSelesai||'-')) : 'Lembur'),
-      'HM Awal': e.hmAwal||'-', 'HM Akhir': e.hmAkhir||'-', 'HM Terpakai': hmTerpakai, 'BBM (L)': fmtLiterID((parseFloat(e.bbmLiter)||0)/1000),
-      // FIX: entri tambahan tidak punya kolom Jam Lembur sama sekali di form Hari
-      // Ini (e.lembur selalu kosong), jadi dulu tampil "0" / "0.0" yang menyesatkan
-      // (seolah memang 0 jam lembur, padahal memang tidak berlaku/tidak diisi).
-      'Lembur (j)': e.isSecondary ? '-' : (e.lembur||'0'),
-      'Lembur Final': e.isSecondary ? '-' : computeLemburFinal(e).toFixed(1),
+    /* Hari Libur/Cuti/Standby: tidak ada kerja sama sekali, jadi semua kolom
+     * kerja "-" (BUKAN nilai bawaan seperti jam istirahat default atau angka
+     * 0 di BBM/Lembur yang menyesatkan seolah memang terisi). Cuaca &
+     * Catatan tetap tampil apa adanya seperti biasa. */
+    const perHari = {
+      'Absen Berangkat': isSys ? '-' : (e.absenBerangkat||(e.menginap?'Menginap':'-')),
+      'Absen Pulang': isSys ? '-' : (e.absenPulang||(e.menginap?'Menginap':'-')),
+      'Istirahat': (isSys || e.isSecondary) ? '-' : (e.istirahat ? ((e.istMulai||'-')+'-'+(e.istSelesai||'-')) : 'Lembur'),
+      'HM Awal': isSys ? '-' : (e.hmAwal||'-'), 'HM Akhir': isSys ? '-' : (e.hmAkhir||'-'), 'HM Terpakai': isSys ? '-' : hmTerpakai,
+      'BBM (L)': isSys ? '-' : fmtLiterID((parseFloat(e.bbmLiter)||0)/1000),
+      'Lembur (j)': (isSys || e.isSecondary) ? '-' : (e.lembur||'0'),
+      'Lembur Final': (isSys || e.isSecondary) ? '-' : computeLemburFinal(e).toFixed(1),
       'BU/TU': cuacaCellText(wlog && wlog.utara), 'BS/TS': cuacaCellText(wlog && wlog.selatan),
-      'Catatan': e.catatan||'', 'Catatan Khusus': e.catatanKhusus||'',
-      _dateIso: e.date, /* dipakai untuk highlight Minggu/libur nasional di PDF & penanda di Excel — bukan kolom cetak */
-      _menginap: !!e.menginap /* dipakai untuk sorot biru baris tugas menginap di PDF — bukan kolom cetak */
+      'Catatan': e.catatan||'', 'Catatan Khusus': e.catatanKhusus||''
     };
+    kegiatanUntukEntry(e).forEach(k=>{
+      data.push(Object.assign({
+        'Tanggal': fmtLabel(e.date), 'No Unit': btLabel(e.btId),
+        'Jenis Layanan': k.jenisLabel, 'Detail': k.detail, 'Lokasi': k.lokasi
+      }, perHari, {
+        _dateIso: e.date, /* dipakai untuk highlight Minggu/libur nasional & garis penyatu antar baris 1 hari yang sama - bukan kolom cetak */
+        _menginap: !!e.menginap, /* dipakai untuk sorot biru baris tugas menginap - bukan kolom cetak */
+        _groupKey: e.id /* dipakai untuk kosongkan kolom "1x per hari" di baris kegiatan ke-2/3 - bukan kolom cetak */
+      }));
+    });
   });
   const totalHm = rows.reduce((s,e)=>{ const a=parseFloat(e.hmAwal), b=parseFloat(e.hmAkhir); return s+((!isNaN(a)&&!isNaN(b)&&b>=a)?(b-a):0); },0);
   const totalLembur = rows.reduce((s,e)=>s+(parseFloat(e.lembur)||0),0);
@@ -666,6 +689,15 @@ function getExportRows(){
   const uniqueDates = Array.from(new Set(rows.map(e=>e.date)));
   const totalRainUtara = uniqueDates.reduce((s,d)=>{ const w=getWeatherLogForDate(d); return s+(w&&w.utara?(w.utara.rainMm||0):0); },0);
   const totalRainSelatan = uniqueDates.reduce((s,d)=>{ const w=getWeatherLogForDate(d); return s+(w&&w.selatan?(w.selatan.rainMm||0):0); },0);
+  // Baris kegiatan ke-2/ke-3 dalam 1 entri yang sama: kosongkan kolom "1x per
+  // hari" (termasuk No Unit KALAU sama dengan baris sebelumnya - beda unit
+  // antar entri tetap ditulis masing-masing, tidak ikut dikosongkan).
+  for(let i=data.length-1;i>0;i--){
+    if(data[i]._groupKey===data[i-1]._groupKey){
+      MERGE_PER_HARI_COLS.forEach(col=>{ if(col in data[i]) data[i][col] = ''; });
+      if(data[i]['No Unit']===data[i-1]['No Unit']) data[i]['No Unit'] = '';
+    }
+  }
   for(let i=data.length-1;i>0;i--){
     if(data[i]['Tanggal']===data[i-1]['Tanggal']) data[i]['Tanggal'] = '';
   }
