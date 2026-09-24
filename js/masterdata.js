@@ -790,6 +790,12 @@ function computeLembur(e){
   return lembur;
 }
 const LEMBUR_TRIGGER_KEYS = ['absenBerangkat','absenPulang','istirahat','istMulai','istSelesai','liburMerah','date'];
+/* Field yang statusnya digambar lewat class/tampilan tombol (chip aktif,
+ * blok tersembunyi/muncul) - bukan lewat elemen native (checkbox/select) yang
+ * sudah otomatis kelihatan berubah sendiri di layar. Field ini WAJIB
+ * memicu render ulang setelah quickSave, kalau tidak tombolnya kelihatan
+ * "tidak merespon" walau datanya sebenarnya sudah tersimpan. */
+const UI_REFRESH_KEYS = ['menginap','hanyaSatuArah','hanyaSatuArah2','hanyaSatuArah3','arahAntarJemput','arahAntarJemput2','arahAntarJemput3'];
 function recomputeLemburIfNeeded(entry, changedKey){
   if(!LEMBUR_TRIGGER_KEYS.includes(changedKey)) return;
   const val = computeLembur(entry);
@@ -808,7 +814,7 @@ function quickSave(key, val){
   recomputeLemburIfNeeded(e, key);
   saveEntries();
   toast('Tersimpan');
-  if(LEMBUR_TRIGGER_KEYS.includes(key)) renderHari();
+  if(LEMBUR_TRIGGER_KEYS.includes(key) || UI_REFRESH_KEYS.includes(key)) renderHari();
 }
 /* Pembungkus khusus HM Akhir entri harian utama (poin 1): cek dulu lewat
  * handleHmBaruInput() sebelum benar-benar quickSave(). Kalau user batal
