@@ -370,6 +370,8 @@ function renderPkAktualEditModal(rencanaId, tanggal){
     <label class="flabel">No Unit</label>
     <select onchange="updatePkAktualModal('${r.id}','${tanggal}','unitId',this.value)">
       ${UNITS.filter(u=>!u.isSystem).map(u=>`<option value="${u.id}" ${unitId===u.id?'selected':''}>${escapeHtml(u.kode)}</option>`).join('')}
+      <option disabled>&mdash;&mdash;&mdash;</option>
+      ${UNITS.filter(u=>u.isSystem).map(u=>`<option value="${u.id}" ${unitId===u.id?'selected':''}>${escapeHtml(u.kode)}</option>`).join('')}
     </select>
     <label class="flabel">Sopir</label>
     <select onchange="updatePkAktualSopirModal('${r.id}','${tanggal}', this.value)">

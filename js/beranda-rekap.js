@@ -304,7 +304,10 @@ function renderBeranda(){
             <div style="display:flex;align-items:center;gap:8px;margin-top:6px;">
               <div style="font-size:26px;line-height:1;flex-shrink:0;">${curInfo[1]}</div>
               <div style="min-width:0;">
-                <div style="font-weight:800;font-size:22px;line-height:1.1;">${curSlot&&curSlot.temp!==null?Math.round(curSlot.temp):'-'}&deg;</div>
+                <div style="display:flex;align-items:baseline;gap:6px;">
+                  <div style="font-weight:800;font-size:22px;line-height:1.1;">${curSlot&&curSlot.temp!==null?Math.round(curSlot.temp):'-'}&deg;</div>
+                  <div style="font-size:11px;font-weight:700;color:var(--on-surface-variant);text-transform:uppercase;letter-spacing:.05em;">${curSlot?formatArahAngin(curSlot.windDir):'-'}</div>
+                </div>
                 <div style="font-size:10px;color:var(--on-surface-variant);">pukul ${curSlot?jamLabel(curSlot.hour):'-'}</div>
                 <div style="font-size:11px;color:var(--on-surface-variant);">${escapeHtml(curInfo[0])}</div>
                 <div style="font-size:10px;color:var(--on-surface-variant);margin-top:1px;">Min/Maks hari ini: ${w.tmin!==null?Math.round(w.tmin):'-'}&deg;/${w.tmax!==null?Math.round(w.tmax):'-'}&deg;</div>
