@@ -487,19 +487,32 @@ function namaCetakRows(namaFilterLower, dariIso, sampaiIso){
   ENTRIES.forEach(e=>{
     if(dariIso && e.date<dariIso) return;
     if(sampaiIso && e.date>sampaiIso) return;
-    const cekSlot = (lokasiField, namaField, jenis) => {
+    const cekSlot = (lokasiField, namaField, jenis, groupKey) => {
       pasanganArrGetForDisplay(e, lokasiField, namaField).forEach(p=>{
         if(!p.lokasi || !p.nama) return;
         const namaDiBaris = splitNamaKoma(p.nama);
         if(namaFilterLower.length>0 && !namaDiBaris.some(n=>namaFilterLower.includes(n.toLowerCase()))) return;
-        rows.push({date:e.date, btId:e.btId, jenis, nama:p.nama, blok:p.lokasi});
+        // Shift di sini SHIFT OPERATOR yang diantar/dijemput (per orang,
+        // diisi di baris Lokasi & Nama) - cuma relevan untuk Jenis Layanan
+        // Operator, jenis lain kosong.
+        const shift = jenis==='Operator' ? (p.shift||'') : '';
+        rows.push({date:e.date, btId:e.btId, jenis, nama:p.nama, blok:p.lokasi, shift, _groupKey:groupKey});
       });
     };
-    cekSlot('lokasi','nama', e.jenisLayanan);
-    cekSlot('lokasi2','nama2', e.jenisLayanan2||e.jenisLayanan);
-    cekSlot('lokasi3','nama3', e.jenisLayanan3||e.jenisLayanan);
+    cekSlot('lokasi','nama', e.jenisLayanan, e.id+'|');
+    if(e.adaLayanan2) cekSlot('lokasi2','nama2', e.jenisLayanan2||e.jenisLayanan, e.id+'|2');
+    if(e.adaLayanan3) cekSlot('lokasi3','nama3', e.jenisLayanan3||e.jenisLayanan, e.id+'|3');
   });
   rows.sort((a,b)=>a.date.localeCompare(b.date));
+  // "1 sel" untuk Tanggal/No Unit/Jenis Layanan kalau baris-baris itu masih
+  // dari 1 kegiatan yang sama (mis. 5 operator dalam 1 kegiatan Operator hari
+  // itu) - dikosongkan di baris ke-2 dst, sama seperti pola di Cetak Riwayat
+  // utama. Kegiatan lain (slot/entri lain) tetap tertulis sendiri.
+  for(let i=rows.length-1;i>0;i--){
+    if(rows[i]._groupKey===rows[i-1]._groupKey){
+      rows[i]._tanggalKosong = true; rows[i]._noUnitKosong = true; rows[i]._jenisKosong = true;
+    }
+  }
   return rows;
 }
 async function cetakRiwayatNama(){
@@ -521,10 +534,27 @@ async function cetakRiwayatNama(){
   doc.text('Periode: '+periodeLabel+'  |  Nama: '+namaLabel, 14, 22);
   doc.autoTable({
     startY: 28,
-    head: [['Tanggal','No Unit','Jenis Layanan','Nama','Blok']],
-    body: rows.map(r=>[fmtLabel(r.date), btLabel(r.btId), r.jenis||'-', r.nama, r.blok]),
+    head: [['Tanggal','No Unit','Jenis Layanan','Nama','Blok','Shift']],
+    body: rows.map(r=>[
+      r._tanggalKosong?'':fmtLabel(r.date),
+      r._noUnitKosong?'':btLabel(r.btId),
+      r._jenisKosong?'':(r.jenis||'-'),
+      r.nama, r.blok, r.jenis==='Operator' ? operatorShiftKode(r.shift) : '-'
+    ]),
     styles:{fontSize:8},
-    headStyles:{fillColor:[46,90,166]}
+    headStyles:{fillColor:[46,90,166]},
+    didParseCell(data){
+      // Sembunyikan garis atas kalau sel Tanggal/No Unit/Jenis-nya memang
+      // sengaja dikosongkan (baris ini masih 1 kegiatan yang sama dengan
+      // baris sebelumnya) - supaya benar-benar KELIHATAN menyatu jadi 1 sel,
+      // bukan cuma kosong dengan garis pemisah di tengahnya.
+      if(data.section!=='body') return;
+      const r = rows[data.row.index];
+      if(!r) return;
+      if((data.column.index===0 && r._tanggalKosong) || (data.column.index===1 && r._noUnitKosong) || (data.column.index===2 && r._jenisKosong)){
+        data.cell.styles.lineWidth = {top:0, right:0.1, bottom:0.1, left:0.1};
+      }
+    }
   });
   const pdfBlob = doc.output('blob');
   const result = await saveOrShareBlob(pdfBlob, 'riwayat-nama-'+todayIso()+'.pdf');

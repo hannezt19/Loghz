@@ -256,7 +256,8 @@ function renderJenisLayananFields(e, suffix, mode){
   // (dari sebelum digabung, waktu Lokasi & Nama masih 2 daftar terpisah, atau
   // dari sebelum itu lagi waktu keduanya masih 1 field tunggal) otomatis
   // dipasangkan lewat pasanganArrGetForDisplay().
-  const lokasiNamaPairInput = (lokasiFieldBase) => {
+  const lokasiNamaPairInput = (lokasiFieldBase, opts) => {
+    opts = opts || {};
     const lokasiField = fk(lokasiFieldBase);
     const namaField = fk('nama');
     const arr = pasanganArrGetForDisplay(e, lokasiField, namaField);
@@ -265,6 +266,10 @@ function renderJenisLayananFields(e, suffix, mode){
         <div style="display:flex;gap:6px;margin-bottom:6px;">
           <input type="text" list="lokasiSuggest" placeholder="Lokasi" style="flex:1;min-width:0;" oninput="onLokasiInput(this)" onfocus="onLokasiFocus(this)" value="${escapeHtml(p.lokasi||'')}" onchange="pasanganArrChange('${e.id}','${mode}','${lokasiField}','${namaField}',${idx},'lokasi',this.value)">
           <input type="text" list="namaSuggest" placeholder="Nama (opsional)" style="flex:1;min-width:0;" onfocus="onNamaFocus(this)" value="${escapeHtml(p.nama||'')}" onchange="pasanganArrChange('${e.id}','${mode}','${lokasiField}','${namaField}',${idx},'nama',this.value)">
+          ${opts.shift ? `<select style="flex:0 0 86px;" onchange="pasanganArrChange('${e.id}','${mode}','${lokasiField}','${namaField}',${idx},'shift',this.value)">
+            <option value="">Shift?</option>
+            ${OPERATOR_SHIFT_LIST.map(s=>`<option value="${s}" ${p.shift===s?'selected':''}>${s}</option>`).join('')}
+          </select>` : ''}
         </div>
       `).join('')}
       <button type="button" class="pill-btn sm outline" onclick="pasanganArrTambah('${e.id}','${mode}','${lokasiField}','${namaField}')">${ic('plus',12)} Tambah Lokasi &amp; Nama</button>
@@ -302,8 +307,8 @@ function renderJenisLayananFields(e, suffix, mode){
       <label class="flabel">Lokasi &amp; Nama <span style="font-weight:400;color:var(--on-surface-variant);">(opsional)</span></label>${lokasiNamaPairInput('lokasi')}
     ` : ''}
     ${jenis==='Operator' ? `
-      <div style="margin-top:8px;"><label class="flabel">Shift</label>${sel('shift', SHIFT_LIST)}</div>
-      <label class="flabel">Lokasi &amp; Nama <span style="font-weight:400;color:var(--on-surface-variant);">(opsional)</span></label>${lokasiNamaPairInput('lokasi')}
+      <div style="margin-top:8px;"><label class="flabel">Shift (Anda)</label>${sel('shift', SHIFT_LIST)}</div>
+      <label class="flabel">Lokasi &amp; Nama <span style="font-weight:400;color:var(--on-surface-variant);">(opsional) &middot; Shift di tiap baris = shift OPERATOR yang diantar/dijemput, beda dengan Shift Anda di atas</span></label>${lokasiNamaPairInput('lokasi', {shift:true})}
     ` : ''}
     ${jenis && !['Antar/Jemput Tenaga','Muat Tebu','Drone','Operator'].includes(jenis) ? `
       <label class="flabel">Lokasi &amp; Nama <span style="font-weight:400;color:var(--on-surface-variant);">(opsional)</span></label>${lokasiNamaPairInput('lokasi')}
@@ -327,7 +332,10 @@ function pasanganArrChange(entryId, mode, lokasiField, namaField, idx, key, valu
   const e = ENTRIES.find(x=>x.id===entryId);
   if(!e) return;
   const arrKey = lokasiField+'PasanganArr';
-  const arr = pasanganArrGetForDisplay(e, lokasiField, namaField).map(p=>({lokasi:p.lokasi, nama:p.nama}));
+  // {...p} (BUKAN {lokasi:p.lokasi, nama:p.nama} seperti sebelumnya) - supaya
+  // field tambahan per-baris seperti "shift" (khusus Operator) ikut terbawa,
+  // tidak kepotong tiap kali salah satu field pasangan ini diubah.
+  const arr = pasanganArrGetForDisplay(e, lokasiField, namaField).map(p=>({...p}));
   arr[idx][key] = value;
   e[arrKey] = arr;
   // Field lama (lokasi/nama tunggal) disinkronkan ke pasangan PERTAMA - dipakai
@@ -341,8 +349,8 @@ function pasanganArrTambah(entryId, mode, lokasiField, namaField){
   const e = ENTRIES.find(x=>x.id===entryId);
   if(!e) return;
   const arrKey = lokasiField+'PasanganArr';
-  const arr = pasanganArrGetForDisplay(e, lokasiField, namaField).map(p=>({lokasi:p.lokasi, nama:p.nama}));
-  arr.push({lokasi:'', nama:''});
+  const arr = pasanganArrGetForDisplay(e, lokasiField, namaField).map(p=>({...p}));
+  arr.push({lokasi:'', nama:'', shift:''});
   e[arrKey] = arr;
   saveEntries();
   if(mode==='edit'){ expandedRowId=entryId; renderRekap(); } else renderHari();

@@ -80,6 +80,20 @@ let KEGIATAN_LIST = LS.get('v2_kegiatan', ['Pel. Umum','Pemupukan','Penyemprotan
 let MUAT_TIPE_LIST = LS.get('v2_muattipe', ['Bibit','Produksi']);
 let DRONE_JENIS_LIST = LS.get('v2_dronejenis', ['Penyemprotan','Pemetaan']);
 let SHIFT_LIST = LS.get('v2_shift', ['Pagi','Siang','Malam']);
+/* Shift OPERATOR yang diantar/dijemput (beda dengan SHIFT_LIST di atas yang
+ * itu shift SOPIR sendiri) - dipilih per-orang di "Lokasi & Nama" khusus
+ * Jenis Layanan Operator. Kode singkatnya (P/S/M/N) dipakai di cetak
+ * "Riwayat per Nama" di Peta. Tetap (bukan dari LS/tidak dikelola user)
+ * karena kodenya sudah dikunci 1 huruf per pilihan.
+ * */
+const OPERATOR_SHIFT_LIST = ['Pagi','Siang','Malam','Non-Shift'];
+function operatorShiftKode(shift){
+  if(shift==='Pagi') return 'P';
+  if(shift==='Siang') return 'S';
+  if(shift==='Malam') return 'M';
+  if(shift==='Non-Shift') return 'N';
+  return '-';
+}
 let JENIS_KERUSAKAN_LIST = LS.get('v2_jeniskerusakan', ['Rem','Mesin','Hidrolik','Kelistrikan','Ban/Roda']);
 let MEKANIK_LIST = LS.get('v2_mekanik', []);
 let BBM_SUSULAN = LS.get('v2_bbm_susulan', []); // [{id, btId, tanggal, hm, bbmMl, createdAt}]
