@@ -94,15 +94,15 @@ function renderBbmDetailModal(){
 }
 /* Akordion Detail BBM per bulan - "sorted" sudah terurut terbaru-lebih-dulu,
  * jadi grup bulan otomatis ikut urut terbaru-lebih-dulu juga (tidak perlu
- * sort ulang). Isi tiap grup cukup ringkasan (jumlah entri & total liter),
- * TANPA rincian per hari - biar akordion tetap ringkas dibuka berkali-kali. */
+ * sort ulang). Header (sebelum ditap) cukup jumlah pengisian & total liter;
+ * dibuka baru tampil rincian tiap tanggal seperti daftar lama. */
 function renderBbmMonthAccordion(sorted){
   const groups = [];
   const byMonth = {};
   sorted.forEach(t=>{
     const mk = t.tanggal.slice(0,7);
-    if(!byMonth[mk]){ byMonth[mk] = {monthKey:mk, count:0, totalMl:0}; groups.push(byMonth[mk]); }
-    byMonth[mk].count++;
+    if(!byMonth[mk]){ byMonth[mk] = {monthKey:mk, items:[], totalMl:0}; groups.push(byMonth[mk]); }
+    byMonth[mk].items.push(t);
     byMonth[mk].totalMl += t.bbmMl;
   });
   const openSet = window._bbmOpenMonths || new Set();
@@ -111,13 +111,24 @@ function renderBbmMonthAccordion(sorted){
     return `
       <div class="card" style="margin-bottom:8px;padding:0;overflow:hidden;">
         <div style="padding:12px 14px;display:flex;justify-content:space-between;align-items:center;cursor:pointer;" onclick="toggleBbmMonth('${g.monthKey}')">
-          <div style="font-weight:700;">${bbmBulanTahunLabel(g.monthKey)}</div>
+          <div>
+            <div style="font-weight:700;">${bbmBulanTahunLabel(g.monthKey)}</div>
+            <div class="field-sub" style="margin-top:1px;">${g.items.length}x pengisian</div>
+          </div>
           <div style="display:flex;align-items:center;gap:8px;">
             <span style="font-size:13px;font-weight:700;color:var(--primary);">${(g.totalMl/1000).toFixed(1)} L</span>
             <span style="transform:rotate(${open?'180deg':'0deg'});transition:transform .15s;">${ic('chevron',16)}</span>
           </div>
         </div>
-        ${open ? `<div style="padding:0 14px 12px;color:var(--on-surface-variant);font-size:13px;">${g.count}x isi BBM &middot; total ${(g.totalMl/1000).toFixed(1)} L</div>` : ''}
+        ${open ? `<div style="padding:0 14px 12px;">${g.items.map(t=>`
+          <div style="padding:8px 0;border-top:1px solid var(--outline-variant);display:flex;justify-content:space-between;align-items:flex-start;">
+            <div>
+              <div style="font-weight:700;">${escapeHtml(btLabel(t.btId))} &middot; ${fmtLabel(t.tanggal)}${t.sumber==='susulan'?' <span style="background:var(--maroon);color:#fff;font-size:9px;padding:2px 6px;border-radius:6px;">SUSULAN</span>':''}</div>
+              <div class="field-sub">HM ${t.hm} &middot; ${(t.bbmMl/1000).toFixed(1)} L${t.hmTerpakai!==null?' &middot; '+t.hmTerpakai.toFixed(1)+' jam sejak isi sebelumnya':''}</div>
+            </div>
+            ${t.sumber==='susulan'?`<button class="icon-btn" onclick="hapusBbmSusulan('${t.id}');renderBbmDetailModal()">${ic('trash')}</button>`:''}
+          </div>
+        `).join('')}</div>` : ''}
       </div>
     `;
   }).join('');

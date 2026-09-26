@@ -42,6 +42,113 @@ let PETA_BLOCKS = LS.get('v2_peta_blocks', []);  // [{id, label, points:[{x,y},.
 function savePetaBlocks(){ LS.set('v2_peta_blocks', PETA_BLOCKS); }
 let petaDrawing = false;
 let petaDrawPoints = [];
+/* ----- Edit Bentuk Poligon (untuk blok yang kurang presisi) -----
+ * petaEditPoints adalah SALINAN kerja titik-titik blok yang sedang diedit -
+ * baru ditimpa ke PETA_BLOCKS asli waktu "Simpan" ditekan (supaya "Batal"
+ * benar-benar tidak mengubah apa-apa). 3 mode:
+ * - geser: seret titik yang sudah ada ke posisi baru (paling sering dipakai
+ *   untuk membetulkan sudut yang meleset).
+ * - tambah: tap di dekat salah satu sisi poligon untuk menyisipkan titik baru
+ *   di situ (posisi sisipnya otomatis dicari berdasarkan sisi terdekat).
+ * - hapus: tap sebuah titik untuk menghapusnya (minimal 3 titik tersisa). */
+let petaEditingBlockId = null;
+let petaEditPoints = null;
+let petaEditMode = 'geser'; // 'geser' | 'tambah' | 'hapus'
+function editPetaBlockPolygon(id){
+  const b = PETA_BLOCKS.find(x=>x.id===id);
+  if(!b) return;
+  petaEditingBlockId = id;
+  petaEditPoints = b.points.map(p=>({x:p.x, y:p.y}));
+  petaEditMode = 'geser';
+  closeModal();
+  renderPeta();
+}
+function setPetaEditMode(mode){
+  petaEditMode = mode;
+  renderPeta();
+}
+function cancelEditPetaBlock(){
+  petaEditingBlockId = null;
+  petaEditPoints = null;
+  renderPeta();
+}
+function savePetaBlockPolygon(){
+  if(!petaEditPoints || petaEditPoints.length<3){ toast('Minimal 3 titik untuk membentuk area'); return; }
+  const b = PETA_BLOCKS.find(x=>x.id===petaEditingBlockId);
+  if(b) { b.points = petaEditPoints.map(p=>({x:p.x, y:p.y})); savePetaBlocks(); }
+  petaEditingBlockId = null;
+  petaEditPoints = null;
+  renderPeta();
+  toast('Bentuk blok diperbarui');
+}
+/* Jarak titik pt ke ruas garis a-b, dipakai untuk cari sisi terdekat waktu
+ * mode "tambah" menyisipkan titik baru di posisi yang masuk akal (bukan asal
+ * ditambah di akhir array, yang bisa merusak bentuk poligon). */
+function distToSegment(p, a, b){
+  const dx=b.x-a.x, dy=b.y-a.y;
+  const len2 = dx*dx+dy*dy;
+  if(len2===0) return Math.hypot(p.x-a.x, p.y-a.y);
+  let t = ((p.x-a.x)*dx + (p.y-a.y)*dy)/len2;
+  t = Math.max(0, Math.min(1, t));
+  return Math.hypot(p.x-(a.x+t*dx), p.y-(a.y+t*dy));
+}
+function insertPetaEditPointNearest(pt){
+  if(!petaEditPoints) return;
+  if(petaEditPoints.length<2){ petaEditPoints.push(pt); renderPeta(); return; }
+  let bestIdx = 0, bestDist = Infinity;
+  for(let i=0;i<petaEditPoints.length;i++){
+    const d = distToSegment(pt, petaEditPoints[i], petaEditPoints[(i+1)%petaEditPoints.length]);
+    if(d<bestDist){ bestDist=d; bestIdx=i; }
+  }
+  petaEditPoints.splice(bestIdx+1, 0, pt);
+  renderPeta();
+}
+function removePetaEditPointAt(idx){
+  if(idx===-1 || !petaEditPoints) return;
+  if(petaEditPoints.length<=3){ toast('Minimal 3 titik, tidak bisa dihapus lagi'); return; }
+  petaEditPoints.splice(idx,1);
+  renderPeta();
+}
+/* Cari titik (vertex) petaEditPoints yang PALING DEKAT dengan posisi
+ * sentuhan di layar (dalam px, bukan persen) - dipakai untuk mendeteksi mau
+ * geser titik yang mana, dan untuk mode "hapus". Ambang 26px cukup longgar
+ * untuk jari di layar HP tanpa gampang salah pilih titik tetangganya. */
+function nearestPetaEditVertex(clientX, clientY){
+  if(!petaEditPoints) return -1;
+  const wrap = document.getElementById('petaImgWrap');
+  const img = document.getElementById('petaImgEl');
+  if(!wrap) return -1;
+  const rect = wrap.getBoundingClientRect();
+  const imgRenderedHeight = (img && img.naturalWidth) ? (rect.width * img.naturalHeight / img.naturalWidth) : rect.height;
+  const threshold = 26;
+  let best = -1, bestDist = threshold;
+  petaEditPoints.forEach((p,idx)=>{
+    const sx = rect.left + (p.x/100*rect.width)*petaZoom.scale + petaZoom.panX;
+    const sy = rect.top + (p.y/100*imgRenderedHeight)*petaZoom.scale + petaZoom.panY;
+    const d = Math.hypot(clientX-sx, clientY-sy);
+    if(d<bestDist){ bestDist=d; best=idx; }
+  });
+  return best;
+}
+/* Update posisi poligon/titik langsung lewat DOM saat drag berlangsung -
+ * BUKAN renderPeta() penuh tiap gerakan jari, supaya seret titik terasa
+ * mulus (renderPeta penuh berat karena menyusun ulang semua polygon blok
+ * lain + toolbar setiap kali dipanggil). */
+function updatePetaEditSvg(){
+  const poly = document.getElementById('petaEditPolygon');
+  if(poly) poly.setAttribute('points', petaEditPoints.map(p=>p.x+','+p.y).join(' '));
+  petaEditPoints.forEach((p,idx)=>{
+    const c = document.getElementById('petaEditVertex-'+idx);
+    if(c){ c.setAttribute('cx', p.x); c.setAttribute('cy', p.y); }
+  });
+}
+function renderPetaEditOverlaySvg(){
+  if(!petaEditPoints) return '';
+  return `
+    <polygon id="petaEditPolygon" points="${petaEditPoints.map(p=>p.x+','+p.y).join(' ')}" fill="rgba(251,140,0,0.22)" stroke="#FB8C00" stroke-width="0.3" vector-effect="non-scaling-stroke"></polygon>
+    ${petaEditPoints.map((p,idx)=>`<circle id="petaEditVertex-${idx}" class="peta-editdot" cx="${p.x}" cy="${p.y}" r="1.1" fill="#FB8C00" stroke="#fff" stroke-width="0.35" vector-effect="non-scaling-stroke"></circle>`).join('')}
+  `;
+}
 /* ----- Cari Nama di Peta: highlight poligon merah + akses ke Cetak Riwayat
  * per Nama. Kolom pencarian ini TERPISAH TOTAL dari kolom Nama di modal
  * Cetak (disepakati supaya tidak saling memengaruhi/membingungkan) - cuma 1
@@ -116,17 +223,18 @@ function renderPeta(){
             }).join('')}
             ${petaDrawing && petaDrawPoints.length>0 ? `<polyline points="${svgPoints}" fill="none" stroke="#1565C0" stroke-width="0.15" stroke-dasharray="1.2,0.8" vector-effect="non-scaling-stroke"></polyline>
               ${petaDrawPoints.map(p=>`<circle class="peta-drawdot" cx="${p.x}" cy="${p.y}" r="0.9" fill="#1565C0" stroke="#fff" stroke-width="0.3" vector-effect="non-scaling-stroke"></circle>`).join('')}` : ''}
+            ${petaEditingBlockId ? renderPetaEditOverlaySvg() : ''}
           </svg>
         </div>
       </div>
 
-      ${petaCariNamaAktif ? `
+      ${(petaCariNamaAktif && !petaEditingBlockId) ? `
       <div style="position:absolute;left:10px;right:10px;top:10px;background:var(--surface);border-radius:12px;padding:5px 10px;box-shadow:0 3px 12px rgba(0,0,0,.3);z-index:45;">
         <input type="text" list="namaSuggest" placeholder="Ketik nama untuk highlight blok" value="${escapeHtml(petaCariNamaQuery)}" style="margin-bottom:0;height:38px;" oninput="onPetaCariNamaInput(this)" onfocus="refreshNamaDatalist(this.value)">
       </div>
       ` : ''}
 
-      ${!petaDrawing ? `
+      ${(!petaDrawing && !petaEditingBlockId) ? `
       <div style="position:fixed;left:16px;bottom:calc(78px + env(safe-area-inset-bottom, 20px));display:flex;gap:8px;align-items:center;z-index:45;">
         <button onclick="togglePetaCariNama()" title="${petaCariNamaAktif?'Tutup pencarian':'Cari Nama'}" style="width:56px;height:56px;border-radius:50%;background:${petaCariNamaAktif?'var(--secondary)':'var(--surface)'};color:${petaCariNamaAktif?'#fff':'var(--on-surface)'};border:none;box-shadow:0 3px 10px rgba(0,0,0,.35);display:flex;align-items:center;justify-content:center;">
           ${petaCariNamaAktif
@@ -137,7 +245,20 @@ function renderPeta(){
       </div>
       ` : ''}
 
-      ${!petaDrawing ? `
+      ${petaEditingBlockId ? `
+      <div style="position:fixed;left:12px;right:12px;bottom:calc(78px + env(safe-area-inset-bottom, 20px));background:var(--surface);border-radius:16px;padding:12px 14px;box-shadow:0 3px 12px rgba(0,0,0,.3);z-index:45;">
+        <div class="field-sub" style="margin-bottom:8px;">${petaEditPoints.length} titik &middot; ${petaEditMode==='geser'?'Seret titik untuk menggeser posisinya':(petaEditMode==='tambah'?'Tap dekat sisi poligon untuk menambah titik':'Tap sebuah titik untuk menghapusnya')}</div>
+        <div style="display:flex;gap:6px;margin-bottom:8px;">
+          <button class="pill-btn sm ${petaEditMode==='geser'?'':'outline'}" style="flex:1;justify-content:center;" onclick="setPetaEditMode('geser')">${ic('move',14)} Geser</button>
+          <button class="pill-btn sm ${petaEditMode==='tambah'?'':'outline'}" style="flex:1;justify-content:center;" onclick="setPetaEditMode('tambah')">${ic('plus',14)} Titik</button>
+          <button class="pill-btn sm ${petaEditMode==='hapus'?'':'outline'}" style="flex:1;justify-content:center;" onclick="setPetaEditMode('hapus')">${ic('trash',14)} Titik</button>
+        </div>
+        <div style="display:flex;gap:8px;">
+          <button class="pill-btn sm" style="flex:1;justify-content:center;" onclick="savePetaBlockPolygon()">Simpan</button>
+          <button class="pill-btn sm outline" style="flex:1;justify-content:center;" onclick="cancelEditPetaBlock()">Batal</button>
+        </div>
+      </div>
+      ` : (!petaDrawing ? `
       <button onclick="startPetaDraw()" title="Gambar Blok Baru" style="position:fixed;right:16px;bottom:calc(78px + env(safe-area-inset-bottom, 20px));width:56px;height:56px;border-radius:50%;background:var(--primary);color:#fff;border:none;box-shadow:0 3px 10px rgba(0,0,0,.35);display:flex;align-items:center;justify-content:center;z-index:45;">
         <svg viewBox="0 0 24 24" width="26" height="26" fill="none" stroke="currentColor" stroke-width="2.2"><circle cx="12" cy="12" r="9"/><path d="M12 8v8M8 12h8"/></svg>
       </button>
@@ -150,7 +271,7 @@ function renderPeta(){
           <button class="pill-btn sm outline" style="flex:1;justify-content:center;" onclick="cancelPetaDraw()">Batal</button>
         </div>
       </div>
-      `}
+      `)}
     </div>
   `;
   applyPetaTransform();
@@ -194,13 +315,13 @@ function applyPetaTransform(){
   const inner = document.getElementById('petaImgInner');
   if(inner) inner.style.transform = `translate(${petaZoom.panX}px, ${petaZoom.panY}px) scale(${petaZoom.scale})`;
   const wrap = document.getElementById('petaImgWrap');
-  const dots = document.querySelectorAll('.peta-drawdot');
-  if(wrap && dots.length){
-    const rectWidth = wrap.getBoundingClientRect().width || 350;
-    const desiredScreenRadiusPx = 7;
+  const rectWidth = wrap ? (wrap.getBoundingClientRect().width || 350) : 350;
+  const applyRadius = (selector, desiredScreenRadiusPx)=>{
     const r = ((desiredScreenRadiusPx * 100 / rectWidth) / petaZoom.scale).toFixed(3);
-    dots.forEach(c=>{ c.setAttribute('r', r); });
-  }
+    document.querySelectorAll(selector).forEach(c=>{ c.setAttribute('r', r); });
+  };
+  applyRadius('.peta-drawdot', 7);
+  applyRadius('.peta-editdot', 9);
 }
 function resetPetaZoom(){
   petaZoom = {scale:1, panX:0, panY:0};
@@ -224,6 +345,15 @@ function petaTouchStart(e){
     const midY = (t1.clientY+t2.clientY)/2 - rect.top;
     petaTouchState = {mode:'pinch', startDist:dist, startScale:petaZoom.scale, midX, midY, startPanX:petaZoom.panX, startPanY:petaZoom.panY};
   } else if(e.touches.length===1){
+    // Mode "Geser" saat edit poligon: kalau jari mulai TEPAT di dekat salah
+    // satu titik yang sedang diedit, itu jadi drag titik (bukan pan peta).
+    if(petaEditingBlockId && petaEditMode==='geser'){
+      const idx = nearestPetaEditVertex(e.touches[0].clientX, e.touches[0].clientY);
+      if(idx!==-1){
+        petaTouchState = {mode:'vertexDrag', idx};
+        return;
+      }
+    }
     petaTouchState = {mode:'pan', startX:e.touches[0].clientX, startY:e.touches[0].clientY, startPanX:petaZoom.panX, startPanY:petaZoom.panY, moved:false};
   }
 }
@@ -241,6 +371,11 @@ function petaTouchMove(e){
     petaZoom.panY = petaTouchState.midY - contentY*newScale;
     clampPan();
     applyPetaTransform();
+  } else if(petaTouchState.mode==='vertexDrag' && e.touches.length===1){
+    e.preventDefault();
+    const pt = petaCoordsFromClient(e.touches[0].clientX, e.touches[0].clientY);
+    petaEditPoints[petaTouchState.idx] = pt;
+    updatePetaEditSvg();
   } else if(petaTouchState.mode==='pan' && e.touches.length===1){
     const dx = e.touches[0].clientX - petaTouchState.startX;
     const dy = e.touches[0].clientY - petaTouchState.startY;
@@ -255,23 +390,32 @@ function petaTouchMove(e){
   }
 }
 function petaTouchEnd(e){
+  if(petaTouchState && petaTouchState.mode==='vertexDrag'){
+    petaJustDragged = true;
+    setTimeout(()=>{ petaJustDragged = false; }, 200);
+    petaTouchState = null;
+    return;
+  }
   if(petaTouchState && (petaTouchState.mode==='pinch' || (petaTouchState.mode==='pan' && petaTouchState.moved))){
     petaJustDragged = true;
     setTimeout(()=>{ petaJustDragged = false; }, 200);
   }
   petaTouchState = null;
 }
-function petaTapCoords(evt){
+function petaCoordsFromClient(clientX, clientY){
   const wrap = document.getElementById('petaImgWrap');
   const img = document.getElementById('petaImgEl');
   const rect = wrap.getBoundingClientRect();
   const imgRenderedHeight = (img && img.naturalWidth) ? (rect.width * img.naturalHeight / img.naturalWidth) : rect.height;
-  const localX = (evt.clientX - rect.left - petaZoom.panX) / petaZoom.scale;
-  const localY = (evt.clientY - rect.top - petaZoom.panY) / petaZoom.scale;
+  const localX = (clientX - rect.left - petaZoom.panX) / petaZoom.scale;
+  const localY = (clientY - rect.top - petaZoom.panY) / petaZoom.scale;
   return {
     x: +(localX / rect.width * 100).toFixed(2),
     y: +(localY / imgRenderedHeight * 100).toFixed(2)
   };
+}
+function petaTapCoords(evt){
+  return petaCoordsFromClient(evt.clientX, evt.clientY);
 }
 function startPetaDraw(){
   petaDrawing = true;
@@ -320,6 +464,14 @@ function handlePetaTap(evt){
   if(petaDrawing){
     petaDrawPoints.push(pt);
     renderPeta();
+    return;
+  }
+  if(petaEditingBlockId){
+    if(petaEditMode==='tambah'){
+      insertPetaEditPointNearest(pt);
+    } else if(petaEditMode==='hapus'){
+      removePetaEditPointAt(nearestPetaEditVertex(evt.clientX, evt.clientY));
+    }
     return;
   }
   const hit = PETA_BLOCKS.find(b=>pointInPolygon(pt, b.points));
@@ -385,7 +537,8 @@ function showPetaBlock(id){
     </div>
     ` : ''}
     <div style="display:flex;gap:8px;">
-      <button class="pill-btn outline" style="flex:2;justify-content:center;" onclick="editPetaBlockName('${b.id}')">${ic('edit')} Edit Nama</button>
+      <button class="pill-btn outline" style="flex:1;justify-content:center;" onclick="editPetaBlockName('${b.id}')">${ic('edit')} Nama</button>
+      <button class="pill-btn outline" style="flex:1;justify-content:center;" onclick="editPetaBlockPolygon('${b.id}')">${ic('move')} Bentuk</button>
       <button class="pill-btn outline" style="flex:1;justify-content:center;color:var(--secondary);border-color:var(--secondary);" onclick="deletePetaBlock('${b.id}');closeModal();">Hapus</button>
     </div>
   `);
