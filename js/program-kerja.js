@@ -584,7 +584,7 @@ function renderPkRekapBody(){
   rows.forEach(r=>{ const key = r.sopir||'(kosong)'; totals[key] = (totals[key]||0) + (parseFloat(r.overtimeJam)||0); });
   const totalArr = Object.entries(totals).sort((a,b)=>b[1]-a[1]);
   const byDate = rows.reduce((g,r)=>{ (g[r.tanggal]=g[r.tanggal]||[]).push(r); return g; }, {});
-  const dateGroups = Object.entries(byDate).sort((a,b)=>a[0].localeCompare(b[0]));
+  const dateGroups = Object.entries(byDate).sort((a,b)=>b[0].localeCompare(a[0])); // terbaru di atas
   return `
     <div class="section-eyebrow" style="margin-top:0;">Total Jam per Driver</div>
     <div class="card card-flat" style="padding:2px 14px;">

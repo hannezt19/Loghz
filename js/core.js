@@ -67,6 +67,7 @@ function fmtTanggalSingkat(iso){
 function toast(msg){ const t=document.getElementById('toast'); t.textContent=msg; t.classList.add('show'); clearTimeout(window._toastT); window._toastT=setTimeout(()=>t.classList.remove('show'),2200); }
 
 let expandedRowId = null;
+let rekapExpandedMonth = null; // accordion bulan di Riwayat Lengkap - null berarti belum di-set, otomatis diisi bulan berjalan saat render pertama
 let USER = LS.get('v2_user', {name:'', mainBt:''});
 let UNITS = LS.get('v2_units', []);       // [{id, kode}]
 let BLOKS = LS.get('v2_bloks', []);       // [{id, kode}]

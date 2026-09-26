@@ -538,10 +538,133 @@ function renderRekap(){
   const host = document.getElementById('screen-rekap');
   host.innerHTML = renderRekapPribadiHtml();
 }
+const BULAN_ID = ['Januari','Februari','Maret','April','Mei','Juni','Juli','Agustus','September','Oktober','November','Desember'];
+function monthLabelId(monthKey){
+  const [y,m] = monthKey.split('-').map(Number);
+  return BULAN_ID[m-1]+' '+y;
+}
+/* Kelompokkan entri (sudah terurut terbaru->terlama) per bulan (YYYY-MM),
+ * dan urutkan kelompoknya terbaru di atas. Cuma bulan yang benar-benar ADA
+ * datanya yang muncul - tidak ada accordion bulan kosong. */
+function monthGroupsForRekap(sorted){
+  const groups = {};
+  sorted.forEach(e=>{ const key = e.date.slice(0,7); (groups[key]=groups[key]||[]).push(e); });
+  return Object.entries(groups).sort((a,b)=>b[0].localeCompare(a[0]));
+}
+function toggleRekapMonth(monthKey){
+  rekapExpandedMonth = (rekapExpandedMonth===monthKey) ? null : monthKey;
+  renderRekap();
+}
+/* 1 kartu riwayat (dipakai di dalam tiap accordion bulan). Dipisah dari
+ * renderRekapPribadiHtml() supaya tidak dobel-tulis template kartu yang
+ * panjang ini. */
+function renderRiwayatCardHtml(e, dupDates){
+  const isDup = dupDates.has(e.date+'|'+e.btId+'|'+e.id);
+  return `
+  <div class="card" style="${isDup?'border-color:var(--danger);':''}">
+    <div style="display:flex;justify-content:space-between;align-items:center;gap:10px;">
+      <button class="icon-btn" style="flex-shrink:0;padding:4px;" onclick="toggleEditRow('${e.id}')" aria-label="Edit">
+        <svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 20h9"/><path d="M16.5 3.5a2.12 2.12 0 0 1 3 3L7 19l-4 1 1-4Z"/></svg>
+      </button>
+      <div style="flex:1;min-width:0;"><div style="font-weight:800;">${fmtLabel(e.date)}</div>
+        <div class="field-sub">${escapeHtml(btLabel(e.btId))}${e.jenisLayanan?' &middot; '+escapeHtml(entryTipeLabel(e)):''} &middot; HM ${escapeHtml(e.hmAwal||'-')}&rarr;${escapeHtml(e.hmAkhir||'-')} &middot; ${escapeHtml(fmtThousandsLive(e.bbmLiter||'0'))} ml</div>
+        ${e.catatanKhusus?'<div style="display:inline-block;margin-top:2px;color:var(--secondary);font-weight:700;font-size:10px;border:1px solid var(--secondary);border-radius:100px;padding:1px 7px;">Catatan Khusus</div>':''}
+        ${e.menginap?'<div style="display:inline-block;margin-top:2px;margin-left:4px;color:#2F6FE0;font-weight:700;font-size:10px;border:1px solid #2F6FE0;border-radius:100px;padding:1px 7px;">Menginap</div>':''}
+        ${isDup?'<div class="field-sub" style="color:var(--danger);font-weight:700;">'+ic('warning')+' Ada entri lain di tanggal &amp; unit yang sama</div>':''}
+      </div>
+    </div>
+    <div id="editrow-${e.id}" style="display:${expandedRowId===e.id?'block':'none'};margin-top:12px;">
+      ${isSystemUnitId(e.btId) ? `
+      <div class="grid2">
+        <div><label class="flabel">No Unit</label><select onchange="editEntryField('${e.id}','btId',this.value)">${unitsForSelect().map(u=>`<option value="${u.id}" ${e.btId===u.id?'selected':''}>${escapeHtml(u.kode)}</option>`).join('')}</select></div>
+        <div><label class="flabel">Tanggal</label><input type="date" value="${e.date}" onchange="editEntryField('${e.id}','date',this.value)"></div>
+      </div>
+      <div style="display:flex;gap:8px;margin-top:8px;">
+        <button class="btn-block" style="flex:1;" onclick="toggleEditRow('${e.id}')">Selesai</button>
+        <button class="pill-btn outline" onclick="deleteRow('${e.id}')">Hapus</button>
+      </div>
+      ` : `
+      <div class="grid2">
+        <div><label class="flabel">No Unit</label><select onchange="editEntryField('${e.id}','btId',this.value)">${unitsForSelect().map(u=>`<option value="${u.id}" ${e.btId===u.id?'selected':''}>${escapeHtml(u.kode)}</option>`).join('')}</select></div>
+        <div><label class="flabel">Tanggal</label><input type="date" value="${e.date}" onchange="editEntryField('${e.id}','date',this.value)"></div>
+      </div>
+      <button class="pill-btn sm outline" style="width:100%;justify-content:center;margin-bottom:8px;" onclick="toggleSecondaryFlag('${e.id}')">${e.isSecondary ? ic('splitback')+' Jadikan Entri Utama (pakai absen)' : ic('splitfwd')+' Jadikan Entri Tambahan (tanpa absen, lembur manual)'}</button>
+
+      <div class="section-eyebrow" style="margin-top:8px;">Jenis Layanan</div>
+      <label class="flabel">Jenis Layanan</label>
+      ${renderJenisLayananFields(e, '', 'edit')}
+      ${e.adaLayanan2 ? `
+      <div style="border-top:1px solid var(--outline-variant);margin-top:10px;padding-top:10px;">
+        <div class="section-eyebrow-row" style="margin:0 0 6px;"><label class="flabel" style="margin:0;">Jenis Layanan ke-2 (unit sama, hari sama)</label><button class="icon-btn" style="color:var(--secondary);" onclick="toggleJenisLayanan2('${e.id}');expandedRowId='${e.id}';renderRekap();">${ic('trash')}</button></div>
+        ${renderJenisLayananFields(e, '2', 'edit')}
+      </div>
+      ${e.adaLayanan3 ? `
+      <div style="border-top:1px solid var(--outline-variant);margin-top:10px;padding-top:10px;">
+        <div class="section-eyebrow-row" style="margin:0 0 6px;"><label class="flabel" style="margin:0;">Jenis Layanan ke-3 (unit sama, hari sama)</label><button class="icon-btn" style="color:var(--secondary);" onclick="toggleJenisLayanan3('${e.id}');expandedRowId='${e.id}';renderRekap();">${ic('trash')}</button></div>
+        ${renderJenisLayananFields(e, '3', 'edit')}
+      </div>
+      ` : `
+      <button class="pill-btn sm outline" style="margin-top:8px;" onclick="toggleJenisLayanan3('${e.id}');expandedRowId='${e.id}';renderRekap();">${ic('plus')} Tambah Jenis Layanan ke-3 (unit sama, hari sama)</button>
+      `}
+      ` : `
+      <button class="pill-btn sm outline" style="margin-top:8px;" onclick="toggleJenisLayanan2('${e.id}');expandedRowId='${e.id}';renderRekap();">${ic('plus')} Tambah Jenis Layanan (unit sama, hari sama)</button>
+      `}
+
+      ${!e.isSecondary ? `
+      <div class="section-eyebrow" style="margin-top:8px;">Absen &amp; Istirahat</div>
+      <div class="grid2">
+        <div><label class="flabel">Absen Berangkat</label><input type="time" value="${escapeHtml(e.absenBerangkat)}" onchange="editEntryField('${e.id}','absenBerangkat',this.value)"></div>
+        <div><label class="flabel">Absen Pulang</label><input type="time" value="${escapeHtml(e.absenPulang)}" onchange="editEntryField('${e.id}','absenPulang',this.value)"></div>
+      </div>
+      <div style="display:flex;gap:8px;margin-top:4px;flex-wrap:wrap;">
+        <button class="chip ${e.istirahat?'active':''}" onclick="editEntryField('${e.id}','istirahat',true)">${ic('coffee')} Istirahat</button>
+        <button class="chip ${!e.istirahat?'active':''}" onclick="editEntryField('${e.id}','istirahat',false)">${ic('hourglass')} Lembur</button>
+        <button class="chip ${e.menginap?'active':''}" onclick="editEntryField('${e.id}','menginap',${e.menginap?'false':'true'})">${ic('moon')} Menginap</button>
+      </div>
+      ${e.menginap ? `<div class="field-sub" style="margin-top:4px;">Tugas luar kota &middot; kosongkan Absen Berangkat/Pulang di hari yang tidak ada jam - akan tercatat "Menginap" saat dicetak.</div>` : ''}
+      ${e.istirahat ? `
+      <div class="grid2" style="margin-top:8px;">
+        <div><label class="flabel">Istirahat Mulai</label><input type="text" inputmode="numeric" value="${escapeHtml(e.istMulai)}" placeholder="11.00" oninput="this.value=fmtJamTitikLive(this.value)" onchange="editEntryField('${e.id}','istMulai',this.value)"></div>
+        <div><label class="flabel">Istirahat Selesai</label><input type="text" inputmode="numeric" value="${escapeHtml(e.istSelesai)}" placeholder="13.30" oninput="this.value=fmtJamTitikLive(this.value)" onchange="editEntryField('${e.id}','istSelesai',this.value)"></div>
+      </div>` : ''}
+      <div class="chk-row" style="margin-top:8px;"><input type="checkbox" id="ed-liburMerah-${e.id}" ${e.liburMerah?'checked':''} onchange="editEntryField('${e.id}','liburMerah',this.checked)"><label for="ed-liburMerah-${e.id}" style="margin-left:6px;">${ic('calendar')} Tanggal Merah / Libur Nasional</label></div>
+      ` : `
+      <div class="field-sub" style="margin-top:10px;">Ini entri tambahan (tanggal ini sudah ada entri lain) — tanpa absen otomatis, Jam Lembur di bawah diisi manual.</div>
+      `}
+
+      <div class="section-eyebrow" style="margin-top:8px;">Hour Meter &amp; BBM</div>
+      <div class="grid2">
+        <div><label class="flabel">HM Awal</label><input type="text" inputmode="numeric" id="ed-hmA-${e.id}" value="${escapeHtml(e.hmAwal)}" oninput="this.value=fmtHmLive(this.value)" onchange="editEntryField('${e.id}','hmAwal',this.value);checkHmWarning('${e.id}')"></div>
+        <div><label class="flabel">HM Akhir</label><input type="text" inputmode="numeric" id="ed-hmB-${e.id}" class="${hmBad(e)?'field-error':''}" value="${escapeHtml(e.hmAkhir)}" oninput="this.value=fmtHmLive(this.value)" onchange="onHmAkhirChangeEdit('${e.id}', this)"></div>
+        <div class="full" id="ed-hmWarning-${e.id}">${hmBad(e)?'<div class="field-sub" style="color:var(--danger);">'+ic('warning')+' HM Akhir lebih kecil dari HM Awal.</div>':''}</div>
+        <div><label class="flabel">BBM (ml)</label><input type="text" inputmode="numeric" value="${escapeHtml(fmtThousandsLive(e.bbmLiter))}" oninput="this.value=fmtThousandsLive(this.value)" onchange="editEntryField('${e.id}','bbmLiter',stripDots(this.value))"></div>
+        <div><label class="flabel">Jam Lembur</label><input type="text" value="${escapeHtml(e.lembur)}" onchange="editEntryField('${e.id}','lembur',this.value)"></div>
+      </div>
+      <label class="flabel">Catatan</label>
+      <textarea rows="2" onchange="editEntryField('${e.id}','catatan',this.value)">${escapeHtml(e.catatan)}</textarea>
+      <label class="flabel" style="margin-top:8px;">Catatan Khusus (opsional)</label>
+      <textarea rows="2" onchange="editEntryField('${e.id}','catatanKhusus',this.value)">${escapeHtml(e.catatanKhusus)}</textarea>
+      <div style="display:flex;gap:8px;margin-top:8px;">
+        <button class="btn-block" style="flex:1;" onclick="toggleEditRow('${e.id}')">Selesai</button>
+        <button class="pill-btn outline" onclick="deleteRow('${e.id}')">Hapus</button>
+      </div>
+      `}
+    </div>
+  </div>`;
+}
 function renderRekapPribadiHtml(){
   const missing = missingDays();
   const dupDates = findDuplicateDates();
   const sorted = ENTRIES.slice().sort((a,b)=>b.date.localeCompare(a.date));
+  const monthGroups = monthGroupsForRekap(sorted);
+  // Default: bulan berjalan otomatis terbuka pertama kali dibuka - tapi
+  // kalau bulan berjalan belum ada datanya sama sekali, buka bulan
+  // TERBARU yang memang ada datanya (lebih masuk akal daripada semua
+  // tertutup begitu halaman pertama dibuka).
+  if(rekapExpandedMonth===null && monthGroups.length>0){
+    const bulanIni = todayIso().slice(0,7);
+    rekapExpandedMonth = monthGroups.some(([k])=>k===bulanIni) ? bulanIni : monthGroups[0][0];
+  }
   return `
     <div style="position:sticky;top:0;z-index:5;background:var(--surface);padding-top:1px;margin:0 -16px;padding-left:16px;padding-right:16px;">
       <button class="btn-block" onclick="openExportSheet()">${ic('download')} Export Laporan</button>
@@ -558,99 +681,34 @@ function renderRekapPribadiHtml(){
     </div>
 
     <div class="section-eyebrow section-eyebrow-row">Riwayat Lengkap<button class="pill-btn sm" onclick="openBackfill(todayIso())">+ Tambah</button></div>
-    ${sorted.length===0 ? '<div class="card"><div class="empty-note">Belum ada riwayat.</div></div>' :
-      sorted.map(e=>{
-        const isDup = dupDates.has(e.date+'|'+e.btId+'|'+e.id);
+    ${monthGroups.length===0 ? '<div class="card"><div class="empty-note">Belum ada riwayat.</div></div>' :
+      monthGroups.map(([monthKey, list])=>{
+        const expanded = rekapExpandedMonth===monthKey;
+        const totalHm = list.reduce((s,e)=>{ const a=parseFloat(e.hmAwal), b=parseFloat(e.hmAkhir); return s+((!isNaN(a)&&!isNaN(b)&&b>=a)?(b-a):0); },0);
+        const totalLembur = list.reduce((s,e)=>s+computeLemburFinal(e),0);
+        // "Hari kerja" = jumlah ENTRI di bulan itu yang bukan Cuti/Libur.
+        // Standby TETAP dihitung hari kerja (bukan dikecualikan seperti
+        // Cuti/Libur).
+        const hariKerja = list.filter(e=>e.btId!==UNIT_CUTI_ID && e.btId!==UNIT_LIBUR_ID).length;
+        // "Tanggal merah/libur" di sini maksudnya entri kerja biasa yang
+        // dicentang "Tanggal Merah/Libur Nasional" (liburMerah) - BUKAN
+        // No Unit=Libur/Cuti (itu otomatis tidak ikut hitungan ini).
+        const liburMerahCount = list.filter(e=>e.liburMerah).length;
         return `
-        <div class="card" style="${isDup?'border-color:var(--danger);':''}">
-          <div style="display:flex;justify-content:space-between;align-items:center;gap:10px;">
-            <button class="icon-btn" style="flex-shrink:0;padding:4px;" onclick="toggleEditRow('${e.id}')" aria-label="Edit">
-              <svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 20h9"/><path d="M16.5 3.5a2.12 2.12 0 0 1 3 3L7 19l-4 1 1-4Z"/></svg>
-            </button>
-            <div style="flex:1;min-width:0;"><div style="font-weight:800;">${fmtLabel(e.date)}</div>
-              <div class="field-sub">${escapeHtml(btLabel(e.btId))}${e.jenisLayanan?' &middot; '+escapeHtml(entryTipeLabel(e)):''} &middot; HM ${escapeHtml(e.hmAwal||'-')}&rarr;${escapeHtml(e.hmAkhir||'-')} &middot; ${escapeHtml(fmtThousandsLive(e.bbmLiter||'0'))} ml</div>
-              ${e.catatanKhusus?'<div style="display:inline-block;margin-top:2px;color:var(--secondary);font-weight:700;font-size:10px;border:1px solid var(--secondary);border-radius:100px;padding:1px 7px;">Catatan Khusus</div>':''}
-              ${e.menginap?'<div style="display:inline-block;margin-top:2px;margin-left:4px;color:#2F6FE0;font-weight:700;font-size:10px;border:1px solid #2F6FE0;border-radius:100px;padding:1px 7px;">Menginap</div>':''}
-              ${isDup?'<div class="field-sub" style="color:var(--danger);font-weight:700;">'+ic('warning')+' Ada entri lain di tanggal &amp; unit yang sama</div>':''}
+        <div class="pk-accordion-item" style="border-bottom:1px solid var(--outline-variant);">
+          <div class="list-row" style="cursor:pointer;border-bottom:none;padding:12px 0;flex-direction:column;align-items:stretch;gap:4px;" onclick="toggleRekapMonth('${monthKey}')">
+            <div style="display:flex;justify-content:space-between;align-items:center;">
+              <span style="display:flex;align-items:center;gap:6px;min-width:0;font-weight:800;">
+                <span style="display:inline-block;flex-shrink:0;transition:transform .2s;transform:rotate(${expanded?180:0}deg);color:var(--on-surface-variant);">${ic('chevron',16)}</span>
+                ${monthLabelId(monthKey)}
+              </span>
             </div>
+            <div class="field-sub" style="padding-left:22px;">HM ${totalHm.toFixed(1)} &middot; Lembur ${totalLembur.toFixed(1)} j &middot; ${hariKerja} hari kerja &middot; ${liburMerahCount} tanggal merah/libur</div>
           </div>
-          <div id="editrow-${e.id}" style="display:${expandedRowId===e.id?'block':'none'};margin-top:12px;">
-            ${isSystemUnitId(e.btId) ? `
-            <div class="grid2">
-              <div><label class="flabel">No Unit</label><select onchange="editEntryField('${e.id}','btId',this.value)">${unitsForSelect().map(u=>`<option value="${u.id}" ${e.btId===u.id?'selected':''}>${escapeHtml(u.kode)}</option>`).join('')}</select></div>
-              <div><label class="flabel">Tanggal</label><input type="date" value="${e.date}" onchange="editEntryField('${e.id}','date',this.value)"></div>
-            </div>
-            <div style="display:flex;gap:8px;margin-top:8px;">
-              <button class="btn-block" style="flex:1;" onclick="toggleEditRow('${e.id}')">Selesai</button>
-              <button class="pill-btn outline" onclick="deleteRow('${e.id}')">Hapus</button>
-            </div>
-            ` : `
-            <div class="grid2">
-              <div><label class="flabel">No Unit</label><select onchange="editEntryField('${e.id}','btId',this.value)">${unitsForSelect().map(u=>`<option value="${u.id}" ${e.btId===u.id?'selected':''}>${escapeHtml(u.kode)}</option>`).join('')}</select></div>
-              <div><label class="flabel">Tanggal</label><input type="date" value="${e.date}" onchange="editEntryField('${e.id}','date',this.value)"></div>
-            </div>
-            <button class="pill-btn sm outline" style="width:100%;justify-content:center;margin-bottom:8px;" onclick="toggleSecondaryFlag('${e.id}')">${e.isSecondary ? ic('splitback')+' Jadikan Entri Utama (pakai absen)' : ic('splitfwd')+' Jadikan Entri Tambahan (tanpa absen, lembur manual)'}</button>
-
-            <div class="section-eyebrow" style="margin-top:8px;">Jenis Layanan</div>
-            <label class="flabel">Jenis Layanan</label>
-            ${renderJenisLayananFields(e, '', 'edit')}
-            ${e.adaLayanan2 ? `
-            <div style="border-top:1px solid var(--outline-variant);margin-top:10px;padding-top:10px;">
-              <div class="section-eyebrow-row" style="margin:0 0 6px;"><label class="flabel" style="margin:0;">Jenis Layanan ke-2 (unit sama, hari sama)</label><button class="icon-btn" style="color:var(--secondary);" onclick="toggleJenisLayanan2('${e.id}');expandedRowId='${e.id}';renderRekap();">${ic('trash')}</button></div>
-              ${renderJenisLayananFields(e, '2', 'edit')}
-            </div>
-            ${e.adaLayanan3 ? `
-            <div style="border-top:1px solid var(--outline-variant);margin-top:10px;padding-top:10px;">
-              <div class="section-eyebrow-row" style="margin:0 0 6px;"><label class="flabel" style="margin:0;">Jenis Layanan ke-3 (unit sama, hari sama)</label><button class="icon-btn" style="color:var(--secondary);" onclick="toggleJenisLayanan3('${e.id}');expandedRowId='${e.id}';renderRekap();">${ic('trash')}</button></div>
-              ${renderJenisLayananFields(e, '3', 'edit')}
-            </div>
-            ` : `
-            <button class="pill-btn sm outline" style="margin-top:8px;" onclick="toggleJenisLayanan3('${e.id}');expandedRowId='${e.id}';renderRekap();">${ic('plus')} Tambah Jenis Layanan ke-3 (unit sama, hari sama)</button>
-            `}
-            ` : `
-            <button class="pill-btn sm outline" style="margin-top:8px;" onclick="toggleJenisLayanan2('${e.id}');expandedRowId='${e.id}';renderRekap();">${ic('plus')} Tambah Jenis Layanan (unit sama, hari sama)</button>
-            `}
-
-            ${!e.isSecondary ? `
-            <div class="section-eyebrow" style="margin-top:8px;">Absen &amp; Istirahat</div>
-            <div class="grid2">
-              <div><label class="flabel">Absen Berangkat</label><input type="time" value="${escapeHtml(e.absenBerangkat)}" onchange="editEntryField('${e.id}','absenBerangkat',this.value)"></div>
-              <div><label class="flabel">Absen Pulang</label><input type="time" value="${escapeHtml(e.absenPulang)}" onchange="editEntryField('${e.id}','absenPulang',this.value)"></div>
-            </div>
-            <div style="display:flex;gap:8px;margin-top:4px;flex-wrap:wrap;">
-              <button class="chip ${e.istirahat?'active':''}" onclick="editEntryField('${e.id}','istirahat',true)">${ic('coffee')} Istirahat</button>
-              <button class="chip ${!e.istirahat?'active':''}" onclick="editEntryField('${e.id}','istirahat',false)">${ic('hourglass')} Lembur</button>
-              <button class="chip ${e.menginap?'active':''}" onclick="editEntryField('${e.id}','menginap',${e.menginap?'false':'true'})">${ic('moon')} Menginap</button>
-            </div>
-            ${e.menginap ? `<div class="field-sub" style="margin-top:4px;">Tugas luar kota &middot; kosongkan Absen Berangkat/Pulang di hari yang tidak ada jam - akan tercatat "Menginap" saat dicetak.</div>` : ''}
-            ${e.istirahat ? `
-            <div class="grid2" style="margin-top:8px;">
-              <div><label class="flabel">Istirahat Mulai</label><input type="text" inputmode="numeric" value="${escapeHtml(e.istMulai)}" placeholder="11.00" oninput="this.value=fmtJamTitikLive(this.value)" onchange="editEntryField('${e.id}','istMulai',this.value)"></div>
-              <div><label class="flabel">Istirahat Selesai</label><input type="text" inputmode="numeric" value="${escapeHtml(e.istSelesai)}" placeholder="13.30" oninput="this.value=fmtJamTitikLive(this.value)" onchange="editEntryField('${e.id}','istSelesai',this.value)"></div>
-            </div>` : ''}
-            <div class="chk-row" style="margin-top:8px;"><input type="checkbox" id="ed-liburMerah-${e.id}" ${e.liburMerah?'checked':''} onchange="editEntryField('${e.id}','liburMerah',this.checked)"><label for="ed-liburMerah-${e.id}" style="margin-left:6px;">${ic('calendar')} Tanggal Merah / Libur Nasional</label></div>
-            ` : `
-            <div class="field-sub" style="margin-top:10px;">Ini entri tambahan (tanggal ini sudah ada entri lain) — tanpa absen otomatis, Jam Lembur di bawah diisi manual.</div>
-            `}
-
-            <div class="section-eyebrow" style="margin-top:8px;">Hour Meter &amp; BBM</div>
-            <div class="grid2">
-              <div><label class="flabel">HM Awal</label><input type="text" inputmode="numeric" id="ed-hmA-${e.id}" value="${escapeHtml(e.hmAwal)}" oninput="this.value=fmtHmLive(this.value)" onchange="editEntryField('${e.id}','hmAwal',this.value);checkHmWarning('${e.id}')"></div>
-              <div><label class="flabel">HM Akhir</label><input type="text" inputmode="numeric" id="ed-hmB-${e.id}" class="${hmBad(e)?'field-error':''}" value="${escapeHtml(e.hmAkhir)}" oninput="this.value=fmtHmLive(this.value)" onchange="onHmAkhirChangeEdit('${e.id}', this)"></div>
-              <div class="full" id="ed-hmWarning-${e.id}">${hmBad(e)?'<div class="field-sub" style="color:var(--danger);">'+ic('warning')+' HM Akhir lebih kecil dari HM Awal.</div>':''}</div>
-              <div><label class="flabel">BBM (ml)</label><input type="text" inputmode="numeric" value="${escapeHtml(fmtThousandsLive(e.bbmLiter))}" oninput="this.value=fmtThousandsLive(this.value)" onchange="editEntryField('${e.id}','bbmLiter',stripDots(this.value))"></div>
-              <div><label class="flabel">Jam Lembur</label><input type="text" value="${escapeHtml(e.lembur)}" onchange="editEntryField('${e.id}','lembur',this.value)"></div>
-            </div>
-            <label class="flabel">Catatan</label>
-            <textarea rows="2" onchange="editEntryField('${e.id}','catatan',this.value)">${escapeHtml(e.catatan)}</textarea>
-            <label class="flabel" style="margin-top:8px;">Catatan Khusus (opsional)</label>
-            <textarea rows="2" onchange="editEntryField('${e.id}','catatanKhusus',this.value)">${escapeHtml(e.catatanKhusus)}</textarea>
-            <div style="display:flex;gap:8px;margin-top:8px;">
-              <button class="btn-block" style="flex:1;" onclick="toggleEditRow('${e.id}')">Selesai</button>
-              <button class="pill-btn outline" onclick="deleteRow('${e.id}')">Hapus</button>
-            </div>
-            `}
-          </div>
+          ${expanded ? `
+          <div style="padding:4px 0 10px;">
+            ${list.map(e=>renderRiwayatCardHtml(e, dupDates)).join('')}
+          </div>` : ''}
         </div>`;
       }).join('')}
   `;
