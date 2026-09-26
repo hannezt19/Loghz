@@ -561,7 +561,7 @@ async function cetakRiwayatNama(){
   toast(result==='shared'?'PDF siap dibagikan':'PDF diunduh');
   closeModal();
 }
-const ALL_EXPORT_HEADERS = ['Tanggal','No Unit','Jenis Layanan','Detail','Lokasi','Absen Berangkat','Absen Pulang','Istirahat','HM Awal','HM Akhir','HM Terpakai','BBM (L)','Lembur (j)','Lembur Final','BU/TU','BS/TS','Catatan','Catatan Khusus'];
+const ALL_EXPORT_HEADERS = ['Tanggal','No Unit','Jenis Layanan','Detail','Lokasi','Jml Orang','Absen Berangkat','Absen Pulang','Istirahat','HM Awal','HM Akhir','HM Terpakai','BBM (L)','Lembur (j)','Lembur Final','BU/TU','BS/TS','Catatan','Catatan Khusus'];
 function slugCol(h){ return h.toLowerCase().replace(/[^a-z0-9]+/g,'-'); }
 /* Grup checklist kolom cetak: kolom cuaca (BU/TU + BS/TS) digabung jadi 1 ceklis "Cuaca" */
 function buildExportCheckGroups(){
@@ -654,6 +654,17 @@ function getExportRows(){
     // dicetak cuma yang PERTAMA sebagai wakil - biar laporan tetap ringkas.
     return lokasiArrGetForDisplay(e, fk('lokasi'))[0] || '';
   };
+  /* Jml Orang: KHUSUS Antar/Jemput Tenaga, dijumlahkan dari semua baris
+   * Lokasi & Nama (tiap baris punya jumlah orang sendiri-sendiri). Jenis lain
+   * tidak punya field ini sama sekali, jadi tetap '-' seperti kolom lain yang
+   * tidak relevan. */
+  const jmlOrangUntukLayanan = (e, jenis, suffix) => {
+    if(jenis!=='Antar/Jemput Tenaga') return '';
+    const fk = (name)=>name+suffix;
+    const arr = pasanganArrGetForDisplay(e, fk('lokasi'), fk('nama'));
+    const total = arr.reduce((s,p)=>s+(parseInt(p.jumlahOrang,10)||0),0);
+    return total>0 ? String(total) : '';
+  };
   /* 1 hari kerja = 1 s/d 3 "kegiatan" (Jenis Layanan utama/ke-2/ke-3, unit
    * sama). Setiap kegiatan sekarang tercetak sebagai BARIS TABEL SENDIRI
    * (bukan digabung \n dalam 1 sel seperti sebelumnya) - supaya tiap kegiatan
@@ -661,15 +672,16 @@ function getExportRows(){
    * satu-satu. Hari Libur/Cuti/Standby (tidak ada kegiatan sama sekali) tetap
    * jadi 1 baris kosong (tanda "-"). */
   const kegiatanUntukEntry = (e) => {
-    if(isSystemUnitId(e.btId)) return [{jenisLabel:'-', detail:'-', lokasi:'-'}];
+    if(isSystemUnitId(e.btId)) return [{jenisLabel:'-', detail:'-', lokasi:'-', jmlOrang:'-'}];
     const slots = LAYANAN_SUFFIXES.filter(sfx => sfx==='' ? e.jenisLayanan : (e['adaLayanan'+sfx] && e['jenisLayanan'+sfx]));
-    if(slots.length===0) return [{jenisLabel:'-', detail:'-', lokasi:'-'}];
+    if(slots.length===0) return [{jenisLabel:'-', detail:'-', lokasi:'-', jmlOrang:'-'}];
     return slots.map(sfx=>{
       const jenis = e['jenisLayanan'+sfx];
       return {
         jenisLabel: jenisLayananArahLabel(jenis, e, sfx) || '-',
         detail: detailUntukLayanan(e, jenis, sfx) || '-',
-        lokasi: lokasiUntukLayanan(e, jenis, sfx) || '-'
+        lokasi: lokasiUntukLayanan(e, jenis, sfx) || '-',
+        jmlOrang: jmlOrangUntukLayanan(e, jenis, sfx) || '-'
       };
     });
   };
@@ -704,7 +716,7 @@ function getExportRows(){
     kegiatanUntukEntry(e).forEach(k=>{
       data.push(Object.assign({
         'Tanggal': fmtLabel(e.date), 'No Unit': btLabel(e.btId),
-        'Jenis Layanan': k.jenisLabel, 'Detail': k.detail, 'Lokasi': k.lokasi
+        'Jenis Layanan': k.jenisLabel, 'Detail': k.detail, 'Lokasi': k.lokasi, 'Jml Orang': k.jmlOrang
       }, perHari, {
         _dateIso: e.date, /* dipakai untuk highlight Minggu/libur nasional & garis penyatu antar baris 1 hari yang sama - bukan kolom cetak */
         _menginap: !!e.menginap, /* dipakai untuk sorot biru baris tugas menginap - bukan kolom cetak */
@@ -716,6 +728,7 @@ function getExportRows(){
   const totalLembur = rows.reduce((s,e)=>s+(parseFloat(e.lembur)||0),0);
   const totalLemburFinal = rows.reduce((s,e)=>s+computeLemburFinal(e),0);
   const totalBbm = rows.reduce((s,e)=>s+(parseFloat(e.bbmLiter)||0),0)/1000; // ml -> liter
+  const totalJmlOrang = data.reduce((s,r)=>s+(parseInt(r['Jml Orang'],10)||0),0);
   const uniqueDates = Array.from(new Set(rows.map(e=>e.date)));
   const totalRainUtara = uniqueDates.reduce((s,d)=>{ const w=getWeatherLogForDate(d); return s+(w&&w.utara?(w.utara.rainMm||0):0); },0);
   const totalRainSelatan = uniqueDates.reduce((s,d)=>{ const w=getWeatherLogForDate(d); return s+(w&&w.selatan?(w.selatan.rainMm||0):0); },0);
@@ -731,7 +744,7 @@ function getExportRows(){
   for(let i=data.length-1;i>0;i--){
     if(data[i]['Tanggal']===data[i-1]['Tanggal']) data[i]['Tanggal'] = '';
   }
-  return {headers, rows:data, totalHm, totalLembur, totalLemburFinal, totalBbm, totalRainUtara, totalRainSelatan};
+  return {headers, rows:data, totalHm, totalLembur, totalLemburFinal, totalBbm, totalJmlOrang, totalRainUtara, totalRainSelatan};
 }
 function exportFileLabel(){
   const mode = document.querySelector('input[name="exp-mode"]:checked').value;
@@ -771,7 +784,7 @@ function weatherCategoryLabel(category){
   return map[category] || 'Berawan';
 }
 async function doExport(fmt){
-  const {headers, rows, totalHm, totalLembur, totalLemburFinal, totalBbm, totalRainUtara, totalRainSelatan} = getExportRows();
+  const {headers, rows, totalHm, totalLembur, totalLemburFinal, totalBbm, totalJmlOrang, totalRainUtara, totalRainSelatan} = getExportRows();
   if(headers.length===0){ toast('Pilih minimal satu kolom dulu'); return; }
   if(rows.length===0){ toast('Tidak ada data pada periode ini'); return; }
   /* Ambil data libur nasional/Minggu untuk rentang tanggal yang tercakup di rows ini —
@@ -782,6 +795,7 @@ async function doExport(fmt){
     if(i===0) return 'TOTAL';
     if(h==='HM Terpakai') return totalHm.toFixed(1);
     if(h==='BBM (L)') return fmtLiterID(totalBbm);
+    if(h==='Jml Orang') return totalJmlOrang>0 ? String(totalJmlOrang) : '';
     if(h==='Lembur (j)') return totalLembur.toFixed(1);
     if(h==='Lembur Final') return totalLemburFinal.toFixed(1);
     if(h==='BU/TU') return totalRainUtara.toFixed(1)+' mm';

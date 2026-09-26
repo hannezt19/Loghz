@@ -45,7 +45,23 @@ function renderRingkasanHmLemburHtml(){
 function openBbmDetailModal(){
   window._bbmFilterBt = USER.mainBt;
   window._bbmShowSusulanForm = false;
+  // Bulan berjalan otomatis terbuka duluan saat modal pertama dibuka - bulan
+  // lain mulai dalam keadaan tertutup (ringkas) supaya daftarnya tidak
+  // langsung panjang kalau riwayat sudah banyak bulan.
+  window._bbmOpenMonths = new Set([todayIso().slice(0,7)]);
   renderBbmDetailModal();
+}
+function toggleBbmMonth(monthKey){
+  if(!window._bbmOpenMonths) window._bbmOpenMonths = new Set();
+  if(window._bbmOpenMonths.has(monthKey)) window._bbmOpenMonths.delete(monthKey);
+  else window._bbmOpenMonths.add(monthKey);
+  renderBbmDetailModal();
+}
+const BBM_BULAN_NAMA = ['Januari','Februari','Maret','April','Mei','Juni','Juli','Agustus','September','Oktober','November','Desember'];
+function bbmBulanTahunLabel(monthKey){
+  const parts = monthKey.split('-');
+  const bulan = BBM_BULAN_NAMA[parseInt(parts[1],10)-1] || '';
+  return bulan+' '+parts[0];
 }
 function renderBbmDetailModal(){
   const list = unitsForSelect().filter(u=>!u.isSystem);
@@ -72,17 +88,39 @@ function renderBbmDetailModal(){
     ${renderSusulanForm()}
     ` : `
     <button class="pill-btn outline" style="width:100%;margin-bottom:10px;" onclick="window._bbmShowSusulanForm=true;renderBbmDetailModal()">+ Tambah Data Susulan</button>
-    ${sorted.length===0 ? `<div class="empty-note">Belum ada data isi BBM.</div>` : sorted.map(t=>`
-      <div class="card" style="margin-bottom:8px;padding:12px 14px;display:flex;justify-content:space-between;align-items:flex-start;">
-        <div>
-          <div style="font-weight:700;">${escapeHtml(btLabel(t.btId))} &middot; ${fmtLabel(t.tanggal)}${t.sumber==='susulan'?' <span style="background:var(--maroon);color:#fff;font-size:9px;padding:2px 6px;border-radius:6px;">SUSULAN</span>':''}</div>
-          <div class="field-sub">HM ${t.hm} &middot; ${(t.bbmMl/1000).toFixed(1)} L${t.hmTerpakai!==null?' &middot; '+t.hmTerpakai.toFixed(1)+' jam sejak isi sebelumnya':''}</div>
-        </div>
-        ${t.sumber==='susulan'?`<button class="icon-btn" onclick="hapusBbmSusulan('${t.id}');renderBbmDetailModal()">${ic('trash')}</button>`:''}
-      </div>
-    `).join('')}
+    ${sorted.length===0 ? `<div class="empty-note">Belum ada data isi BBM.</div>` : renderBbmMonthAccordion(sorted)}
     `}
   `);
+}
+/* Akordion Detail BBM per bulan - "sorted" sudah terurut terbaru-lebih-dulu,
+ * jadi grup bulan otomatis ikut urut terbaru-lebih-dulu juga (tidak perlu
+ * sort ulang). Isi tiap grup cukup ringkasan (jumlah entri & total liter),
+ * TANPA rincian per hari - biar akordion tetap ringkas dibuka berkali-kali. */
+function renderBbmMonthAccordion(sorted){
+  const groups = [];
+  const byMonth = {};
+  sorted.forEach(t=>{
+    const mk = t.tanggal.slice(0,7);
+    if(!byMonth[mk]){ byMonth[mk] = {monthKey:mk, count:0, totalMl:0}; groups.push(byMonth[mk]); }
+    byMonth[mk].count++;
+    byMonth[mk].totalMl += t.bbmMl;
+  });
+  const openSet = window._bbmOpenMonths || new Set();
+  return groups.map(g=>{
+    const open = openSet.has(g.monthKey);
+    return `
+      <div class="card" style="margin-bottom:8px;padding:0;overflow:hidden;">
+        <div style="padding:12px 14px;display:flex;justify-content:space-between;align-items:center;cursor:pointer;" onclick="toggleBbmMonth('${g.monthKey}')">
+          <div style="font-weight:700;">${bbmBulanTahunLabel(g.monthKey)}</div>
+          <div style="display:flex;align-items:center;gap:8px;">
+            <span style="font-size:13px;font-weight:700;color:var(--primary);">${(g.totalMl/1000).toFixed(1)} L</span>
+            <span style="transform:rotate(${open?'180deg':'0deg'});transition:transform .15s;">${ic('chevron',16)}</span>
+          </div>
+        </div>
+        ${open ? `<div style="padding:0 14px 12px;color:var(--on-surface-variant);font-size:13px;">${g.count}x isi BBM &middot; total ${(g.totalMl/1000).toFixed(1)} L</div>` : ''}
+      </div>
+    `;
+  }).join('');
 }
 function renderSusulanForm(){
   const list = unitsForSelect().filter(u=>!u.isSystem);

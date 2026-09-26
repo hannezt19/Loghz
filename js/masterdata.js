@@ -265,11 +265,12 @@ function renderJenisLayananFields(e, suffix, mode){
       ${arr.map((p,idx)=>`
         <div style="display:flex;gap:6px;margin-bottom:6px;">
           <input type="text" list="lokasiSuggest" placeholder="Lokasi" style="flex:1;min-width:0;" oninput="onLokasiInput(this)" onfocus="onLokasiFocus(this)" value="${escapeHtml(p.lokasi||'')}" onchange="pasanganArrChange('${e.id}','${mode}','${lokasiField}','${namaField}',${idx},'lokasi',this.value)">
-          <input type="text" list="namaSuggest" placeholder="Nama (opsional)" style="flex:1;min-width:0;" onfocus="onNamaFocus(this)" value="${escapeHtml(p.nama||'')}" onchange="pasanganArrChange('${e.id}','${mode}','${lokasiField}','${namaField}',${idx},'nama',this.value)">
+          <input type="text" list="namaSuggest" placeholder="Nama (opsional)" style="flex:1;min-width:0;" oninput="onNamaInput(this)" onfocus="onNamaFocus(this)" value="${escapeHtml(p.nama||'')}" onchange="pasanganArrChange('${e.id}','${mode}','${lokasiField}','${namaField}',${idx},'nama',this.value)">
           ${opts.shift ? `<select style="flex:0 0 86px;" onchange="pasanganArrChange('${e.id}','${mode}','${lokasiField}','${namaField}',${idx},'shift',this.value)">
             <option value="">Shift?</option>
             ${OPERATOR_SHIFT_LIST.map(s=>`<option value="${s}" ${p.shift===s?'selected':''}>${s}</option>`).join('')}
           </select>` : ''}
+          ${opts.jumlahOrang ? `<input type="text" inputmode="numeric" placeholder="Org" title="Jumlah orang/tenaga" style="flex:0 0 52px;text-align:center;" value="${escapeHtml(p.jumlahOrang||'')}" oninput="this.value=this.value.replace(/\\D/g,'').slice(0,2)" onchange="pasanganArrChange('${e.id}','${mode}','${lokasiField}','${namaField}',${idx},'jumlahOrang',this.value)">` : ''}
         </div>
       `).join('')}
       <button type="button" class="pill-btn sm outline" onclick="pasanganArrTambah('${e.id}','${mode}','${lokasiField}','${namaField}')">${ic('plus',12)} Tambah Lokasi &amp; Nama</button>
@@ -288,7 +289,7 @@ function renderJenisLayananFields(e, suffix, mode){
         <button type="button" class="chip ${e[fk('arahAntarJemput')]!=='jemput'?'active':''}" onclick="${chgRaw('arahAntarJemput',"'antar'")}">Antar</button>
         <button type="button" class="chip ${e[fk('arahAntarJemput')]==='jemput'?'active':''}" onclick="${chgRaw('arahAntarJemput',"'jemput'")}">Jemput</button>
       </div>` : ''}
-      <label class="flabel">Lokasi &amp; Nama <span style="font-weight:400;color:var(--on-surface-variant);">(vendor/mandor, opsional)</span></label>${lokasiNamaPairInput('lokasi')}
+      <label class="flabel">Lokasi &amp; Nama <span style="font-weight:400;color:var(--on-surface-variant);">(vendor/mandor, opsional) &middot; "Org" = jumlah orang/tenaga yang diangkut di baris itu</span></label>${lokasiNamaPairInput('lokasi', {jumlahOrang:true})}
     ` : ''}
     ${jenis==='Muat Tebu' ? `
       <div style="margin-top:8px;"><label class="flabel">Tipe</label>${sel('muatTipe', MUAT_TIPE_LIST)}</div>
@@ -350,7 +351,7 @@ function pasanganArrTambah(entryId, mode, lokasiField, namaField){
   if(!e) return;
   const arrKey = lokasiField+'PasanganArr';
   const arr = pasanganArrGetForDisplay(e, lokasiField, namaField).map(p=>({...p}));
-  arr.push({lokasi:'', nama:'', shift:''});
+  arr.push({lokasi:'', nama:'', shift:'', jumlahOrang:''});
   e[arrKey] = arr;
   saveEntries();
   if(mode==='edit'){ expandedRowId=entryId; renderRekap(); } else renderHari();
@@ -720,6 +721,17 @@ function refreshNamaDatalist(filterText){
 function onNamaFocus(el){
   refreshNamaDatalist(el.value);
   setTimeout(()=>{ el.scrollIntoView({behavior:'smooth', block:'center'}); }, 250);
+}
+/* Saran Nama diperbarui LAGI saat mengetik (bukan cuma sekali waktu fokus),
+ * tapi baru mulai menyaring setelah >=2 huruf - di bawah itu daftarnya masih
+ * terlalu panjang/acak untuk berguna, jadi datalist dikosongkan dulu. */
+function onNamaInput(el){
+  const q = String(el.value||'').trim();
+  if(q.length>=2) refreshNamaDatalist(q);
+  else {
+    const dl = document.getElementById('namaSuggest');
+    if(dl) dl.innerHTML = '';
+  }
 }
 function stripDots(v){ return v==null?'':String(v).replace(/\./g,''); }
 function fmtThousandsLive(v){ const c=String(v||'').replace(/[^\d]/g,''); return c===''?'':c.replace(/\B(?=(\d{3})+(?!\d))/g,'.'); }
