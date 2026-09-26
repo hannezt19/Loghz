@@ -735,14 +735,18 @@ function renderRekapPribadiHtml(){
         const expanded = rekapExpandedMonth===monthKey;
         const totalHm = list.reduce((s,e)=>{ const a=parseFloat(e.hmAwal), b=parseFloat(e.hmAkhir); return s+((!isNaN(a)&&!isNaN(b)&&b>=a)?(b-a):0); },0);
         const totalLembur = list.reduce((s,e)=>s+computeLemburFinal(e),0);
-        // "Hari kerja" = jumlah ENTRI di bulan itu yang bukan Cuti/Libur.
-        // Standby TETAP dihitung hari kerja (bukan dikecualikan seperti
-        // Cuti/Libur).
-        const hariKerja = list.filter(e=>e.btId!==UNIT_CUTI_ID && e.btId!==UNIT_LIBUR_ID).length;
-        // "Tanggal merah/libur" di sini maksudnya entri kerja biasa yang
-        // dicentang "Tanggal Merah/Libur Nasional" (liburMerah) - BUKAN
-        // No Unit=Libur/Cuti (itu otomatis tidak ikut hitungan ini).
-        const liburMerahCount = list.filter(e=>e.liburMerah).length;
+        // "Hari kerja" = jumlah TANGGAL UNIK di bulan itu yang bukan Cuti/Libur
+        // (BUKAN jumlah entri - 1 tanggal bisa punya 2 entri kalau ada Entri
+        // Tambahan/unit ke-2 di hari yang sama, jadi harus dihitung per
+        // tanggal supaya tidak dobel). Standby TETAP dihitung hari kerja
+        // (bukan dikecualikan seperti Cuti/Libur).
+        const hariKerja = new Set(list.filter(e=>e.btId!==UNIT_CUTI_ID && e.btId!==UNIT_LIBUR_ID).map(e=>e.date)).size;
+        // "Tanggal merah" = jumlah TANGGAL UNIK yang dicentang "Tanggal
+        // Merah/Libur Nasional" (liburMerah) - checkbox ini cuma ada di entri
+        // utama (bukan Entri Tambahan), tapi tetap dihitung per tanggal unik
+        // supaya konsisten dengan hariKerja di atas. Ini SAMA SEKALI beda
+        // dengan No Unit=Libur/Cuti (yang otomatis tidak ikut hitungan ini).
+        const liburMerahCount = new Set(list.filter(e=>e.liburMerah).map(e=>e.date)).size;
         return `
         <div class="pk-accordion-item" style="border-bottom:1px solid var(--outline-variant);">
           <div class="list-row" style="cursor:pointer;border-bottom:none;padding:12px 0;flex-direction:column;align-items:stretch;gap:4px;" onclick="toggleRekapMonth('${monthKey}')">
@@ -752,7 +756,7 @@ function renderRekapPribadiHtml(){
                 ${monthLabelId(monthKey)}
               </span>
             </div>
-            <div class="field-sub" style="padding-left:22px;">HM ${totalHm.toFixed(1)} &middot; Lembur ${totalLembur.toFixed(1)} j &middot; ${hariKerja} hari kerja &middot; ${liburMerahCount} tanggal merah/libur</div>
+            <div class="field-sub" style="padding-left:22px;">HM ${totalHm.toFixed(1)} &middot; Lembur ${totalLembur.toFixed(1)} j &middot; ${hariKerja} hari kerja &middot; ${liburMerahCount} tanggal merah</div>
           </div>
           ${expanded ? `
           <div style="padding:4px 0 10px;">
