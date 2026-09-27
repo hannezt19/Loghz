@@ -289,7 +289,7 @@ function renderJenisLayananFields(e, suffix, mode){
         <button type="button" class="chip ${e[fk('arahAntarJemput')]!=='jemput'?'active':''}" onclick="${chgRaw('arahAntarJemput',"'antar'")}">Antar</button>
         <button type="button" class="chip ${e[fk('arahAntarJemput')]==='jemput'?'active':''}" onclick="${chgRaw('arahAntarJemput',"'jemput'")}">Jemput</button>
       </div>` : ''}
-      <label class="flabel">Lokasi &amp; Nama <span style="font-weight:400;color:var(--on-surface-variant);">(vendor/mandor, opsional) &middot; "Org" = jumlah orang/tenaga yang diangkut di baris itu</span></label>${lokasiNamaPairInput('lokasi', {jumlahOrang:true})}
+      <label class="flabel">Lokasi &amp; Nama <span style="font-weight:400;color:var(--on-surface-variant);">(vendor/mandor, opsional) &middot; boleh lebih dari 1, pisah pakai koma &middot; "Org" = jumlah orang/tenaga yang diangkut di baris itu</span></label>${lokasiNamaPairInput('lokasi', {jumlahOrang:true})}
     ` : ''}
     ${jenis==='Muat Tebu' ? `
       <div style="margin-top:8px;"><label class="flabel">Tipe</label>${sel('muatTipe', MUAT_TIPE_LIST)}</div>
@@ -305,14 +305,14 @@ function renderJenisLayananFields(e, suffix, mode){
     ` : ''}
     ${jenis==='Drone' ? `
       <div style="margin-top:8px;"><label class="flabel">Jenis Drone</label>${sel('droneJenis', DRONE_JENIS_LIST)}</div>
-      <label class="flabel">Lokasi &amp; Nama <span style="font-weight:400;color:var(--on-surface-variant);">(opsional)</span></label>${lokasiNamaPairInput('lokasi')}
+      <label class="flabel">Lokasi &amp; Nama <span style="font-weight:400;color:var(--on-surface-variant);">(opsional) &middot; boleh lebih dari 1, pisah pakai koma</span></label>${lokasiNamaPairInput('lokasi')}
     ` : ''}
     ${jenis==='Operator' ? `
       <div style="margin-top:8px;"><label class="flabel">Shift (Anda)</label>${sel('shift', SHIFT_LIST)}</div>
-      <label class="flabel">Lokasi &amp; Nama <span style="font-weight:400;color:var(--on-surface-variant);">(opsional) &middot; Shift di tiap baris = shift OPERATOR yang diantar/dijemput, beda dengan Shift Anda di atas</span></label>${lokasiNamaPairInput('lokasi', {shift:true})}
+      <label class="flabel">Lokasi &amp; Nama <span style="font-weight:400;color:var(--on-surface-variant);">(opsional) &middot; boleh lebih dari 1, pisah pakai koma &middot; Shift di tiap baris = shift OPERATOR yang diantar/dijemput, beda dengan Shift Anda di atas</span></label>${lokasiNamaPairInput('lokasi', {shift:true})}
     ` : ''}
     ${jenis && !['Antar/Jemput Tenaga','Muat Tebu','Drone','Operator'].includes(jenis) ? `
-      <label class="flabel">Lokasi &amp; Nama <span style="font-weight:400;color:var(--on-surface-variant);">(opsional)</span></label>${lokasiNamaPairInput('lokasi')}
+      <label class="flabel">Lokasi &amp; Nama <span style="font-weight:400;color:var(--on-surface-variant);">(opsional) &middot; boleh lebih dari 1, pisah pakai koma</span></label>${lokasiNamaPairInput('lokasi')}
     ` : ''}
   `;
 }
@@ -407,6 +407,23 @@ function toggleJenisLayanan3(entryId){
   saveEntries();
   renderHari();
 }
+/* Menu "Tambah" gabungan untuk laman Hari Ini - dulu ada 3 tombol "+"
+ * terpisah (Unit Lain, Jenis Layanan ke-2, Jenis Layanan ke-3), sekarang
+ * digabung ke 1 titik biar rapi. Isi menu otomatis menyesuaikan: opsi Jenis
+ * Layanan ke-2/ke-3 cuma muncul kalau memang belum aktif/masih relevan.
+ * "+ Tambah Lokasi & Nama" SENGAJA tidak ikut digabung ke sini - itu tetap
+ * nempel di section-nya sendiri karena row-level (nambah baris di dalam 1
+ * jenis layanan), beda konteks dengan 3 aksi struktural di atas. */
+function openHariTambahMenu(){
+  const e = getTodayEntry();
+  const isSys = isSystemUnitId(e.btId);
+  openModal(`
+    <div class="mhead"><h2>Tambah</h2><button class="mclose" onclick="closeModal()">&times;</button></div>
+    <button class="pill-btn outline" style="width:100%;justify-content:center;margin-bottom:8px;" onclick="closeModal();addSecondaryUnit();">${ic('plus')} Unit Lain (No Unit lain hari ini)</button>
+    ${(!isSys && !e.adaLayanan2) ? `<button class="pill-btn outline" style="width:100%;justify-content:center;margin-bottom:8px;" onclick="closeModal();toggleJenisLayanan2();">${ic('plus')} Jenis Layanan ke-2 (unit sama, hari sama)</button>` : ''}
+    ${(!isSys && e.adaLayanan2 && !e.adaLayanan3) ? `<button class="pill-btn outline" style="width:100%;justify-content:center;" onclick="closeModal();toggleJenisLayanan3();">${ic('plus')} Jenis Layanan ke-3 (unit sama, hari sama)</button>` : ''}
+  `);
+}
 function renderHari(){
   const host = document.getElementById('screen-hari');
   if(!USER.mainBt || UNITS.length===0){
@@ -427,7 +444,7 @@ function renderHari(){
           <select style="flex:4;" onchange="quickSave('btId', this.value)">
             ${unitsForSelect().map(u=>`<option value="${u.id}" ${e.btId===u.id?'selected':''}>${escapeHtml(u.kode)}</option>`).join('')}
           </select>
-          <button class="pill-btn" style="flex:1;justify-content:center;padding:0;" onclick="addSecondaryUnit()" title="Tambah unit lain untuk hari ini">+</button>
+          <button class="pill-btn" style="flex:1;justify-content:center;padding:0;" onclick="openHariTambahMenu()" title="Tambah Unit Lain / Jenis Layanan">+</button>
         </div>
       </div>
       <div class="empty-note">${sysUnitEmptyNote(e.btId)}</div>
@@ -443,7 +460,7 @@ function renderHari(){
         <select style="flex:4;" onchange="quickSave('btId', this.value)">
           ${unitsForSelect().map(u=>`<option value="${u.id}" ${e.btId===u.id?'selected':''}>${escapeHtml(u.kode)}</option>`).join('')}
         </select>
-        <button class="pill-btn" style="flex:1;justify-content:center;padding:0;" onclick="addSecondaryUnit()" title="Tambah unit lain untuk hari ini">+</button>
+        <button class="pill-btn" style="flex:1;justify-content:center;padding:0;" onclick="openHariTambahMenu()" title="Tambah Unit Lain / Jenis Layanan">+</button>
       </div>
     </div>
 
@@ -462,12 +479,8 @@ function renderHari(){
       <div class="section-eyebrow-row" style="margin:0 0 6px;"><label class="flabel" style="margin:0;">Jenis Layanan ke-3 (unit sama, hari sama)</label><button class="icon-btn" style="color:var(--secondary);" onclick="toggleJenisLayanan3()">${ic('trash')}</button></div>
       ${renderJenisLayananFields(e, '3')}
     </div>
-    ` : `
-    <button class="pill-btn sm outline" style="margin-top:8px;" onclick="toggleJenisLayanan3()">${ic('plus')} Tambah Jenis Layanan ke-3 (unit sama, hari sama)</button>
-    `}
-    ` : `
-    <button class="pill-btn sm outline" style="margin-top:8px;" onclick="toggleJenisLayanan2()">${ic('plus')} Tambah Jenis Layanan (unit sama, hari sama)</button>
-    `}
+    ` : ``}
+    ` : ``}
 
     <div class="section-eyebrow">Absen &amp; Istirahat</div>
     <div class="card">
@@ -659,13 +672,17 @@ function entryTipeLabel(e){
 function lokasiSuggestions(){
   const set = new Set();
   ENTRIES.forEach(e=>{
-    [e.lokasi,e.lokasiMuat,e.lokasiBongkar,e.lokasi2,e.lokasiMuat2,e.lokasiBongkar2,e.lokasi3,e.lokasiMuat3,e.lokasiBongkar3].forEach(l=>{ if(l) set.add(l); });
-    (e.lokasiArr||[]).forEach(l=>{ if(l) set.add(l); });
-    (e.lokasiArr2||[]).forEach(l=>{ if(l) set.add(l); });
-    (e.lokasiArr3||[]).forEach(l=>{ if(l) set.add(l); });
-    (e.lokasiPasanganArr||[]).forEach(p=>{ if(p.lokasi) set.add(p.lokasi); });
-    (e.lokasi2PasanganArr||[]).forEach(p=>{ if(p.lokasi) set.add(p.lokasi); });
-    (e.lokasi3PasanganArr||[]).forEach(p=>{ if(p.lokasi) set.add(p.lokasi); });
+    // splitLokasiKoma (didefinisikan di peta.js) dipakai di sini juga - field
+    // lokasi sekarang boleh berisi beberapa kode dipisah koma, jadi tiap kode
+    // perlu dipecah dulu supaya yang masuk daftar saran benar-benar 1 kode
+    // blok per opsi (bukan gabungan "01 AB 02, 03 CD 04" sebagai 1 saran).
+    [e.lokasi,e.lokasiMuat,e.lokasiBongkar,e.lokasi2,e.lokasiMuat2,e.lokasiBongkar2,e.lokasi3,e.lokasiMuat3,e.lokasiBongkar3].forEach(l=>{ splitLokasiKoma(l).forEach(x=>set.add(x)); });
+    (e.lokasiArr||[]).forEach(l=>{ splitLokasiKoma(l).forEach(x=>set.add(x)); });
+    (e.lokasiArr2||[]).forEach(l=>{ splitLokasiKoma(l).forEach(x=>set.add(x)); });
+    (e.lokasiArr3||[]).forEach(l=>{ splitLokasiKoma(l).forEach(x=>set.add(x)); });
+    (e.lokasiPasanganArr||[]).forEach(p=>{ splitLokasiKoma(p.lokasi).forEach(x=>set.add(x)); });
+    (e.lokasi2PasanganArr||[]).forEach(p=>{ splitLokasiKoma(p.lokasi).forEach(x=>set.add(x)); });
+    (e.lokasi3PasanganArr||[]).forEach(p=>{ splitLokasiKoma(p.lokasi).forEach(x=>set.add(x)); });
   });
   PETA_BLOCKS.forEach(b=>{ if(b.label) set.add(b.label); });
   BLOKS.forEach(b=>{ if(b.kode) set.add(b.kode); });
@@ -699,8 +716,20 @@ function fmtBlokKode(v){
   return out;
 }
 function onLokasiInput(el){
-  el.value = fmtBlokKode(el.value);
-  refreshLokasiDatalist(el.value);
+  // Dukung lebih dari 1 lokasi dalam 1 kotak, dipisah koma (mis. "01AB02,
+  // 03CD04" -> "01 AB 02, 03 CD 04") - tiap bagian yang dipisah koma
+  // diformat sebagai kode blok SENDIRI-SENDIRI, bukan digabung jadi 1 kode.
+  let raw = el.value;
+  // Kalau user pilih dari datalist saran, browser akan MENIMPA SELURUH isi
+  // kotak dengan teks yang dipilih (koma yang sudah diketik sebelumnya ikut
+  // hilang). Prefix (bagian sebelum segmen terakhir) disimpan tiap kali,
+  // jadi kalau tiba-2 koma-nya hilang padahal sebelumnya ada, sambung lagi.
+  const prefix = el.dataset.commaPrefix || '';
+  if(prefix && raw.indexOf(',')===-1 && !raw.startsWith(prefix)) raw = prefix + raw;
+  el.value = raw.split(',').map(p=>fmtBlokKode(p.trim())).join(', ');
+  const lastSeg = el.value.split(',').pop().trim();
+  el.dataset.commaPrefix = el.value.slice(0, el.value.length - lastSeg.length);
+  refreshLokasiDatalist(lastSeg);
 }
 function onLokasiFocus(el){
   refreshLokasiDatalist(el.value);
@@ -724,10 +753,18 @@ function onNamaFocus(el){
 }
 /* Saran Nama diperbarui LAGI saat mengetik (bukan cuma sekali waktu fokus),
  * tapi baru mulai menyaring setelah >=2 huruf - di bawah itu daftarnya masih
- * terlalu panjang/acak untuk berguna, jadi datalist dikosongkan dulu. */
+ * terlalu panjang/acak untuk berguna, jadi datalist dikosongkan dulu.
+ * Sama seperti Lokasi, field ini boleh diisi lebih dari 1 nama dipisah koma
+ * (mis. "Budi, Joko") - saran yang muncul cuma menyaring SEGMEN TERAKHIR
+ * yang sedang diketik, dan prefix (nama-nama sebelum koma terakhir)
+ * disambung lagi kalau sampai tertimpa waktu pilih dari datalist. */
 function onNamaInput(el){
-  const q = String(el.value||'').trim();
-  if(q.length>=2) refreshNamaDatalist(q);
+  let raw = el.value;
+  const prefix = el.dataset.commaPrefix || '';
+  if(prefix && raw.indexOf(',')===-1 && !raw.startsWith(prefix)){ raw = prefix + raw; el.value = raw; }
+  const lastSeg = raw.split(',').pop().trim();
+  el.dataset.commaPrefix = raw.slice(0, raw.length - lastSeg.length);
+  if(lastSeg.length>=2) refreshNamaDatalist(lastSeg);
   else {
     const dl = document.getElementById('namaSuggest');
     if(dl) dl.innerHTML = '';

@@ -183,13 +183,19 @@ function onPetaCariNamaInput(el){
 function splitNamaKoma(s){
   return String(s||'').split(',').map(x=>x.trim()).filter(Boolean);
 }
+/* Sama persis seperti splitNamaKoma, tapi dipakai buat field Lokasi - yang
+ * sekarang JUGA boleh diisi lebih dari 1 kode blok dipisah koma (mis. "01 AB
+ * 02, 03 CD 04") supaya 1 baris Lokasi & Nama bisa mewakili beberapa blok
+ * sekaligus untuk 1 nama yang sama. Dipisah jadi nama fungsi sendiri cuma
+ * biar kebacanya jelas sesuai konteks pemakaian, isinya sama saja. */
+function splitLokasiKoma(s){ return splitNamaKoma(s); }
 function blokTerhighlightUntukNama(nama){
   const set = new Set();
   if(!nama) return set;
   const q = nama.toLowerCase();
   ENTRIES.forEach(e=>{
     [...pasanganArrGetForDisplay(e,'lokasi','nama'), ...pasanganArrGetForDisplay(e,'lokasi2','nama2'), ...pasanganArrGetForDisplay(e,'lokasi3','nama3')].forEach(p=>{
-      if(p.lokasi && splitNamaKoma(p.nama).some(n=>n.toLowerCase()===q)) set.add(p.lokasi);
+      if(p.lokasi && splitNamaKoma(p.nama).some(n=>n.toLowerCase()===q)) splitLokasiKoma(p.lokasi).forEach(l=>set.add(l));
     });
   });
   return set;
@@ -363,7 +369,7 @@ function petaTouchMove(e){
     e.preventDefault();
     const [t1,t2] = e.touches;
     const dist = Math.hypot(t2.clientX-t1.clientX, t2.clientY-t1.clientY);
-    const newScale = Math.min(12, Math.max(1, petaTouchState.startScale * (dist/petaTouchState.startDist)));
+    const newScale = Math.min(20, Math.max(1, petaTouchState.startScale * (dist/petaTouchState.startDist)));
     const contentX = (petaTouchState.midX - petaTouchState.startPanX) / petaTouchState.startScale;
     const contentY = (petaTouchState.midY - petaTouchState.startPanY) / petaTouchState.startScale;
     petaZoom.scale = newScale;
@@ -494,7 +500,7 @@ const LAYANAN_SUFFIXES = ['','2','3']; // utama, ke-2, ke-3
 function riwayatUntukBlok(label){
   return ENTRIES
     .filter(e => LAYANAN_SUFFIXES.some(sfx =>
-      pasanganArrGetForDisplay(e,'lokasi'+sfx,'nama'+sfx).some(p=>p.lokasi===label) ||
+      pasanganArrGetForDisplay(e,'lokasi'+sfx,'nama'+sfx).some(p=>splitLokasiKoma(p.lokasi).includes(label)) ||
       e[sfx?('lokasiMuat'+sfx):'lokasiMuat']===label || e[sfx?('lokasiBongkar'+sfx):'lokasiBongkar']===label
     ))
     .sort((a,b)=>b.date.localeCompare(a.date))
@@ -503,7 +509,7 @@ function riwayatUntukBlok(label){
       // blok ini, supaya jenis layanan & detail (mis. tonase) yang ditampilkan
       // sesuai layanan yang tepat, bukan asal ambil yang pertama.
       let jenis = e.jenisLayanan, tonase = e.tonaseKg;
-      const pasanganPerSlot = LAYANAN_SUFFIXES.map(sfx=>pasanganArrGetForDisplay(e,'lokasi'+sfx,'nama'+sfx).filter(p=>p.lokasi===label));
+      const pasanganPerSlot = LAYANAN_SUFFIXES.map(sfx=>pasanganArrGetForDisplay(e,'lokasi'+sfx,'nama'+sfx).filter(p=>splitLokasiKoma(p.lokasi).includes(label)));
       const slotCocok = LAYANAN_SUFFIXES.find((sfx,i)=> pasanganPerSlot[i].length>0 || e[sfx?('lokasiMuat'+sfx):'lokasiMuat']===label || e[sfx?('lokasiBongkar'+sfx):'lokasiBongkar']===label);
       if(slotCocok!==undefined && slotCocok!==''){
         jenis = e['jenisLayanan'+slotCocok] || e.jenisLayanan;
