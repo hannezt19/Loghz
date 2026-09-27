@@ -976,7 +976,10 @@ function hmServiceStatus(btId){
   let segStart = baseHm;
   resetsRelevan.forEach(r=>{
     sisa += Math.max(0, r.hmSebelumReset - segStart);
-    segStart = 0; // segmen baru (setelah meter diganti) dimulai dari hampir-nol
+    // Segmen baru (setelah meter diganti) mulai dari HM Setelah Ganti yang
+    // dicatat user; kalau catatan lama tidak punya nilai ini, anggap hampir-nol
+    // seperti perilaku sebelumnya (backward-compatible).
+    segStart = (r.hmSetelahReset!=null && !isNaN(r.hmSetelahReset)) ? r.hmSetelahReset : 0;
   });
   sisa += Math.max(0, current - segStart);
   return {last, current, baseHm, sisa};
@@ -1077,8 +1080,9 @@ function konfirmasiHmBaru(){
   window._hmBaruPending = null;
   if(!p){ closeModal(); return; }
   const hmSebelumReset = currentHmForBt(p.btId);
-  HM_RESETS.push({id:uid(), btId:p.btId, date:p.tanggal, hmSebelumReset,
-    note:'Ganti HM baru (dikonfirmasi user)'+(hmSebelumReset!=null?' — HM sebelumnya '+hmSebelumReset.toFixed(1):'')});
+  const hmSetelahReset = p.val;
+  HM_RESETS.push({id:uid(), btId:p.btId, date:p.tanggal, hmSebelumReset, hmSetelahReset,
+    note:'Ganti HM baru (dikonfirmasi user)'+(hmSebelumReset!=null?' — HM sebelumnya '+hmSebelumReset.toFixed(1):'')+' — HM baru '+hmSetelahReset.toFixed(1)});
   saveHmResets();
   closeModal();
   toast('Ganti HM baru dicatat untuk '+btLabel(p.btId));
@@ -1342,35 +1346,53 @@ function deleteServis(id){
   saveServis();
   renderServisModal();
 }
+let _gantiHmBt = null;
 function openGantiHmModal(){
   closeDrawer();
+  _gantiHmBt = USER.mainBt;
+  renderGantiHmModal();
+}
+function setGantiHmUnit(val){
+  _gantiHmBt = val;
   renderGantiHmModal();
 }
 function renderGantiHmModal(){
-  const bt = USER.mainBt;
+  const bt = _gantiHmBt || USER.mainBt;
   const current = bt ? currentHmForBt(bt) : null;
   const history = HM_RESETS.filter(r=>r.btId===bt).sort((a,b)=>b.date.localeCompare(a.date));
+  const unitOptions = unitsForSelect().filter(u=>!u.isSystem);
   openModal(`
     <div class="mhead"><h2>Ganti HM Manual</h2><button class="mclose" onclick="closeModal()">&times;</button></div>
-    ${!bt ? '<div class="empty-note">Set unit default dulu di Pengaturan Akun.</div>' : `
-    <div class="field-sub" style="margin-bottom:10px;">HM saat ini menurut catatan: <b>${current!==null?current.toFixed(1):'-'}</b></div>
+    ${unitOptions.length===0 ? '<div class="empty-note">Belum ada unit terdaftar.</div>' : `
+    <label class="flabel">No Unit</label>
+    <select id="gantiHmUnit" onchange="setGantiHmUnit(this.value)">
+      ${unitOptions.map(u=>`<option value="${u.id}" ${bt===u.id?'selected':''}>${escapeHtml(u.kode)}</option>`).join('')}
+    </select>
+    <div class="field-sub" style="margin:10px 0;">HM saat ini menurut catatan: <b>${current!==null?current.toFixed(1):'-'}</b></div>
     <label class="flabel">Tanggal Ganti</label><input type="date" id="gantiHmDate" value="${todayIso()}">
-    <label class="flabel">HM Baru (setelah ganti meter)</label><input type="text" id="gantiHmVal" inputmode="numeric" placeholder="mis. 0" oninput="this.value=fmtHmLive(this.value)">
+    <label class="flabel">HM Sebelum Ganti</label><input type="text" id="gantiHmSebelum" inputmode="numeric" value="${current!==null?current.toFixed(1):''}" placeholder="mis. 58.9" oninput="this.value=fmtHmLive(this.value)">
+    <label class="flabel">HM Setelah Ganti (meter baru)</label><input type="text" id="gantiHmVal" inputmode="numeric" placeholder="mis. 0" oninput="this.value=fmtHmLive(this.value)">
     <label class="flabel">Catatan</label><input type="text" id="gantiHmNote" placeholder="mis. Meter rusak, ganti unit baru">
     <button class="btn-block" onclick="saveGantiHm()">Simpan Perubahan HM</button>
-    <div class="section-eyebrow">Riwayat Perubahan HM</div>
+    <div class="section-eyebrow">Riwayat Perubahan HM ${escapeHtml(btLabel(bt))}</div>
     <div class="card card-flat">
       ${history.length===0 ? '<div class="empty-note">Belum pernah ada perubahan HM.</div>' :
-        history.map(r=>`<div class="list-row"><span>${fmtLabel(r.date)}<br><span class="field-sub">${escapeHtml(r.note||'')}</span></span><button class="icon-btn" onclick="deleteHmReset('${r.id}')">${ic('trash')}</button></div>`).join('')}
+        history.map(r=>`<div class="list-row"><span>${fmtLabel(r.date)}<br><span class="field-sub">${r.hmSebelumReset!=null?('HM sebelum: '+r.hmSebelumReset.toFixed(1)):''}${r.hmSetelahReset!=null?(' &rarr; setelah: '+r.hmSetelahReset.toFixed(1)):''}${r.note?('<br>'+escapeHtml(r.note)):''}</span></span><button class="icon-btn" onclick="deleteHmReset('${r.id}')">${ic('trash')}</button></div>`).join('')}
     </div>
     `}
   `);
 }
 function saveGantiHm(){
+  const bt = _gantiHmBt || USER.mainBt;
+  if(!bt){ toast('Pilih unit dulu'); return; }
   const date = document.getElementById('gantiHmDate').value;
   const note = document.getElementById('gantiHmNote').value;
-  const hmSebelumReset = currentHmForBt(USER.mainBt);
-  HM_RESETS.push({id:uid(), btId:USER.mainBt, date, hmSebelumReset, note: note || 'Ganti HM manual'});
+  const sebelumRaw = document.getElementById('gantiHmSebelum').value;
+  const setelahRaw = document.getElementById('gantiHmVal').value;
+  const hmSebelumReset = (sebelumRaw!=='' && !isNaN(parseFloat(sebelumRaw))) ? parseFloat(sebelumRaw) : currentHmForBt(bt);
+  if(setelahRaw==='' || isNaN(parseFloat(setelahRaw))){ toast('Isi HM Setelah Ganti dengan angka'); return; }
+  const hmSetelahReset = parseFloat(setelahRaw);
+  HM_RESETS.push({id:uid(), btId:bt, date, hmSebelumReset, hmSetelahReset, note: note || 'Ganti HM manual'});
   saveHmResets();
   toast('Perubahan HM dicatat');
   renderGantiHmModal();
