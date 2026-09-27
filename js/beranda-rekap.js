@@ -101,9 +101,10 @@ function renderBbmMonthAccordion(sorted){
   const byMonth = {};
   sorted.forEach(t=>{
     const mk = t.tanggal.slice(0,7);
-    if(!byMonth[mk]){ byMonth[mk] = {monthKey:mk, items:[], totalMl:0}; groups.push(byMonth[mk]); }
+    if(!byMonth[mk]){ byMonth[mk] = {monthKey:mk, items:[], totalMl:0, totalHm:0}; groups.push(byMonth[mk]); }
     byMonth[mk].items.push(t);
     byMonth[mk].totalMl += t.bbmMl;
+    if(t.hmTerpakai!=null && !isNaN(t.hmTerpakai)) byMonth[mk].totalHm += t.hmTerpakai;
   });
   const openSet = window._bbmOpenMonths || new Set();
   return groups.map(g=>{
@@ -117,6 +118,7 @@ function renderBbmMonthAccordion(sorted){
           </div>
           <div style="display:flex;align-items:center;gap:8px;">
             <span style="font-size:13px;font-weight:700;color:var(--primary);">${(g.totalMl/1000).toFixed(1)} L</span>
+            <span style="font-size:13px;font-weight:700;color:#4E7FE0;">${g.totalHm.toFixed(1)} jam</span>
             <span style="transform:rotate(${open?'180deg':'0deg'});transition:transform .15s;">${ic('chevron',16)}</span>
           </div>
         </div>
