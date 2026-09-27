@@ -531,17 +531,17 @@ function showPetaBlock(id){
   const b = PETA_BLOCKS.find(x=>x.id===id);
   if(!b) return;
   _petaActiveBlockId = id;
-  const formatValid = isBlokFormatValid(b.label);
-  const riwayat = formatValid ? riwayatUntukBlok(b.label) : [];
+  // Riwayat dihitung untuk SEMUA poligon, apa pun bentuk namanya - tidak lagi
+  // dibatasi hanya yang berformat No Blok (2 angka+2 huruf+2 angka), supaya
+  // titik non-blok (mis. Tower Pemadam, Pos Jaga, Gudang) juga punya Riwayat.
+  const riwayat = riwayatUntukBlok(b.label);
   openModal(`
     <div class="mhead"><h2>${ic('map')} ${escapeHtml(b.label)}</h2><button class="mclose" onclick="closeModal()">&times;</button></div>
     <button class="pill-btn" style="margin-bottom:14px;" onclick="usePetaBlockAsLokasi('${b.id}')">+ Lokasi Hari Ini</button>
-    ${formatValid ? `
     <div class="section-eyebrow">Riwayat</div>
     <div style="max-height:110px;overflow-y:auto;border:1px solid var(--outline-variant);border-radius:12px;padding:6px 12px;margin-bottom:16px;">
       ${riwayat.length===0 ? '' : riwayat.map(r=>`<div style="font-size:11px;color:var(--on-surface-variant);padding:4px 0;border-bottom:1px solid var(--outline-variant);">${fmtTglSingkat(r.date)} &middot; ${escapeHtml(btLabel(r.btId))} &middot; ${escapeHtml(r.jenis||'-')}${r.detail?' &middot; '+escapeHtml(r.detail):''}${r.nama?' &middot; '+escapeHtml(r.nama):''}</div>`).join('')}
     </div>
-    ` : ''}
     <div style="display:flex;gap:8px;">
       <button class="pill-btn outline" style="flex:1;justify-content:center;" onclick="editPetaBlockName('${b.id}')">${ic('edit')} Nama</button>
       <button class="pill-btn outline" style="flex:1;justify-content:center;" onclick="editPetaBlockPolygon('${b.id}')">${ic('move')} Bentuk</button>
