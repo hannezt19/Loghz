@@ -512,6 +512,8 @@ function renderHari(){
         <div><label class="flabel">BBM (ml)</label><input type="text" inputmode="numeric" value="${escapeHtml(fmtThousandsLive(e.bbmLiter))}" oninput="this.value=fmtThousandsLive(this.value)" onchange="quickSave('bbmLiter', stripDots(this.value))"></div>
         <div><label class="flabel">Jam Lembur</label><input type="text" inputmode="decimal" value="${escapeHtml(e.lembur)}" onchange="quickSave('lembur', this.value)"></div>
       </div>
+      <button class="pill-btn sm outline" style="margin:4px 0 2px;" onclick="openCekIndikatorBbm()">${ic('truck')} Cek Indikator BBM</button>
+      ${(()=>{ const est = estimasiSisaBbm(e.btId); if(!est) return ''; return `<div class="field-sub" style="margin-bottom:8px;">Perkiraan sisa BBM${est.cukupData?'':' (rata-rata L/jam belum cukup data)'}: <b>≈ ${Math.round(est.sisa)} L</b> dari ${est.cap} L &middot; dari cek indikator tanggal ${fmtLabel(est.tanggalCek)}</div>`; })()}
       <label class="flabel">Catatan (opsional)</label>
       <textarea rows="2" onchange="quickSave('catatan', this.value)">${escapeHtml(e.catatan)}</textarea>
       <label class="flabel" style="margin-top:8px;">Catatan Khusus (opsional)</label>
@@ -938,6 +940,138 @@ function hitungLiterPerJam(btId){
   const literPerJam = totalHm>0 ? (totalLiter/totalHm) : null;
   return {literPerJam, totalLiter, totalHm, cukupData:literPerJam!==null, jumlahIsi:timeline.length};
 }
+function unitCapacity(btId){
+  const u = UNITS.find(x=>x.id===btId);
+  return (u && u.kapasitas && !isNaN(parseFloat(u.kapasitas))) ? parseFloat(u.kapasitas) : 200;
+}
+function latestGaugeCheck(btId){
+  const list = GAUGE_CHECKS.filter(g=>g.btId===btId);
+  if(list.length===0) return null;
+  list.sort((a,b)=>a.date.localeCompare(b.date) || (a.hm-b.hm));
+  return list[list.length-1];
+}
+/* Perkiraan sisa BBM (poin: dari titik pasti Cek Indikator BBM terakhir,
+ * dikurangi konsumsi sejak saat itu berdasarkan rata-rata L/jam unit itu
+ * sendiri, hitungLiterPerJam()). Murni perkiraan - bukan pengganti data isi
+ * BBM sungguhan, dan TIDAK dipakai untuk Total BBM/kalibrasi. */
+function estimasiSisaBbm(btId){
+  const g = latestGaugeCheck(btId);
+  if(!g) return null;
+  const cap = unitCapacity(btId);
+  const literSaatCek = g.pct/100*cap;
+  const curHm = currentHmForBt(btId);
+  const { literPerJam, cukupData } = hitungLiterPerJam(btId);
+  if(curHm===null || !cukupData) return { sisa:literSaatCek, jamBerlalu:0, cap, tanggalCek:g.date, cukupData:false };
+  const jamBerlalu = Math.max(0, curHm - g.hm);
+  const sisa = Math.max(0, literSaatCek - jamBerlalu*literPerJam);
+  return { sisa, jamBerlalu, cap, tanggalCek:g.date, cukupData:true, literPerJam };
+}
+
+/* ================= GAUGE INDIKATOR BBM (busur kanan, F atas - E bawah) =================
+ * Dipakai di modal "Cek Indikator BBM" (Hari Ini). Posisi digerakkan lewat
+ * slider di bawah gambar (bukan drag langsung di busur), supaya lebih mudah
+ * dipakai di lapangan - lihat diskusi rancangan sebelumnya. */
+function gaugeSvgHtml(pct){
+  return `
+    <svg id="gaugeSvg" viewBox="0 0 220 220" style="width:100%;max-width:200px;display:block;margin:0 auto 10px;">
+      <path id="gaugeArc" fill="none" stroke="var(--outline-variant)" stroke-width="3"></path>
+      <g id="gaugeTicks"></g>
+      <text id="gaugeLabelF" font-size="16" font-weight="700" fill="currentColor" text-anchor="middle">F</text>
+      <text id="gaugeLabelE" font-size="16" font-weight="700" fill="currentColor" text-anchor="middle">E</text>
+      <line id="gaugeNeedle" stroke="var(--danger)" stroke-width="4" stroke-linecap="round"></line>
+      <circle id="gaugePivot" r="7" fill="currentColor"></circle>
+    </svg>
+    <input id="gaugeSlider" type="range" min="0" max="100" step="1" value="${pct}" style="width:100%;" oninput="gaugeOnInput(this.value)">
+  `;
+}
+/* Dipanggil sekali setelah openModal() untuk gambar busur statis + posisi
+ * awal jarum (pola sama seperti wireLongPressExportTitle di catatan-mandor.js -
+ * innerHTML tidak menjalankan <script>, jadi wiring dilakukan manual di sini). */
+function wireGauge(pct){
+  const cx=105, cy=110, rArc=95, rTick=95, rLabel=112, rNeedle=75, gridCount=4;
+  const pt = (deg,r)=>{ const rad=deg*Math.PI/180; return {x:cx+r*Math.cos(rad), y:cy-r*Math.sin(rad)}; };
+  const degAt = t => 90 - t*180;
+  const svg = document.getElementById('gaugeSvg');
+  if(!svg) return;
+  const pF = pt(degAt(0), rArc), pE = pt(degAt(1), rArc);
+  document.getElementById('gaugeArc').setAttribute('d', 'M '+pF.x+' '+pF.y+' A '+rArc+' '+rArc+' 0 0 1 '+pE.x+' '+pE.y);
+  const lF = pt(degAt(0), rLabel), lE = pt(degAt(1), rLabel);
+  const labelF = document.getElementById('gaugeLabelF'), labelE = document.getElementById('gaugeLabelE');
+  labelF.setAttribute('x', lF.x); labelF.setAttribute('y', lF.y-2);
+  labelE.setAttribute('x', lE.x); labelE.setAttribute('y', lE.y+8);
+  const pivot = document.getElementById('gaugePivot');
+  pivot.setAttribute('cx', cx); pivot.setAttribute('cy', cy);
+  const ticks = document.getElementById('gaugeTicks');
+  ticks.innerHTML = '';
+  for(let i=0;i<=gridCount;i++){
+    const deg = degAt(i/gridCount);
+    const outer = pt(deg, rTick+3), inner = pt(deg, rTick-10);
+    const major = (i===0||i===gridCount||i===Math.round(gridCount/2));
+    const line = document.createElementNS('http://www.w3.org/2000/svg','line');
+    line.setAttribute('x1', inner.x); line.setAttribute('y1', inner.y);
+    line.setAttribute('x2', outer.x); line.setAttribute('y2', outer.y);
+    line.setAttribute('stroke', 'var(--outline-variant)');
+    line.setAttribute('stroke-width', major ? '3' : '2');
+    ticks.appendChild(line);
+  }
+  window._gaugeUpdateNeedle = (v)=>{
+    const deg = degAt(1 - v/100);
+    const p = pt(deg, rNeedle);
+    const needle = document.getElementById('gaugeNeedle');
+    needle.setAttribute('x1', cx); needle.setAttribute('y1', cy);
+    needle.setAttribute('x2', p.x); needle.setAttribute('y2', p.y);
+  };
+  window._gaugeUpdateNeedle(pct);
+}
+function gaugeOnInput(v){
+  if(window._gaugeUpdateNeedle) window._gaugeUpdateNeedle(v);
+  const out = document.getElementById('gaugePctOut');
+  if(out) out.textContent = v+'%';
+  const literOut = document.getElementById('gaugeLiterOut');
+  if(literOut && window._gaugeCapacity) literOut.textContent = '≈ '+Math.round(v/100*window._gaugeCapacity)+' L dari '+window._gaugeCapacity+' L';
+}
+
+/* ----- Cek Indikator BBM: khusus unit yang sedang dipakai user di Hari Ini,
+ * TIDAK terikat isi BBM (bisa dipakai kapan saja, cuma untuk lihat posisi
+ * jarum). Tersimpan sebagai titik pasti baru untuk perkiraan sisa BBM. ----- */
+function openCekIndikatorBbm(){
+  const e = getTodayEntry();
+  const bt = e.btId;
+  if(!bt || isSystemUnitId(bt)){ toast('Pilih No Unit dulu'); return; }
+  const cap = unitCapacity(bt);
+  const hmNow = parseFloat(e.hmAkhir) || parseFloat(e.hmAwal) || currentHmForBt(bt) || '';
+  const lastCheck = latestGaugeCheck(bt);
+  const pct = lastCheck ? lastCheck.pct : 50;
+  window._gaugeCapacity = cap;
+  openModal(`
+    <div class="mhead"><h2>Cek Indikator BBM &middot; ${escapeHtml(btLabel(bt))}</h2><button class="mclose" onclick="closeModal()">&times;</button></div>
+    <div class="field-sub" style="margin-bottom:10px;">Geser slider sampai jarum sejajar dengan posisi di panel unit. Ini bukan catatan isi BBM, cuma cek posisi tangki.</div>
+    ${gaugeSvgHtml(pct)}
+    <div style="display:flex;align-items:baseline;justify-content:space-between;margin-top:12px;padding-top:12px;border-top:1px solid var(--outline-variant);">
+      <span class="flabel" style="margin:0;">Posisi</span>
+      <span style="font-size:20px;font-weight:700;" id="gaugePctOut">${pct}%</span>
+    </div>
+    <div style="display:flex;align-items:baseline;justify-content:space-between;margin-top:4px;">
+      <span class="flabel" style="margin:0;">Perkiraan isi</span>
+      <span class="field-sub" id="gaugeLiterOut">≈ ${Math.round(pct/100*cap)} L dari ${cap} L</span>
+    </div>
+    <label class="flabel" style="margin-top:12px;">HM Saat Ini</label>
+    <input type="text" inputmode="numeric" id="gaugeHm" value="${escapeHtml(String(hmNow))}" oninput="this.value=fmtHmLive(this.value)">
+    <button class="btn-block" onclick="saveCekIndikatorBbm('${bt}')">Simpan</button>
+  `);
+  wireGauge(pct);
+}
+function saveCekIndikatorBbm(btId){
+  const pct = parseInt(document.getElementById('gaugeSlider').value, 10);
+  const hm = parseFloat(document.getElementById('gaugeHm').value);
+  if(isNaN(hm)){ toast('Isi HM saat ini dengan angka'); return; }
+  GAUGE_CHECKS.push({id:uid(), btId, date:todayIso(), hm, pct});
+  saveGaugeChecks();
+  closeModal();
+  toast('Posisi indikator dicatat');
+  renderHari();
+}
+
 /* Ambang batas HM baru (poin 1): kalau nilai yang diketik user untuk HM Akhir
  * lebih kecil dari ini, dianggap indikasi meter HM unit tsb baru diganti/direset,
  * dan WAJIB dikonfirmasi dulu lewat popup sebelum data boleh tersimpan. */
@@ -1210,7 +1344,6 @@ function renderServisListItem(s){
         ${servisLainnyaFields(s.id, s)}
         <div style="display:flex;gap:8px;margin-top:10px;">
           <button class="btn-block" style="flex:1;" onclick="toggleServisCase('${s.id}')">Selesai</button>
-          <button class="pill-btn outline" onclick="exportServisCasePdf('${s.id}')">${ic('document')} Cetak</button>
           <button class="pill-btn outline" onclick="deleteServis('${s.id}')">Hapus</button>
         </div>
       </div>
@@ -1229,6 +1362,70 @@ function editServisField(id, key, val){
   toast('Tersimpan');
   expandedServisId = id;
   renderServisModal();
+}
+/* ----- Cetak PDF Servis per periode (menggantikan cetak per-kasus lama -
+ * kasus servis memang jarang, jadi satu PDF berisi semua kasus dalam
+ * rentang tanggal lebih masuk akal daripada 1 file per kasus). ----- */
+function openServisExportSheet(btId){
+  const bt = btId || _servisModalBt || USER.mainBt;
+  openModal(`
+    <div class="mhead"><h2>Cetak Riwayat Servis</h2><button class="mclose" onclick="closeModal()">&times;</button></div>
+    <label class="flabel">No Unit</label>
+    <select id="svcExpUnit">
+      ${unitsForSelect().filter(u=>!u.isSystem).map(u=>`<option value="${u.id}" ${bt===u.id?'selected':''}>${escapeHtml(u.kode)}</option>`).join('')}
+    </select>
+    <div class="section-eyebrow">Periode</div>
+    <div class="chk-row"><input type="radio" name="svcExpMode" value="all" checked onchange="toggleSvcExpCustom(false)"><label style="margin-left:6px;">Semua periode</label></div>
+    <div class="chk-row"><input type="radio" name="svcExpMode" value="custom" onchange="toggleSvcExpCustom(true)"><label style="margin-left:6px;">Rentang tanggal custom</label></div>
+    <div id="svcExpCustomRange" style="display:none;margin:8px 0;">
+      <label class="flabel">Dari tanggal</label><input type="date" id="svcExpDari" value="${todayIso()}">
+      <label class="flabel">Sampai tanggal</label><input type="date" id="svcExpSampai" value="${todayIso()}">
+    </div>
+    <button class="btn-block" onclick="exportServisPeriodePdf()">${ic('document')} Cetak PDF</button>
+  `);
+}
+function toggleSvcExpCustom(show){
+  const el = document.getElementById('svcExpCustomRange');
+  if(el) el.style.display = show ? 'block' : 'none';
+}
+async function exportServisPeriodePdf(){
+  const bt = document.getElementById('svcExpUnit').value;
+  const mode = document.querySelector('input[name="svcExpMode"]:checked').value;
+  const dari = mode==='custom' ? document.getElementById('svcExpDari').value : null;
+  const sampai = mode==='custom' ? document.getElementById('svcExpSampai').value : null;
+  let list = SERVIS.filter(s=>s.btId===bt);
+  if(mode==='custom') list = list.filter(s=>s.date>=dari && s.date<=sampai);
+  list.sort((a,b)=>a.date.localeCompare(b.date));
+  if(list.length===0){ toast('Tidak ada data servis di periode ini'); return; }
+  if(!window.jspdf){ toast('Library PDF belum siap, coba lagi sesaat'); return; }
+  try{
+    const { jsPDF } = window.jspdf;
+    const doc = new jsPDF({orientation:'landscape'});
+    doc.setFontSize(16); doc.setFont(undefined,'bold');
+    doc.text('Riwayat Servis & Perbaikan - '+btLabel(bt), 14, 16);
+    doc.setFontSize(10); doc.setFont(undefined,'normal');
+    doc.text('Periode: '+(mode==='custom'?(fmtFullDate(dari)+' - '+fmtFullDate(sampai)):'Semua periode'), 14, 22);
+    const body = list.map(s=>{
+      if(s.type==='berkala'){
+        const chips=[]; if(s.filterSolar) chips.push('Solar'); if(s.filterUdara) chips.push('Udara'); if(s.filterOli) chips.push('Oli');
+        return [fmtLabel(s.date), 'Servis Berkala', 'HM '+(s.hm||'-'), chips.join(', ')||'-', '-', s.note||'-'];
+      }
+      const dt = daysBetween(s.tglMasukWorkshop, s.tglSelesai);
+      return [fmtLabel(s.date), s.jenisKerusakan||'Perbaikan', 'HM '+(s.hm||'-'), s.namaPart||'-', dt!==null?dt+' hari':'-', s.gejala||'-'];
+    });
+    if(typeof doc.autoTable !== 'function') throw new Error('Plugin tabel PDF belum siap. Tutup & buka ulang app, lalu coba lagi.');
+    doc.autoTable({
+      head:[['Tanggal','Jenis','HM','Part/Filter','Downtime','Catatan']], body,
+      startY: 28, styles:{fontSize:9, cellPadding:4}, headStyles:{fillColor:[76,140,60]}, theme:'grid'
+    });
+    const pdfBlob = doc.output('blob');
+    const result = await saveOrShareBlob(pdfBlob, 'servis-'+btLabel(bt)+'-'+todayIso()+'.pdf');
+    toast(result==='shared'?'PDF siap dibagikan':'PDF diunduh');
+    closeModal();
+  }catch(err){
+    console.error('Gagal membuat PDF servis:', err);
+    alert('Gagal membuat PDF: ' + (err && err.message ? err.message : err));
+  }
 }
 async function exportServisCasePdf(id){
   const s = SERVIS.find(x=>x.id===id); if(!s) return;
@@ -1310,7 +1507,7 @@ function renderServisModal(){
       ` : servisLainnyaFields('draft', d)}
       <button class="btn-block" onclick="addServis()">Simpan Servis</button>
     </div>
-    <div class="section-eyebrow">Riwayat Servis ${escapeHtml(btLabel(bt))}</div>
+    <div class="section-eyebrow-row"><div class="section-eyebrow" style="margin:0;">Riwayat Servis ${escapeHtml(btLabel(bt))}</div><button class="pill-btn sm outline" onclick="openServisExportSheet('${bt}')">${ic('document')} Cetak</button></div>
     ${list.length===0 ? '<div class="card card-flat"><div class="empty-note">Belum ada riwayat servis.</div></div>' : list.map(renderServisListItem).join('')}
     `}
   `);

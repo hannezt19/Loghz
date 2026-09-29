@@ -99,6 +99,11 @@ function operatorShiftKode(shift){
 let JENIS_KERUSAKAN_LIST = LS.get('v2_jeniskerusakan', ['Rem','Mesin','Hidrolik','Kelistrikan','Ban/Roda']);
 let MEKANIK_LIST = LS.get('v2_mekanik', []);
 let BBM_SUSULAN = LS.get('v2_bbm_susulan', []); // [{id, btId, tanggal, hm, bbmMl, createdAt}]
+/* Cek Indikator BBM (poin: cek posisi jarum tanpa isi BBM) - HANYA dari
+ * laman Hari Ini, khusus unit yang sedang dipakai user sendiri. TIDAK ikut
+ * dihitung sebagai kejadian isi BBM (tidak masuk Total BBM/kalibrasi),
+ * cuma jadi titik pasti untuk perkiraan sisa BBM. */
+let GAUGE_CHECKS = LS.get('v2_gauge_checks', []); // [{id, btId, date, hm, pct}]
 /* ===== Modul Program Kerja (v1.0.26) — terpisah total dari ENTRIES.
  * Mencatat jadwal & realisasi kerja SEMUA driver (bukan cuma Han) untuk
  * analisa keadilan pembagian lembur. Lihat KONSEP-PROGRAM-KERJA.md. */
@@ -239,6 +244,7 @@ function saveHmResets(){ LS.set('v2_hmresets', HM_RESETS); }
 function saveJenisKerusakanList(){ LS.set('v2_jeniskerusakan', JENIS_KERUSAKAN_LIST); }
 function saveMekanikList(){ LS.set('v2_mekanik', MEKANIK_LIST); }
 function saveBbmSusulan(){ LS.set('v2_bbm_susulan', BBM_SUSULAN); }
+function saveGaugeChecks(){ LS.set('v2_gauge_checks', GAUGE_CHECKS); }
 function tambahBbmSusulan(btId, tanggal, hm, bbmMl){
   const s = {id:uid(), btId, tanggal, hm:String(hm), bbmMl:String(bbmMl), createdAt:Date.now()};
   BBM_SUSULAN.push(s);

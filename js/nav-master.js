@@ -218,7 +218,10 @@ function renderUnitEditModal(id){
     <label class="flabel">No Unit</label>
     <input type="text" id="editUnitKode" value="${escapeHtml(u.kode)}" style="text-transform:uppercase;" oninput="this.value=this.value.toUpperCase();">
     <div class="field-sub" style="margin-bottom:14px;">Salah ketik? Ganti namanya saja di sini - semua data lama (Hari Ini, Program Kerja, Servis, BBM, dll) otomatis tetap ikut, tidak perlu hapus lalu buat baru.</div>
-    <button class="pill-btn" style="width:100%;justify-content:center;margin-bottom:16px;" onclick="saveUnitKode('${u.id}')">Simpan Nama</button>
+    <label class="flabel">Kapasitas Tangki BBM (Liter)</label>
+    <input type="number" id="editUnitKapasitas" value="${u.kapasitas || 200}">
+    <div class="field-sub" style="margin-bottom:14px;">Dipakai untuk perkiraan sisa BBM di fitur Cek Indikator BBM.</div>
+    <button class="pill-btn" style="width:100%;justify-content:center;margin-bottom:16px;" onclick="saveUnitKode('${u.id}')">Simpan</button>
     <div style="border-top:1px solid var(--outline-variant);padding-top:14px;">
       <div class="field-sub" style="font-weight:700;color:var(--secondary);margin-bottom:8px;">Zona Bahaya</div>
       <button class="icon-btn" style="color:var(--secondary);" onclick="openDeleteUnitConfirm('${u.id}')">${ic('trash')} Hapus Unit Ini</button>
@@ -232,9 +235,11 @@ function saveUnitKode(id){
   const u = UNITS.find(x=>x.id===id);
   if(!u) return;
   u.kode = val;
+  const kapEl = document.getElementById('editUnitKapasitas');
+  if(kapEl && kapEl.value && !isNaN(parseFloat(kapEl.value))) u.kapasitas = parseFloat(kapEl.value);
   saveUnits();
   renderKelolaUnitModal();
-  toast('Nama unit diperbarui');
+  toast('Unit diperbarui');
 }
 
 /* ----- Dialog konfirmasi hapus unit (menggantikan confirm() bawaan browser) -----
