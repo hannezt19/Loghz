@@ -515,7 +515,7 @@ function riwayatUntukBlok(label){
         jenis = e['jenisLayanan'+slotCocok] || e.jenisLayanan;
         tonase = e['tonaseKg'+slotCocok];
       }
-      const detail = (jenis==='Muat Tebu' && tonase) ? (fmtThousandsLive(String(tonase))+' kg') : '';
+      const detail = (jenis==='Loading' && tonase) ? (fmtThousandsLive(String(tonase))+' kg') : '';
       // Nama yang ditampilkan HANYA yang benar-benar BERPASANGAN dengan lokasi
       // ini - bukan gabungan semua nama di entri itu - supaya tidak tertukar
       // kalau entrinya punya beberapa lokasi sekaligus.
@@ -586,7 +586,7 @@ function terapkanLokasiKeEntry(blockId, entryId){
   const b = PETA_BLOCKS.find(x=>x.id===blockId);
   const e = ENTRIES.find(x=>x.id===entryId);
   if(!b || !e) return;
-  if(e.jenisLayanan==='Muat Tebu' && e.muatTipe==='Bibit'){
+  if(e.jenisLayanan==='Loading' && e.muatTipe==='Bibit'){
     if(!e.lokasiMuat){ e.lokasiMuat = b.label; toast('Lokasi Muat diisi: '+b.label); }
     else { e.lokasiBongkar = b.label; toast('Lokasi Bongkar diisi: '+b.label); }
     saveEntries();
@@ -801,14 +801,23 @@ function getExportRows(){
   const detailUntukLayanan = (e, jenis, suffix) => {
     const fk = (name)=>name+suffix;
     if(jenis==='Antar/Jemput Tenaga') return [e[fk('tipeAntar')], e[fk('kegiatan')]].filter(Boolean).join(' / ');
-    if(jenis==='Muat Tebu') return [e[fk('muatTipe')], e[fk('tonaseKg')]?e[fk('tonaseKg')]+' kg':''].filter(Boolean).join(' / ');
+    if(jenis==='Loading'){
+      const tipe = e[fk('muatTipe')];
+      if(tipe==='Gula' || tipe==='Pupuk'){
+        const arr = pasanganArrGetForDisplay(e, fk('lokasi'), fk('nama'));
+        const totalKg = arr.reduce((s,p)=>s+(parseFloat(p.beratKg)||0),0);
+        const jenisPupukList = tipe==='Pupuk' ? [...new Set(arr.map(p=>p.jenisPupuk).filter(Boolean))].join(', ') : '';
+        return [tipe, jenisPupukList, totalKg?totalKg+' kg':''].filter(Boolean).join(' / ');
+      }
+      return [tipe, e[fk('tonaseKg')]?e[fk('tonaseKg')]+' kg':''].filter(Boolean).join(' / ');
+    }
     if(jenis==='Drone') return e[fk('droneJenis')]||'';
     if(jenis==='Operator') return e[fk('shift')]||'';
     return '';
   };
   const lokasiUntukLayanan = (e, jenis, suffix) => {
     const fk = (name)=>name+suffix;
-    if(jenis==='Muat Tebu') return [e[fk('lokasiMuat')],e[fk('lokasiBongkar')]].filter(Boolean).join(' -> ');
+    if(jenis==='Loading' && e[fk('muatTipe')]==='Bibit') return [e[fk('lokasiMuat')],e[fk('lokasiBongkar')]].filter(Boolean).join(' -> ');
     // Kalau lokasinya lebih dari 1 (1 kegiatan mencakup beberapa blok), yang
     // dicetak cuma yang PERTAMA sebagai wakil - biar laporan tetap ringkas.
     return lokasiArrGetForDisplay(e, fk('lokasi'))[0] || '';

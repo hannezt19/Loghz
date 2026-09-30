@@ -227,6 +227,26 @@ function handleSelectCustom(fieldKey, val){
  * + antagonis). Dibuat 1 fungsi supaya tidak dobel-tulis 4x. `e.isSecondary`
  * menentukan dipakai quickSave (entri utama, implisit "hari ini") atau
  * quickSaveEntry (entri tambahan, eksplisit per id). */
+/* ----- Jenis Pupuk per-baris (khusus Loading > Tipe Pupuk) - daftar bisa
+ * ditambah sendiri lewat "+ Lainnya", sama polanya seperti Jenis Kerusakan
+ * di Servis. Terpisah dari selectWithCustom() karena field ini per-BARIS
+ * (index di dalam PasanganArr), bukan 1 field per entri. ----- */
+function pupukJenisSelectRow(entryId, mode, lokasiField, namaField, idx, current){
+  return `<select style="flex:0 0 130px;" onchange="handlePupukJenisRowChange('${entryId}','${mode}','${lokasiField}','${namaField}',${idx}, this.value)">
+    <option value="">Jenis Pupuk</option>
+    ${PUPUK_JENIS_LIST.map(v=>`<option value="${escapeHtml(v)}" ${current===v?'selected':''}>${escapeHtml(v)}</option>`).join('')}
+    <option value="__custom__">+ Lainnya...</option>
+  </select>`;
+}
+function handlePupukJenisRowChange(entryId, mode, lokasiField, namaField, idx, val){
+  if(val==='__custom__'){
+    const typed = prompt('Ketik jenis pupuk baru:');
+    if(!typed){ if(mode==='edit'){ renderRekap(); } else renderHari(); return; }
+    if(!PUPUK_JENIS_LIST.includes(typed)){ PUPUK_JENIS_LIST.push(typed); savePupukJenisList(); }
+    val = typed;
+  }
+  pasanganArrChange(entryId, mode, lokasiField, namaField, idx, 'jenisPupuk', val);
+}
 function renderJenisLayananFields(e, suffix, mode){
   // mode: 'today' (entri utama hari ini, quickSave), 'secondary' (unit
   // tambahan hari ini, quickSaveEntry), atau 'edit' (edit baris dari Rekap ->
@@ -263,14 +283,16 @@ function renderJenisLayananFields(e, suffix, mode){
     const arr = pasanganArrGetForDisplay(e, lokasiField, namaField);
     return `
       ${arr.map((p,idx)=>`
-        <div style="display:flex;gap:6px;margin-bottom:6px;">
-          <input type="text" list="lokasiSuggest" placeholder="Lokasi" style="flex:1;min-width:0;" oninput="onLokasiInput(this)" onfocus="onLokasiFocus(this)" value="${escapeHtml(p.lokasi||'')}" onchange="pasanganArrChange('${e.id}','${mode}','${lokasiField}','${namaField}',${idx},'lokasi',this.value)">
-          <input type="text" list="namaSuggest" placeholder="Nama (opsional)" style="flex:1;min-width:0;" oninput="onNamaInput(this)" onfocus="onNamaFocus(this)" value="${escapeHtml(p.nama||'')}" onchange="pasanganArrChange('${e.id}','${mode}','${lokasiField}','${namaField}',${idx},'nama',this.value)">
+        <div style="display:flex;flex-wrap:${(opts.beratKg||opts.jenisPupuk)?'wrap':'nowrap'};gap:6px;margin-bottom:6px;">
+          <input type="text" list="lokasiSuggest" placeholder="Lokasi" style="flex:1;min-width:120px;" oninput="onLokasiInput(this)" onfocus="onLokasiFocus(this)" value="${escapeHtml(p.lokasi||'')}" onchange="pasanganArrChange('${e.id}','${mode}','${lokasiField}','${namaField}',${idx},'lokasi',this.value)">
+          <input type="text" list="namaSuggest" placeholder="Nama ${opts.mandor?'Mandor ':''}(opsional)" style="flex:1;min-width:120px;" oninput="onNamaInput(this)" onfocus="onNamaFocus(this)" value="${escapeHtml(p.nama||'')}" onchange="pasanganArrChange('${e.id}','${mode}','${lokasiField}','${namaField}',${idx},'nama',this.value)">
           ${opts.shift ? `<select style="flex:0 0 86px;" onchange="pasanganArrChange('${e.id}','${mode}','${lokasiField}','${namaField}',${idx},'shift',this.value)">
             <option value="">Shift?</option>
             ${OPERATOR_SHIFT_LIST.map(s=>`<option value="${s}" ${p.shift===s?'selected':''}>${s}</option>`).join('')}
           </select>` : ''}
           ${opts.jumlahOrang ? `<input type="text" inputmode="numeric" placeholder="Org" title="Jumlah orang/tenaga" style="flex:0 0 52px;text-align:center;" value="${escapeHtml(p.jumlahOrang||'')}" oninput="this.value=this.value.replace(/\\D/g,'').slice(0,2)" onchange="pasanganArrChange('${e.id}','${mode}','${lokasiField}','${namaField}',${idx},'jumlahOrang',this.value)">` : ''}
+          ${opts.jenisPupuk ? pupukJenisSelectRow(e.id, mode, lokasiField, namaField, idx, p.jenisPupuk) : ''}
+          ${opts.beratKg ? `<input type="text" inputmode="numeric" placeholder="Berat (kg)" title="Berat (kg)" style="flex:0 0 90px;" value="${escapeHtml(fmtThousandsLive(p.beratKg||''))}" oninput="this.value=fmtThousandsLive(this.value)" onchange="pasanganArrChange('${e.id}','${mode}','${lokasiField}','${namaField}',${idx},'beratKg',stripDots(this.value))">` : ''}
         </div>
       `).join('')}
       <button type="button" class="pill-btn sm outline" onclick="pasanganArrTambah('${e.id}','${mode}','${lokasiField}','${namaField}')">${ic('plus',12)} Tambah Lokasi &amp; Nama</button>
@@ -291,9 +313,9 @@ function renderJenisLayananFields(e, suffix, mode){
       </div>` : ''}
       <label class="flabel">Lokasi &amp; Nama <span style="font-weight:400;color:var(--on-surface-variant);">(vendor/mandor, opsional) &middot; boleh lebih dari 1, pisah pakai koma &middot; "Org" = jumlah orang/tenaga yang diangkut di baris itu</span></label>${lokasiNamaPairInput('lokasi', {jumlahOrang:true})}
     ` : ''}
-    ${jenis==='Muat Tebu' ? `
+    ${jenis==='Loading' ? `
       <div style="margin-top:8px;"><label class="flabel">Tipe</label>${sel('muatTipe', MUAT_TIPE_LIST)}</div>
-      ${e[fk('muatTipe')]==='Produksi' ? `
+      ${e[fk('muatTipe')]==='Gleaning' ? `
         <label class="flabel">Tonase (kg)</label><input type="text" inputmode="numeric" value="${escapeHtml(fmtThousandsLive(e[fk('tonaseKg')]||''))}" oninput="this.value=fmtThousandsLive(this.value)" onchange="${chgRaw('tonaseKg','stripDots(this.value)')}">
         <label class="flabel">Lokasi</label>${lokasiInput('lokasi')}
       ` : ''}
@@ -302,6 +324,12 @@ function renderJenisLayananFields(e, suffix, mode){
         <div><label class="flabel">Lokasi Muat</label>${lokasiInput('lokasiMuat')}</div>
         <div><label class="flabel">Lokasi Bongkar</label>${lokasiInput('lokasiBongkar')}</div>
       </div>` : ''}
+      ${e[fk('muatTipe')]==='Gula' ? `
+        <label class="flabel">Lokasi, Nama Mandor &amp; Berat (kg) <span style="font-weight:400;color:var(--on-surface-variant);">boleh lebih dari 1 lokasi dalam 1 kali jalan</span></label>${lokasiNamaPairInput('lokasi', {mandor:true, beratKg:true})}
+      ` : ''}
+      ${e[fk('muatTipe')]==='Pupuk' ? `
+        <label class="flabel">Lokasi, Nama Mandor, Jenis Pupuk &amp; Berat (kg) <span style="font-weight:400;color:var(--on-surface-variant);">boleh lebih dari 1 lokasi/jenis pupuk dalam 1 kali jalan</span></label>${lokasiNamaPairInput('lokasi', {mandor:true, jenisPupuk:true, beratKg:true})}
+      ` : ''}
     ` : ''}
     ${jenis==='Drone' ? `
       <div style="margin-top:8px;"><label class="flabel">Jenis Drone</label>${sel('droneJenis', DRONE_JENIS_LIST)}</div>
@@ -311,7 +339,7 @@ function renderJenisLayananFields(e, suffix, mode){
       <div style="margin-top:8px;"><label class="flabel">Shift (Anda)</label>${sel('shift', SHIFT_LIST)}</div>
       <label class="flabel">Lokasi &amp; Nama <span style="font-weight:400;color:var(--on-surface-variant);">(opsional) &middot; boleh lebih dari 1, pisah pakai koma &middot; Shift di tiap baris = shift OPERATOR yang diantar/dijemput, beda dengan Shift Anda di atas</span></label>${lokasiNamaPairInput('lokasi', {shift:true})}
     ` : ''}
-    ${jenis && !['Antar/Jemput Tenaga','Muat Tebu','Drone','Operator'].includes(jenis) ? `
+    ${jenis && !['Antar/Jemput Tenaga','Loading','Drone','Operator'].includes(jenis) ? `
       <label class="flabel">Lokasi &amp; Nama <span style="font-weight:400;color:var(--on-surface-variant);">(opsional) &middot; boleh lebih dari 1, pisah pakai koma</span></label>${lokasiNamaPairInput('lokasi')}
     ` : ''}
   `;
@@ -651,7 +679,7 @@ function entryTipeSingleLabel(jenis, e, suffix){
   const fk = (name)=>name+suffix;
   if(!jenis) return '';
   if(jenis==='Antar/Jemput Tenaga') return e[fk('tipeAntar')] || jenis;
-  if(jenis==='Muat Tebu') return e[fk('muatTipe')] || jenis;
+  if(jenis==='Loading') return e[fk('muatTipe')] || jenis;
   if(jenis==='Drone') return e[fk('droneJenis')] || jenis;
   if(jenis==='Operator') return e[fk('shift')] || jenis;
   return jenis;

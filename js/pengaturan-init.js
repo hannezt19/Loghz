@@ -405,10 +405,11 @@ async function bootApp(){
     SERVIS = LS.get('v2_servis', []);
     HM_RESETS = LS.get('v2_hmresets', []);
     SETTINGS = LS.get('v2_settings', {serviceInterval:240});
-    JENIS_LAYANAN_LIST = LS.get('v2_jenis', ['Antar/Jemput Tenaga','Muat Tebu','Drone','Operator']);
+    JENIS_LAYANAN_LIST = LS.get('v2_jenis', ['Antar/Jemput Tenaga','Loading','Drone','Operator']);
     TIPE_ANTAR_LIST = LS.get('v2_tipeantar', ['Pekerja Kebun','Tebang','Tanam']);
     KEGIATAN_LIST = LS.get('v2_kegiatan', ['Pel. Umum','Pemupukan','Penyemprotan']);
-    MUAT_TIPE_LIST = LS.get('v2_muattipe', ['Bibit','Produksi']);
+    MUAT_TIPE_LIST = LS.get('v2_muattipe', ['Bibit','Gleaning','Gula','Pupuk']);
+    PUPUK_JENIS_LIST = LS.get('v2_pupukjenis', []);
     DRONE_JENIS_LIST = LS.get('v2_dronejenis', ['Penyemprotan','Pemetaan']);
     SHIFT_LIST = LS.get('v2_shift', ['Pagi','Siang','Malam']);
     JENIS_KERUSAKAN_LIST = LS.get('v2_jeniskerusakan', ['Rem','Mesin','Hidrolik','Kelistrikan','Ban/Roda']);
@@ -428,6 +429,7 @@ async function bootApp(){
     migratePkJamLayananIfNeeded(); // konversi jam otomatis lama (per-Layanan) ke per-sub-tipe (Agustus 2026)
     migrateLayananSingkatanIfNeeded(); // konversi Singkatan lama (per-Layanan) ke per-sub-tipe (v1.0.33)
     migrateSopirCasingIfNeeded(); // rapikan kapitalisasi nama sopir non-inti lama (v1.0.38)
+    migrateLoadingLayananIfNeeded(); // "Muat Tebu" -> "Loading" + Tipe Gula/Pupuk (v1.0.41)
     ensureSystemUnits();
     // Sebelumnya BACKUP_META/WEATHER/WEATHER_LOG TIDAK ikut disegarkan di sini,
     // jadi selalu memakai nilai default (dari `let` di atas, dieksekusi sebelum

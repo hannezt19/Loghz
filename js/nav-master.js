@@ -394,7 +394,7 @@ function openKelolaJenis(){
 function renderKelolaJenisModal(){
   openModal(`
     <div class="mhead"><h2>Kelola Jenis Layanan</h2><button class="mclose" onclick="closeModal()">&times;</button></div>
-    <div class="field-sub" style="margin-bottom:10px;">4 jenis pertama (Antar/Jemput Tenaga, Muat Tebu, Drone, Operator) punya field khusus otomatis. Jenis tambahan akan pakai field Lokasi biasa.</div>
+    <div class="field-sub" style="margin-bottom:10px;">4 jenis pertama (Antar/Jemput Tenaga, Loading, Drone, Operator) punya field khusus otomatis. Jenis tambahan akan pakai field Lokasi biasa.</div>
     <div style="display:flex;gap:8px;margin-bottom:12px;">
       <input type="text" id="newJenisKode" placeholder="mis. Perawatan Jalan" style="margin-bottom:0;">
       <button class="pill-btn" onclick="addJenis()">+ Tambah</button>

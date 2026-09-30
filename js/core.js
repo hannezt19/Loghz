@@ -76,10 +76,11 @@ let ENTRIES = LS.get('v2_entries', []);   // daily log entries
 let SERVIS = LS.get('v2_servis', []);     // [{id, btId, date, hm, note}]
 let HM_RESETS = LS.get('v2_hmresets', []); // [{id, btId, date, note}]
 let SETTINGS = LS.get('v2_settings', {serviceInterval:240});
-let JENIS_LAYANAN_LIST = LS.get('v2_jenis', ['Antar/Jemput Tenaga','Muat Tebu','Drone','Operator']);
+let JENIS_LAYANAN_LIST = LS.get('v2_jenis', ['Antar/Jemput Tenaga','Loading','Drone','Operator']);
 let TIPE_ANTAR_LIST = LS.get('v2_tipeantar', ['Pekerja Kebun','Tebang','Tanam']);
 let KEGIATAN_LIST = LS.get('v2_kegiatan', ['Pel. Umum','Pemupukan','Penyemprotan']);
-let MUAT_TIPE_LIST = LS.get('v2_muattipe', ['Bibit','Produksi']);
+let MUAT_TIPE_LIST = LS.get('v2_muattipe', ['Bibit','Gleaning','Gula','Pupuk']);
+let PUPUK_JENIS_LIST = LS.get('v2_pupukjenis', []); // [string, ...] - daftar Jenis Pupuk, bisa ditambah sendiri lewat "+ Lainnya"
 let DRONE_JENIS_LIST = LS.get('v2_dronejenis', ['Penyemprotan','Pemetaan']);
 let SHIFT_LIST = LS.get('v2_shift', ['Pagi','Siang','Malam']);
 /* Shift OPERATOR yang diantar/dijemput (beda dengan SHIFT_LIST di atas yang
@@ -130,14 +131,14 @@ function savePkShiftList(){ LS.set('v2_pk_shift', PK_SHIFT_LIST); }
  * MUAT_TIPE_LIST) supaya konsisten; Drone & Operator pakai daftar sendiri (lihat di atas). */
 function pkTipeLabelFor(layanan){
   if(layanan==='Antar/Jemput Tenaga') return 'Tipe';
-  if(layanan==='Muat Tebu') return 'Tipe';
+  if(layanan==='Loading') return 'Tipe';
   if(layanan==='Drone') return 'Jenis Drone';
   if(layanan==='Operator') return 'Shift';
   return null;
 }
 function pkTipeOptionsFor(layanan){
   if(layanan==='Antar/Jemput Tenaga') return TIPE_ANTAR_LIST;
-  if(layanan==='Muat Tebu') return MUAT_TIPE_LIST;
+  if(layanan==='Loading') return MUAT_TIPE_LIST;
   if(layanan==='Drone') return PK_DRONE_TIPE_LIST;
   if(layanan==='Operator') return PK_SHIFT_LIST;
   return [];
@@ -188,6 +189,77 @@ function migrateSopirCasingIfNeeded(){
   });
   if(changedR) saveProgramRencana();
   if(changedA) saveProgramAktual();
+}
+/* Migrasi "Muat Tebu" -> "Loading" + rapikan Tipe (v1.0.41):
+ * - Jenis Layanan "Muat Tebu" diganti nama jadi "Loading"; Tipe "Produksi"
+ *   diganti nama jadi "Gleaning". Ditambah 2 Tipe baru: Gula & Pupuk.
+ * - "Muat Gula" yang sempat ditambahkan manual lewat "+ Lainnya" (jatuh ke
+ *   field generik Lokasi&Nama, tanpa Berat) dipindah otomatis jadi
+ *   Loading > Tipe Gula - lokasi/nama yang sudah ada ikut terbawa ke bentuk
+ *   baris-berulang (PasanganArr), Berat dikosongkan karena data lama memang
+ *   tidak punya kolom itu. Dijalankan untuk entri utama + Layanan ke-2/ke-3
+ *   (suffix '', '2', '3'). */
+function migrateLoadingLayananIfNeeded(){
+  let changedList = false;
+  const idxTebu = JENIS_LAYANAN_LIST.indexOf('Muat Tebu');
+  if(idxTebu>=0){
+    if(JENIS_LAYANAN_LIST.includes('Loading')) JENIS_LAYANAN_LIST.splice(idxTebu,1);
+    else JENIS_LAYANAN_LIST[idxTebu] = 'Loading';
+    changedList = true;
+  }
+  const idxGula = JENIS_LAYANAN_LIST.indexOf('Muat Gula');
+  if(idxGula>=0){ JENIS_LAYANAN_LIST.splice(idxGula,1); changedList = true; }
+  if(changedList) saveJenisList();
+
+  let changedTipe = false;
+  const idxProduksi = MUAT_TIPE_LIST.indexOf('Produksi');
+  if(idxProduksi>=0){
+    if(MUAT_TIPE_LIST.includes('Gleaning')) MUAT_TIPE_LIST.splice(idxProduksi,1);
+    else MUAT_TIPE_LIST[idxProduksi] = 'Gleaning';
+    changedTipe = true;
+  }
+  ['Gula','Pupuk'].forEach(t=>{ if(!MUAT_TIPE_LIST.includes(t)){ MUAT_TIPE_LIST.push(t); changedTipe = true; } });
+  if(changedTipe) saveMuatTipeList();
+
+  let changedEntries = false;
+  ENTRIES.forEach(e=>{
+    ['','2','3'].forEach(suf=>{
+      const jkKey = 'jenisLayanan'+suf, tkKey = 'muatTipe'+suf;
+      if(e[jkKey]==='Muat Tebu'){
+        e[jkKey] = 'Loading';
+        if(e[tkKey]==='Produksi') e[tkKey] = 'Gleaning';
+        changedEntries = true;
+      }
+      if(e[jkKey]==='Muat Gula'){
+        e[jkKey] = 'Loading';
+        e[tkKey] = 'Gula';
+        const lokKey = 'lokasi'+suf, namaKey = 'nama'+suf, arrKey = lokKey+'PasanganArr';
+        if(!Array.isArray(e[arrKey]) || e[arrKey].length===0){
+          e[arrKey] = [{lokasi:e[lokKey]||'', nama:e[namaKey]||'', beratKg:''}];
+        }
+        changedEntries = true;
+      }
+    });
+  });
+  if(changedEntries) saveEntries();
+
+  // Program Kerja (PROGRAM_RENCANA/PROGRAM_AKTUAL) pakai field layanan/tipe
+  // tunggal (bukan suffix 2/3 seperti ENTRIES), plus lanjutLayanan/lanjutTipe
+  // khusus di AKTUAL untuk kasus "lanjut layanan lain di hari sama".
+  let changedPk = false;
+  const migrasiPasanganLayananTipe = (obj, layananKey, tipeKey) => {
+    if(obj[layananKey]==='Muat Tebu'){
+      obj[layananKey] = 'Loading';
+      if(obj[tipeKey]==='Produksi') obj[tipeKey] = 'Gleaning';
+      changedPk = true;
+    }
+  };
+  PROGRAM_RENCANA.forEach(r=>migrasiPasanganLayananTipe(r,'layanan','tipe'));
+  PROGRAM_AKTUAL.forEach(a=>{
+    migrasiPasanganLayananTipe(a,'layanan','tipe');
+    migrasiPasanganLayananTipe(a,'lanjutLayanan','lanjutTipe');
+  });
+  if(changedPk){ saveProgramRencana(); saveProgramAktual(); }
 }
 function savePiketJamLayanan(){ LS.set('v2_piket_jam_layanan', PIKET_JAM_LAYANAN); }
 function saveLayananSingkatan(){ LS.set('v2_layanan_singkatan', LAYANAN_SINGKATAN); }
@@ -260,6 +332,7 @@ function saveJenisList(){ LS.set('v2_jenis', JENIS_LAYANAN_LIST); }
 function saveTipeAntarList(){ LS.set('v2_tipeantar', TIPE_ANTAR_LIST); }
 function saveKegiatanList(){ LS.set('v2_kegiatan', KEGIATAN_LIST); }
 function saveMuatTipeList(){ LS.set('v2_muattipe', MUAT_TIPE_LIST); }
+function savePupukJenisList(){ LS.set('v2_pupukjenis', PUPUK_JENIS_LIST); }
 function saveDroneJenisList(){ LS.set('v2_dronejenis', DRONE_JENIS_LIST); }
 function saveShiftList(){ LS.set('v2_shift', SHIFT_LIST); }
 
