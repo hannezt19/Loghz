@@ -650,39 +650,44 @@ function namaCetakRows(namaFilterLower, dariIso, sampaiIso){
     if(isSystemUnitId(e.btId)) return; // Libur/Cuti/Standby bukan kegiatan kerja
     const cekSlot = (lokasiField, namaField, jenis, groupKey, suffix) => {
       if(!jenis) return;
+      const fk = (name)=>name+suffix;
       // Label Jenis Layanan untuk cetak: "Antar Tenaga"/"Jemput Tenaga" kalau
       // hanya satu arah, dan "Loading (Pupuk)"/"Loading (Gleaning)" dst untuk Loading.
       let jenisLabel = jenisLayananArahLabel(jenis, e, suffix) || jenis;
-      const muatTipe = e['muatTipe'+suffix];
+      const muatTipe = e[fk('muatTipe')];
       if(jenis==='Loading' && muatTipe) jenisLabel = 'Loading ('+muatTipe+')';
-      const baris = (nama, blok, shift, org) => ({date:e.date, btId:e.btId, jenis, jenisLabel, nama:nama||'-', blok:blok||'-', shift:shift||'', org:org||0, _groupKey:groupKey});
+      const baris = (nama, blok, shift, org, detail) => ({date:e.date, btId:e.btId, jenis, jenisLabel, nama:nama||'-', blok:blok||'-', shift:shift||'', org:org||0, detail:detail||'-', _groupKey:groupKey});
+      const kg = (v) => { const n = parseFloat(v)||0; return n>0 ? fmtThousandsLive(String(Math.round(n)))+' kg' : ''; };
       // Loading selain Pupuk/Gula (Gleaning, Bibit, atau Tipe belum dipilih) tidak
       // punya isian Nama - tetap dicatat 1 baris (Nama "-") supaya riwayat harian
       // lengkap. Kalau kolom Nama difilter, baris tanpa nama ini otomatis tidak ikut.
       if(jenis==='Loading' && muatTipe!=='Pupuk' && muatTipe!=='Gula'){
         if(adaFilter) return;
         const blok = muatTipe==='Bibit'
-          ? [e['lokasiMuat'+suffix], e['lokasiBongkar'+suffix]].filter(Boolean).join(' -> ')
+          ? [e[fk('lokasiMuat')], e[fk('lokasiBongkar')]].filter(Boolean).join(' -> ')
           : lokasiArrGetForDisplay(e, lokasiField).filter(Boolean).join(', ');
-        rows.push(baris('-', blok, '', 0));
+        const detail = muatTipe==='Gleaning' ? ['Gleaning', kg(e[fk('tonaseKg')])].filter(Boolean).join(': ') : (muatTipe||'');
+        rows.push(baris('-', blok, '', 0, detail));
         return;
       }
-      // Loading > Pupuk: 1 lokasi+mandor dengan beberapa jenis pupuk tersimpan
-      // sebagai beberapa baris - di cetak ini cukup 1 baris per lokasi+mandor.
-      const isPupuk = jenis==='Loading' && muatTipe==='Pupuk';
-      const sudahAda = new Set();
+      // Detail dasar per jenis (Pupuk & Gula dihitung per baris/kelompok di bawah).
+      let detailDasar = '';
+      if(jenis==='Antar/Jemput Tenaga') detailDasar = [e[fk('tipeAntar')], e[fk('kegiatan')]].filter(Boolean).join(' / ');
+      else if(jenis==='Drone') detailDasar = e[fk('droneJenis')] || '';
+      else if(jenis==='Operator') detailDasar = e[fk('shift')] ? 'Shift Anda: '+e[fk('shift')] : '';
       const pasangan = pasanganArrGetForDisplay(e, lokasiField, namaField).filter(p=>p.lokasi||p.nama);
       // Kegiatan tanpa lokasi/nama sama sekali tetap dicatat 1 baris "-" (kecuali sedang filter nama).
       if(pasangan.length===0){
-        if(!adaFilter) rows.push(baris('-', '-', '', 0));
+        if(!adaFilter) rows.push(baris('-', '-', '', 0, detailDasar));
         return;
       }
-      pasangan.forEach(p=>{
-        if(isPupuk){
-          const k = pupukGrupKey(p);
-          if(sudahAda.has(k)) return;
-          sudahAda.add(k);
-        }
+      // Loading > Pupuk: 1 lokasi+mandor dengan beberapa jenis pupuk tersimpan
+      // sebagai beberapa baris - di cetak ini cukup 1 baris per kelompok lokasi+mandor.
+      const items = (jenis==='Loading' && muatTipe==='Pupuk')
+        ? pupukGrupList(pasangan).map(g=>({p:pasangan[g.start], detail:pupukDetailTeks(pasangan.slice(g.start, g.start+g.count))}))
+        : pasangan.map(p=>({p, detail: (jenis==='Loading' && muatTipe==='Gula') ? ['Gula', kg(p.beratKg)].filter(Boolean).join(': ') : detailDasar}));
+      items.forEach(it=>{
+        const p = it.p;
         if(adaFilter){
           const namaDiBaris = splitNamaKoma(p.nama||'');
           if(!namaDiBaris.some(n=>namaFilterLower.includes(n.toLowerCase()))) return;
@@ -692,7 +697,7 @@ function namaCetakRows(namaFilterLower, dariIso, sampaiIso){
         // untuk Antar/Jemput Tenaga.
         const shift = jenis==='Operator' ? (p.shift||'') : '';
         const org = jenis==='Antar/Jemput Tenaga' ? (parseInt(p.jumlahOrang,10)||0) : 0;
-        rows.push(baris(p.nama, p.lokasi, shift, org));
+        rows.push(baris(p.nama, p.lokasi, shift, org, it.detail));
       });
     };
     cekSlot('lokasi','nama', e.jenisLayanan, e.id+'|', '');
@@ -731,17 +736,17 @@ async function cetakRiwayatNama(){
   doc.text('Periode: '+periodeLabel+'  |  Nama: '+namaLabel, 14, 22);
   doc.autoTable({
     startY: 28,
-    head: [['Tanggal','No Unit','Jenis Layanan','Nama','Blok','Org','Shift']],
+    head: [['Tanggal','No Unit','Jenis Layanan','Detail','Nama','Blok','Org','Shift']],
     body: rows.map(r=>[
       r._tanggalKosong?'':fmtLabel(r.date),
       r._noUnitKosong?'':btLabel(r.btId),
       r._jenisKosong?'':(r.jenisLabel||r.jenis||'-'),
-      r.nama, r.blok,
+      r.detail||'-', r.nama, r.blok,
       r.jenis==='Antar/Jemput Tenaga' ? (r.org>0 ? String(r.org) : '-') : '-',
       r.jenis==='Operator' ? operatorShiftKode(r.shift) : '-'
     ]),
-    ...(totalOrang>0 ? {foot:[['TOTAL','','','','',String(totalOrang),'']], footStyles:{fillColor:[240,230,210], textColor:[30,20,0], fontStyle:'bold'}} : {}),
-    columnStyles:{5:{halign:'center'}, 6:{halign:'center'}},
+    ...(totalOrang>0 ? {foot:[['TOTAL','','','','','',String(totalOrang),'']], footStyles:{fillColor:[240,230,210], textColor:[30,20,0], fontStyle:'bold'}} : {}),
+    columnStyles:{3:{cellWidth:46}, 4:{minCellWidth:24}, 6:{halign:'center'}, 7:{halign:'center'}},
     styles:{fontSize:8},
     headStyles:{fillColor:[46,90,166]},
     didParseCell(data){

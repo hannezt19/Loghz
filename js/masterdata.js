@@ -200,7 +200,7 @@ function selectWithCustom(id, list, currentVal, extraOnchange){
   const oc = `handleSelectCustom('${id}', this.value)${extraOnchange?(';'+extraOnchange):''}`;
   return `<select id="qf-${id}" onchange="${oc}">
     <option value="">- Pilih -</option>
-    ${list.map(v=>`<option value="${escapeHtml(v)}" ${currentVal===v?'selected':''}>${escapeHtml(v)}</option>`).join('')}
+    ${opsiDenganNilaiSekarang(list, currentVal).map(v=>`<option value="${escapeHtml(v)}" ${currentVal===v?'selected':''}>${escapeHtml(v)}</option>`).join('')}
     <option value="__custom__">+ Lainnya (tulis sendiri)...</option>
   </select>`;
 }
@@ -717,7 +717,7 @@ function onHmAkhirChangeQf2(entryId, el){
 function selectWithCustomHari(entryId, fieldKey, list, currentVal){
   return `<select onchange="handleSelectCustomHari('${entryId}','${fieldKey}', this.value)">
     <option value="">- Pilih -</option>
-    ${list.map(v=>`<option value="${escapeHtml(v)}" ${currentVal===v?'selected':''}>${escapeHtml(v)}</option>`).join('')}
+    ${opsiDenganNilaiSekarang(list, currentVal).map(v=>`<option value="${escapeHtml(v)}" ${currentVal===v?'selected':''}>${escapeHtml(v)}</option>`).join('')}
     <option value="__custom__">+ Lainnya (tulis sendiri)...</option>
   </select>`;
 }
@@ -1419,7 +1419,7 @@ function svcChg(mode, key){
 function selectSvcCustom(mode, fieldKey, list, currentVal, listName){
   return `<select onchange="handleSvcSelectCustom('${mode}','${fieldKey}', this.value, '${listName}')">
     <option value="">- Pilih -</option>
-    ${list.map(v=>`<option value="${escapeHtml(v)}" ${currentVal===v?'selected':''}>${escapeHtml(v)}</option>`).join('')}
+    ${opsiDenganNilaiSekarang(list, currentVal).map(v=>`<option value="${escapeHtml(v)}" ${currentVal===v?'selected':''}>${escapeHtml(v)}</option>`).join('')}
     <option value="__custom__">+ Lainnya (tulis sendiri)...</option>
   </select>`;
 }

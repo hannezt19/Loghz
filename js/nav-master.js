@@ -387,107 +387,158 @@ function deleteNamaOrang(id){
   renderKelolaNamaModal();
   toast('Nama dihapus');
 }
-function openKelolaJenis(){
-  closeDrawer();
-  renderKelolaJenisModal();
+/* ================= KELOLA JENIS LAYANAN / TIPE (ANTAR-JEMPUT) / KEGIATAN =================
+ * Satu mesin yang sama untuk ketiga daftar. Fitur:
+ * - Ganti nama (ikon pensil): nama baru ikut diterapkan ke SEMUA catatan lama
+ *   (Hari Ini/Rekap, Program Kerja, jam otomatis & singkatan), jadi riwayat
+ *   tidak terpecah jadi dua nama.
+ * - Penanda "dipakai N kali" di tiap item.
+ * - Hapus hanya mencabut item dari daftar PILIHAN. Catatan lama TIDAK diubah
+ *   dan tetap tampil di Rekap & cetak.
+ * - 4 Jenis Layanan inti dikunci (tidak bisa diganti nama/dihapus) karena
+ *   logika app (form, Program Kerja, cetak) mengenali mereka lewat namanya. */
+const JENIS_INTI = ['Antar/Jemput Tenaga','Loading','Drone','Operator'];
+const KELOLA_CFG = {
+  jenis:     {judul:'Kelola Jenis Layanan', kata:'jenis layanan', placeholder:'mis. Perawatan Jalan', kosong:'Belum ada jenis layanan.'},
+  tipeAntar: {judul:'Kelola Tipe (Antar/Jemput)', kata:'tipe', placeholder:'mis. Tebang', kosong:'Belum ada tipe. Tambahkan di atas.'},
+  kegiatan:  {judul:'Kelola Kegiatan', kata:'kegiatan', placeholder:'mis. Pemupukan', kosong:'Belum ada kegiatan. Tambahkan di atas.'}
+};
+function kelolaList(kind){ return kind==='jenis' ? JENIS_LAYANAN_LIST : (kind==='tipeAntar' ? TIPE_ANTAR_LIST : KEGIATAN_LIST); }
+function kelolaSetList(kind, arr){
+  if(kind==='jenis'){ JENIS_LAYANAN_LIST = arr; saveJenisList(); }
+  else if(kind==='tipeAntar'){ TIPE_ANTAR_LIST = arr; saveTipeAntarList(); }
+  else { KEGIATAN_LIST = arr; saveKegiatanList(); }
 }
-function renderKelolaJenisModal(){
+function kelolaTerkunci(kind, val){ return kind==='jenis' && JENIS_INTI.includes(val); }
+/* Hitung berapa kali sebuah nama dipakai di catatan (Hari Ini/Rekap + Program Kerja). */
+function kelolaHitungPakai(kind, val){
+  let n = 0;
+  if(kind==='jenis'){
+    ENTRIES.forEach(e=>['jenisLayanan','jenisLayanan2','jenisLayanan3'].forEach(k=>{ if(e[k]===val) n++; }));
+    PROGRAM_RENCANA.forEach(r=>{ if(r.layanan===val) n++; });
+    PROGRAM_AKTUAL.forEach(a=>{ if(a.layanan===val) n++; if(a.lanjutLayanan===val) n++; });
+  } else if(kind==='tipeAntar'){
+    ENTRIES.forEach(e=>['tipeAntar','tipeAntar2','tipeAntar3'].forEach(k=>{ if(e[k]===val) n++; }));
+    PROGRAM_RENCANA.forEach(r=>{ if(r.layanan==='Antar/Jemput Tenaga' && r.tipe===val) n++; });
+    PROGRAM_AKTUAL.forEach(a=>{
+      if(a.layanan==='Antar/Jemput Tenaga' && a.tipe===val) n++;
+      if(a.lanjutLayanan==='Antar/Jemput Tenaga' && a.lanjutTipe===val) n++;
+    });
+  } else {
+    ENTRIES.forEach(e=>['kegiatan','kegiatan2','kegiatan3'].forEach(k=>{ if(e[k]===val) n++; }));
+  }
+  return n;
+}
+/* Terapkan nama baru ke semua catatan lama + pengaturan terkait. */
+function kelolaTerapkanGantiNama(kind, oldVal, newVal){
+  if(kind==='jenis'){
+    ENTRIES.forEach(e=>['jenisLayanan','jenisLayanan2','jenisLayanan3'].forEach(k=>{ if(e[k]===oldVal) e[k]=newVal; }));
+    PROGRAM_RENCANA.forEach(r=>{ if(r.layanan===oldVal) r.layanan=newVal; });
+    PROGRAM_AKTUAL.forEach(a=>{ if(a.layanan===oldVal) a.layanan=newVal; if(a.lanjutLayanan===oldVal) a.lanjutLayanan=newVal; });
+    PIKET_JAM_LAYANAN.forEach(x=>{ if(x.layanan===oldVal) x.layanan=newVal; });
+    if(Object.prototype.hasOwnProperty.call(LAYANAN_SINGKATAN, oldVal)){
+      LAYANAN_SINGKATAN[newVal] = LAYANAN_SINGKATAN[oldVal];
+      delete LAYANAN_SINGKATAN[oldVal];
+    }
+    saveEntries(); saveProgramRencana(); saveProgramAktual(); savePiketJamLayanan(); saveLayananSingkatan();
+  } else if(kind==='tipeAntar'){
+    const L = 'Antar/Jemput Tenaga';
+    ENTRIES.forEach(e=>['tipeAntar','tipeAntar2','tipeAntar3'].forEach(k=>{ if(e[k]===oldVal) e[k]=newVal; }));
+    PROGRAM_RENCANA.forEach(r=>{ if(r.layanan===L && r.tipe===oldVal) r.tipe=newVal; });
+    PROGRAM_AKTUAL.forEach(a=>{
+      if(a.layanan===L && a.tipe===oldVal) a.tipe=newVal;
+      if(a.lanjutLayanan===L && a.lanjutTipe===oldVal) a.lanjutTipe=newVal;
+    });
+    PIKET_JAM_LAYANAN.forEach(x=>{ if(x.layanan===L && x.tipe===oldVal) x.tipe=newVal; });
+    const kOld = L+'::'+oldVal, kNew = L+'::'+newVal;
+    if(Object.prototype.hasOwnProperty.call(LAYANAN_SINGKATAN, kOld)){
+      LAYANAN_SINGKATAN[kNew] = LAYANAN_SINGKATAN[kOld];
+      delete LAYANAN_SINGKATAN[kOld];
+    }
+    saveEntries(); saveProgramRencana(); saveProgramAktual(); savePiketJamLayanan(); saveLayananSingkatan();
+  } else {
+    ENTRIES.forEach(e=>['kegiatan','kegiatan2','kegiatan3'].forEach(k=>{ if(e[k]===oldVal) e[k]=newVal; }));
+    saveEntries();
+  }
+}
+function openKelolaJenis(){ closeDrawer(); renderKelolaModal('jenis'); }
+function openKelolaTipeAntar(){ closeDrawer(); renderKelolaModal('tipeAntar'); }
+function openKelolaKegiatan(){ closeDrawer(); renderKelolaModal('kegiatan'); }
+function renderKelolaModal(kind){
+  const cfg = KELOLA_CFG[kind];
+  const list = kelolaList(kind);
+  const lockSvg = '<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="vertical-align:-4px;display:inline-block;"><rect x="5" y="11" width="14" height="10" rx="2"/><path d="M8 11V8a4 4 0 018 0v3"/></svg>';
+  const rows = list.map((v,i)=>{
+    const terkunci = kelolaTerkunci(kind, v);
+    const n = kelolaHitungPakai(kind, v);
+    const info = n>0 ? `<div class="field-sub" style="margin:0;">dipakai ${n} kali</div>` : '';
+    const aksi = terkunci
+      ? `<span style="color:var(--on-surface-variant);padding:0 8px;" title="Jenis inti - dikunci">${lockSvg}</span>`
+      : `<button class="icon-btn" title="Ganti nama" onclick="kelolaGantiNama('${kind}',${i})">${ic('edit')}</button><button class="icon-btn" title="Hapus dari daftar" onclick="kelolaHapus('${kind}',${i})">${ic('trash')}</button>`;
+    return `<div class="list-row"><span style="min-width:0;"><div>${escapeHtml(v)}</div>${info}</span><span style="display:flex;gap:2px;align-items:center;">${aksi}</span></div>`;
+  }).join('');
   openModal(`
-    <div class="mhead"><h2>Kelola Jenis Layanan</h2><button class="mclose" onclick="closeModal()">&times;</button></div>
-    <div class="field-sub" style="margin-bottom:10px;">4 jenis pertama (Antar/Jemput Tenaga, Loading, Drone, Operator) punya field khusus otomatis. Jenis tambahan akan pakai field Lokasi biasa.</div>
+    <div class="mhead"><h2>${cfg.judul}</h2><button class="mclose" onclick="closeModal()">&times;</button></div>
+    ${kind==='jenis' ? '<div class="field-sub" style="margin-bottom:10px;">4 jenis inti (Antar/Jemput Tenaga, Loading, Drone, Operator) dikunci karena punya field khusus otomatis. Jenis tambahan memakai field Lokasi biasa.</div>' : ''}
+    <div class="field-sub" style="margin-bottom:10px;">Ganti nama (pensil) ikut memperbarui semua catatan lama. Hapus hanya mencabut dari daftar pilihan &mdash; catatan lama tetap tersimpan dan tampil.</div>
     <div style="display:flex;gap:8px;margin-bottom:12px;">
-      <input type="text" id="newJenisKode" placeholder="mis. Perawatan Jalan" style="margin-bottom:0;">
-      <button class="pill-btn" onclick="addJenis()">+ Tambah</button>
+      <input type="text" id="kelolaBaru" placeholder="${cfg.placeholder}" style="margin-bottom:0;">
+      <button class="pill-btn" onclick="kelolaTambah('${kind}')">+ Tambah</button>
     </div>
     <div class="card card-flat">
-      ${JENIS_LAYANAN_LIST.map(j=>`<div class="list-row"><span>${escapeHtml(j)}</span><button class="icon-btn" onclick="deleteJenis('${escapeHtml(j)}')">${ic('trash')}</button></div>`).join('')}
+      ${list.length===0 ? `<div class="empty-note">${cfg.kosong}</div>` : rows}
     </div>
   `);
 }
-function addJenis(){
-  const val = document.getElementById('newJenisKode').value.trim();
-  if(!val){ toast('Isi nama jenis layanan dulu'); return; }
-  if(JENIS_LAYANAN_LIST.some(j=>j.toLowerCase()===val.toLowerCase())){ toast('Jenis ini sudah ada'); return; }
-  JENIS_LAYANAN_LIST.push(val);
-  saveJenisList();
-  renderKelolaJenisModal();
-  toast('Jenis layanan ditambahkan');
+function kelolaTambah(kind){
+  const cfg = KELOLA_CFG[kind];
+  const val = document.getElementById('kelolaBaru').value.trim();
+  if(!val){ toast('Isi nama '+cfg.kata+' dulu'); return; }
+  const list = kelolaList(kind);
+  if(list.some(x=>x.toLowerCase()===val.toLowerCase())){ toast('Sudah ada'); return; }
+  kelolaSetList(kind, list.concat([val]));
+  renderKelolaModal(kind);
+  toast('Ditambahkan');
 }
-function deleteJenis(val){
-  if(!confirm('Hapus jenis layanan ini?')) return;
-  JENIS_LAYANAN_LIST = JENIS_LAYANAN_LIST.filter(j=>j!==val);
-  saveJenisList();
-  renderKelolaJenisModal();
-  toast('Jenis layanan dihapus');
+function kelolaGantiNama(kind, idx){
+  const cfg = KELOLA_CFG[kind];
+  const list = kelolaList(kind);
+  const oldVal = list[idx];
+  if(oldVal===undefined) return;
+  if(kelolaTerkunci(kind, oldVal)){ toast('Jenis inti tidak bisa diganti nama'); return; }
+  const typed = prompt('Ganti nama '+cfg.kata+' "'+oldVal+'" menjadi:', oldVal);
+  if(typed===null) return;
+  const newVal = typed.trim();
+  if(!newVal || newVal===oldVal) return;
+  if(list.some((x,i)=>i!==idx && x.toLowerCase()===newVal.toLowerCase())){ toast('Nama itu sudah ada di daftar'); return; }
+  const n = kelolaHitungPakai(kind, oldVal);
+  if(n>0 && !confirm('Ganti "'+oldVal+'" menjadi "'+newVal+'"?\n\n'+n+' catatan lama ikut diperbarui ke nama baru.')) return;
+  kelolaTerapkanGantiNama(kind, oldVal, newVal);
+  kelolaSetList(kind, list.map((x,i)=>i===idx ? newVal : x));
+  renderKelolaModal(kind);
+  toast('Nama diganti'+(n>0?' ('+n+' catatan diperbarui)':''));
 }
-
-/* ================= KELOLA TIPE ANTAR ================= */
-function openKelolaTipeAntar(){
-  closeDrawer();
-  renderKelolaTipeAntarModal();
-}
-function renderKelolaTipeAntarModal(){
-  openModal(`
-    <div class="mhead"><h2>Kelola Tipe (Antar/Jemput)</h2><button class="mclose" onclick="closeModal()">&times;</button></div>
-    <div style="display:flex;gap:8px;margin-bottom:12px;">
-      <input type="text" id="newTipeAntarKode" placeholder="mis. Tebang" style="margin-bottom:0;">
-      <button class="pill-btn" onclick="addTipeAntar()">+ Tambah</button>
-    </div>
-    <div class="card card-flat">
-      ${TIPE_ANTAR_LIST.length===0 ? '<div class="empty-note">Belum ada tipe. Tambahkan di atas.</div>' :
-        TIPE_ANTAR_LIST.map(t=>`<div class="list-row"><span>${escapeHtml(t)}</span><button class="icon-btn" onclick="deleteTipeAntar('${escapeHtml(t)}')">${ic('trash')}</button></div>`).join('')}
-    </div>
-  `);
-}
-function addTipeAntar(){
-  const val = document.getElementById('newTipeAntarKode').value.trim();
-  if(!val){ toast('Isi nama tipe dulu'); return; }
-  if(TIPE_ANTAR_LIST.some(t=>t.toLowerCase()===val.toLowerCase())){ toast('Tipe ini sudah ada'); return; }
-  TIPE_ANTAR_LIST.push(val);
-  saveTipeAntarList();
-  renderKelolaTipeAntarModal();
-  toast('Tipe ditambahkan');
-}
-function deleteTipeAntar(val){
-  if(!confirm('Hapus tipe ini?')) return;
-  TIPE_ANTAR_LIST = TIPE_ANTAR_LIST.filter(t=>t!==val);
-  saveTipeAntarList();
-  renderKelolaTipeAntarModal();
-  toast('Tipe dihapus');
+function kelolaHapus(kind, idx){
+  const cfg = KELOLA_CFG[kind];
+  const list = kelolaList(kind);
+  const val = list[idx];
+  if(val===undefined) return;
+  if(kelolaTerkunci(kind, val)){ toast('Jenis inti tidak bisa dihapus'); return; }
+  const n = kelolaHitungPakai(kind, val);
+  const pesan = n>0
+    ? 'Hapus "'+val+'" dari daftar pilihan?\n\nDipakai di '+n+' catatan. Catatan lama TETAP tersimpan dan tetap tampil di Rekap & cetak; hanya tidak muncul lagi sebagai pilihan baru.\n\n(Kalau hanya salah ketik, lebih aman pakai Ganti nama.)'
+    : 'Hapus '+cfg.kata+' "'+val+'"?';
+  if(!confirm(pesan)) return;
+  kelolaSetList(kind, list.filter((x,i)=>i!==idx));
+  renderKelolaModal(kind);
+  toast('Dihapus dari daftar');
 }
 
-/* ================= KELOLA KEGIATAN ================= */
-function openKelolaKegiatan(){
-  closeDrawer();
-  renderKelolaKegiatanModal();
+/* Daftar pilihan dropdown + nilai yang SEDANG tersimpan di catatan, walau nilai itu
+ * sudah dihapus dari daftar Kelola. Tanpa ini dropdown catatan lama tampil
+ * "- Pilih -" seolah datanya hilang, padahal data aslinya masih ada. */
+function opsiDenganNilaiSekarang(list, currentVal){
+  const out = list.slice();
+  if(currentVal && !out.includes(currentVal)) out.push(currentVal);
+  return out;
 }
-function renderKelolaKegiatanModal(){
-  openModal(`
-    <div class="mhead"><h2>Kelola Kegiatan</h2><button class="mclose" onclick="closeModal()">&times;</button></div>
-    <div style="display:flex;gap:8px;margin-bottom:12px;">
-      <input type="text" id="newKegiatanKode" placeholder="mis. Pemupukan" style="margin-bottom:0;">
-      <button class="pill-btn" onclick="addKegiatan()">+ Tambah</button>
-    </div>
-    <div class="card card-flat">
-      ${KEGIATAN_LIST.length===0 ? '<div class="empty-note">Belum ada kegiatan. Tambahkan di atas.</div>' :
-        KEGIATAN_LIST.map(k=>`<div class="list-row"><span>${escapeHtml(k)}</span><button class="icon-btn" onclick="deleteKegiatan('${escapeHtml(k)}')">${ic('trash')}</button></div>`).join('')}
-    </div>
-  `);
-}
-function addKegiatan(){
-  const val = document.getElementById('newKegiatanKode').value.trim();
-  if(!val){ toast('Isi nama kegiatan dulu'); return; }
-  if(KEGIATAN_LIST.some(k=>k.toLowerCase()===val.toLowerCase())){ toast('Kegiatan ini sudah ada'); return; }
-  KEGIATAN_LIST.push(val);
-  saveKegiatanList();
-  renderKelolaKegiatanModal();
-  toast('Kegiatan ditambahkan');
-}
-function deleteKegiatan(val){
-  if(!confirm('Hapus kegiatan ini?')) return;
-  KEGIATAN_LIST = KEGIATAN_LIST.filter(k=>k!==val);
-  saveKegiatanList();
-  renderKelolaKegiatanModal();
-  toast('Kegiatan dihapus');
-}
-

@@ -205,7 +205,7 @@ function renderPkRencanaEditModal(rowId){
     <label class="flabel">Layanan</label>
     <select onchange="updatePkRencanaFieldModal('${r.id}','layanan',this.value)">
       <option value="">- Pilih -</option>
-      ${JENIS_LAYANAN_LIST.map(j=>`<option value="${j}" ${r.layanan===j?'selected':''}>${escapeHtml(j)}</option>`).join('')}
+      ${opsiDenganNilaiSekarang(JENIS_LAYANAN_LIST, r.layanan).map(j=>`<option value="${j}" ${r.layanan===j?'selected':''}>${escapeHtml(j)}</option>`).join('')}
     </select>
     ${pkTipeLabelFor(r.layanan) ? `
     <label class="flabel">${escapeHtml(pkTipeLabelFor(r.layanan))}</label>
@@ -382,7 +382,7 @@ function renderPkAktualEditModal(rencanaId, tanggal){
     ${!isInti ? `<input type="text" placeholder="Ketik nama sopir" value="${escapeHtml(sopir||'')}" onchange="updatePkAktualModal('${r.id}','${tanggal}','sopir',this.value)">` : ''}
     <label class="flabel">Layanan</label>
     <select onchange="updatePkAktualModal('${r.id}','${tanggal}','layanan',this.value)">
-      ${JENIS_LAYANAN_LIST.map(j=>`<option value="${j}" ${layanan===j?'selected':''}>${escapeHtml(j)}</option>`).join('')}
+      ${opsiDenganNilaiSekarang(JENIS_LAYANAN_LIST, layanan).map(j=>`<option value="${j}" ${layanan===j?'selected':''}>${escapeHtml(j)}</option>`).join('')}
     </select>
     ${pkTipeLabelFor(layanan) ? `
     <label class="flabel">${escapeHtml(pkTipeLabelFor(layanan))}</label>
@@ -398,7 +398,7 @@ function renderPkAktualEditModal(rencanaId, tanggal){
       <label class="flabel" style="margin-top:0;">Pekerjaan Selanjutnya <span style="font-weight:400;color:var(--on-surface-variant);">(opsional, catatan saja &mdash; tidak menambah Jam)</span></label>
       <select onchange="updatePkAktualLanjutModal('${r.id}','${tanggal}','lanjutLayanan',this.value)">
         <option value="" ${!lanjutLayanan?'selected':''}>- Tidak ada -</option>
-        ${JENIS_LAYANAN_LIST.map(j=>`<option value="${j}" ${lanjutLayanan===j?'selected':''}>${escapeHtml(j)}</option>`).join('')}
+        ${opsiDenganNilaiSekarang(JENIS_LAYANAN_LIST, lanjutLayanan).map(j=>`<option value="${j}" ${lanjutLayanan===j?'selected':''}>${escapeHtml(j)}</option>`).join('')}
       </select>
       ${lanjutLayanan && pkTipeLabelFor(lanjutLayanan) ? `
       <select onchange="updatePkAktualLanjutModal('${r.id}','${tanggal}','lanjutTipe',this.value)">

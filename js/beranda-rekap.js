@@ -468,7 +468,7 @@ function toggleEditRow(id){
 function selectWithCustomEdit(entryId, fieldKey, list, currentVal){
   return `<select onchange="handleEditSelectCustom('${entryId}','${fieldKey}', this.value)">
     <option value="">- Pilih -</option>
-    ${list.map(v=>`<option value="${escapeHtml(v)}" ${currentVal===v?'selected':''}>${escapeHtml(v)}</option>`).join('')}
+    ${opsiDenganNilaiSekarang(list, currentVal).map(v=>`<option value="${escapeHtml(v)}" ${currentVal===v?'selected':''}>${escapeHtml(v)}</option>`).join('')}
     <option value="__custom__">+ Lainnya (tulis sendiri)...</option>
   </select>`;
 }
