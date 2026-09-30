@@ -674,7 +674,7 @@ function namaCetakRows(namaFilterLower, dariIso, sampaiIso){
       let detailDasar = '';
       if(jenis==='Antar/Jemput Tenaga') detailDasar = [e[fk('tipeAntar')], e[fk('kegiatan')]].filter(Boolean).join(' / ');
       else if(jenis==='Drone') detailDasar = e[fk('droneJenis')] || '';
-      else if(jenis==='Operator') detailDasar = e[fk('shift')] ? 'Shift Anda: '+e[fk('shift')] : '';
+      else if(jenis==='Operator') detailDasar = e[fk('shift')] ? 'Shift: '+e[fk('shift')] : '';
       const pasangan = pasanganArrGetForDisplay(e, lokasiField, namaField).filter(p=>p.lokasi||p.nama);
       // Kegiatan tanpa lokasi/nama sama sekali tetap dicatat 1 baris "-" (kecuali sedang filter nama).
       if(pasangan.length===0){
