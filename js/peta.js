@@ -643,35 +643,56 @@ function togglePetaCetakCustomRange(show){
  * terisi (lokasi tanpa nama tidak relevan untuk laporan "per nama" ini). */
 function namaCetakRows(namaFilterLower, dariIso, sampaiIso){
   const rows = [];
+  const adaFilter = namaFilterLower.length>0;
   ENTRIES.forEach(e=>{
     if(dariIso && e.date<dariIso) return;
     if(sampaiIso && e.date>sampaiIso) return;
+    if(isSystemUnitId(e.btId)) return; // Libur/Cuti/Standby bukan kegiatan kerja
     const cekSlot = (lokasiField, namaField, jenis, groupKey, suffix) => {
+      if(!jenis) return;
       // Label Jenis Layanan untuk cetak: "Antar Tenaga"/"Jemput Tenaga" kalau
-      // hanya satu arah, dan "Loading (Pupuk)"/"Loading (Gula)" dst untuk Loading.
+      // hanya satu arah, dan "Loading (Pupuk)"/"Loading (Gleaning)" dst untuk Loading.
       let jenisLabel = jenisLayananArahLabel(jenis, e, suffix) || jenis;
       const muatTipe = e['muatTipe'+suffix];
       if(jenis==='Loading' && muatTipe) jenisLabel = 'Loading ('+muatTipe+')';
+      const baris = (nama, blok, shift, org) => ({date:e.date, btId:e.btId, jenis, jenisLabel, nama:nama||'-', blok:blok||'-', shift:shift||'', org:org||0, _groupKey:groupKey});
+      // Loading selain Pupuk/Gula (Gleaning, Bibit, atau Tipe belum dipilih) tidak
+      // punya isian Nama - tetap dicatat 1 baris (Nama "-") supaya riwayat harian
+      // lengkap. Kalau kolom Nama difilter, baris tanpa nama ini otomatis tidak ikut.
+      if(jenis==='Loading' && muatTipe!=='Pupuk' && muatTipe!=='Gula'){
+        if(adaFilter) return;
+        const blok = muatTipe==='Bibit'
+          ? [e['lokasiMuat'+suffix], e['lokasiBongkar'+suffix]].filter(Boolean).join(' -> ')
+          : lokasiArrGetForDisplay(e, lokasiField).filter(Boolean).join(', ');
+        rows.push(baris('-', blok, '', 0));
+        return;
+      }
       // Loading > Pupuk: 1 lokasi+mandor dengan beberapa jenis pupuk tersimpan
       // sebagai beberapa baris - di cetak ini cukup 1 baris per lokasi+mandor.
       const isPupuk = jenis==='Loading' && muatTipe==='Pupuk';
       const sudahAda = new Set();
-      pasanganArrGetForDisplay(e, lokasiField, namaField).forEach(p=>{
-        if(!p.lokasi || !p.nama) return;
+      const pasangan = pasanganArrGetForDisplay(e, lokasiField, namaField).filter(p=>p.lokasi||p.nama);
+      // Kegiatan tanpa lokasi/nama sama sekali tetap dicatat 1 baris "-" (kecuali sedang filter nama).
+      if(pasangan.length===0){
+        if(!adaFilter) rows.push(baris('-', '-', '', 0));
+        return;
+      }
+      pasangan.forEach(p=>{
         if(isPupuk){
           const k = pupukGrupKey(p);
           if(sudahAda.has(k)) return;
           sudahAda.add(k);
         }
-        const namaDiBaris = splitNamaKoma(p.nama);
-        if(namaFilterLower.length>0 && !namaDiBaris.some(n=>namaFilterLower.includes(n.toLowerCase()))) return;
-        // Shift di sini SHIFT OPERATOR yang diantar/dijemput (per orang,
-        // diisi di baris Lokasi & Nama) - cuma relevan untuk Jenis Layanan
-        // Operator, jenis lain kosong.
+        if(adaFilter){
+          const namaDiBaris = splitNamaKoma(p.nama||'');
+          if(!namaDiBaris.some(n=>namaFilterLower.includes(n.toLowerCase()))) return;
+        }
+        // Shift di sini SHIFT OPERATOR yang diantar/dijemput (per orang) - cuma
+        // relevan untuk Operator. Org = jumlah orang yang diantar/dijemput - cuma
+        // untuk Antar/Jemput Tenaga.
         const shift = jenis==='Operator' ? (p.shift||'') : '';
-        // Jumlah orang yang diantar/dijemput - cuma untuk Antar/Jemput Tenaga.
         const org = jenis==='Antar/Jemput Tenaga' ? (parseInt(p.jumlahOrang,10)||0) : 0;
-        rows.push({date:e.date, btId:e.btId, jenis, jenisLabel, nama:p.nama, blok:p.lokasi, shift, org, _groupKey:groupKey});
+        rows.push(baris(p.nama, p.lokasi, shift, org));
       });
     };
     cekSlot('lokasi','nama', e.jenisLayanan, e.id+'|', '');
