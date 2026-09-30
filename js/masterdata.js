@@ -247,6 +247,127 @@ function handlePupukJenisRowChange(entryId, mode, lokasiField, namaField, idx, v
   }
   pasanganArrChange(entryId, mode, lokasiField, namaField, idx, 'jenisPupuk', val);
 }
+/* ===== Loading > Pupuk: tampilan DIKELOMPOKKAN per Lokasi + Nama Mandor =====
+ * Data TIDAK berubah: tetap array baris di `lokasiPasanganArr`(+suffix), tiap
+ * baris {lokasi, nama, jenisPupuk, beratKg}. Yang berubah cuma tampilan form:
+ * baris-baris BERURUTAN yang lokasi & nama-nya sama digabung jadi 1 kelompok
+ * (lokasi & nama tampil sekali, di bawahnya daftar Jenis Pupuk + Berat).
+ * Peta, backup, dan data lama tetap jalan tanpa migrasi. */
+function pupukGrupKey(p){
+  return String(p.lokasi||'').trim().toLowerCase()+'|'+String(p.nama||'').trim().toLowerCase();
+}
+function pupukGrupList(arr){
+  const out = [];
+  arr.forEach((p,i)=>{
+    const last = out[out.length-1];
+    if(last && pupukGrupKey(arr[last.start])===pupukGrupKey(p)) last.count++;
+    else out.push({start:i, count:1});
+  });
+  return out;
+}
+function togglePlusMenu(id){
+  const el = document.getElementById(id);
+  if(!el) return;
+  el.style.display = (el.style.display==='none' || !el.style.display) ? 'block' : 'none';
+}
+function pupukGroupedInput(e, mode, lokasiField, namaField){
+  const arr = pasanganArrGetForDisplay(e, lokasiField, namaField);
+  const grups = pupukGrupList(arr);
+  const a = `'${e.id}','${mode}','${lokasiField}','${namaField}'`;
+  const menuId = 'plusmenu-'+(e.id||'today')+'-'+lokasiField;
+  const menuBtnStyle = 'display:block;width:100%;text-align:left;padding:12px 16px;background:none;border:none;border-bottom:1px solid var(--outline-variant);font:inherit;font-size:14px;font-weight:600;color:var(--primary);cursor:pointer;';
+  const grupHtml = grups.map(g=>{
+    const p0 = arr[g.start];
+    const rows = [];
+    for(let k=0;k<g.count;k++){
+      const idx = g.start+k, p = arr[idx];
+      rows.push(`
+        <div style="display:flex;gap:6px;align-items:flex-start;">
+          ${pupukJenisSelectRow(e.id, mode, lokasiField, namaField, idx, p.jenisPupuk)}
+          <input type="text" inputmode="numeric" placeholder="Berat (kg)" title="Berat (kg)" style="flex:0 0 90px;" value="${escapeHtml(fmtThousandsLive(p.beratKg||''))}" oninput="this.value=fmtThousandsLive(this.value)" onchange="pasanganArrChange(${a},${idx},'beratKg',stripDots(this.value))">
+          ${arr.length>1 ? `<button type="button" class="icon-btn" title="Hapus baris ini" style="flex:0 0 auto;" onclick="pupukHapusBaris(${a},${idx})">${ic('trash',16)}</button>` : ''}
+        </div>`);
+    }
+    return `
+      <div style="border-left:3px solid var(--outline);padding-left:8px;margin-bottom:10px;">
+        <div style="display:flex;gap:6px;margin-bottom:6px;">
+          <input type="text" list="lokasiSuggest" placeholder="Lokasi" style="flex:1;min-width:120px;margin-bottom:0;" oninput="onLokasiInput(this)" onfocus="onLokasiFocus(this)" value="${escapeHtml(p0.lokasi||'')}" onchange="pupukGrupUbah(${a},${g.start},${g.count},'lokasi',this.value)">
+          <input type="text" list="namaSuggest" placeholder="Nama Mandor (opsional)" style="flex:1;min-width:120px;margin-bottom:0;" oninput="onNamaInput(this)" onfocus="onNamaFocus(this)" value="${escapeHtml(p0.nama||'')}" onchange="pupukGrupUbah(${a},${g.start},${g.count},'nama',this.value)">
+        </div>
+        ${rows.join('')}
+      </div>`;
+  }).join('');
+  const menuJenis = grups.map((g,gi)=>{
+    const lok = (arr[g.start].lokasi||'').trim();
+    const label = grups.length>1 ? '+ Jenis Pupuk &mdash; '+escapeHtml(lok||('Lokasi '+(gi+1))) : '+ Jenis Pupuk';
+    return `<button type="button" style="${menuBtnStyle}" onclick="pupukTambahJenis(${a},${g.start+g.count-1})">${label}</button>`;
+  }).join('');
+  return `
+    ${grupHtml}
+    <button type="button" class="pill-btn sm outline" onclick="togglePlusMenu('${menuId}')">${ic('plus',12)} Lokasi / Jenis Pupuk</button>
+    <div id="${menuId}" style="display:none;margin-top:6px;border:1px solid var(--outline);border-radius:14px;background:#fff;overflow:hidden;">
+      <button type="button" style="${menuBtnStyle}" onclick="pupukTambahLokasi(${a})">+ Lokasi-Mandor</button>
+      ${menuJenis}
+    </div>
+  `;
+}
+function pupukSimpanDanRender(entryId, mode){
+  saveEntries();
+  if(mode==='edit'){ expandedRowId=entryId; renderRekap(); } else renderHari();
+}
+/* Ubah lokasi/nama untuk SEMUA baris dalam 1 kelompok sekaligus. */
+function pupukGrupUbah(entryId, mode, lokasiField, namaField, start, count, key, value){
+  const e = ENTRIES.find(x=>x.id===entryId);
+  if(!e) return;
+  const arr = pasanganArrGetForDisplay(e, lokasiField, namaField).map(p=>({...p}));
+  for(let i=start;i<start+count && i<arr.length;i++) arr[i][key] = value;
+  e[lokasiField+'PasanganArr'] = arr;
+  e[lokasiField] = arr[0].lokasi||'';
+  e[namaField] = arr[0].nama||'';
+  pupukSimpanDanRender(entryId, mode);
+}
+/* Tambah 1 baris jenis pupuk tepat di bawah kelompok (lokasi & nama disalin otomatis). */
+function pupukTambahJenis(entryId, mode, lokasiField, namaField, afterIdx){
+  const e = ENTRIES.find(x=>x.id===entryId);
+  if(!e) return;
+  const arr = pasanganArrGetForDisplay(e, lokasiField, namaField).map(p=>({...p}));
+  const src = arr[afterIdx] || arr[arr.length-1];
+  arr.splice(afterIdx+1, 0, {lokasi:src.lokasi||'', nama:src.nama||'', jenisPupuk:'', beratKg:''});
+  e[lokasiField+'PasanganArr'] = arr;
+  pupukSimpanDanRender(entryId, mode);
+}
+/* Tambah kelompok baru (lokasi/mandor lain) di paling bawah. */
+function pupukTambahLokasi(entryId, mode, lokasiField, namaField){
+  const e = ENTRIES.find(x=>x.id===entryId);
+  if(!e) return;
+  const arr = pasanganArrGetForDisplay(e, lokasiField, namaField).map(p=>({...p}));
+  arr.push({lokasi:'', nama:'', jenisPupuk:'', beratKg:''});
+  e[lokasiField+'PasanganArr'] = arr;
+  pupukSimpanDanRender(entryId, mode);
+}
+function pupukHapusBaris(entryId, mode, lokasiField, namaField, idx){
+  const e = ENTRIES.find(x=>x.id===entryId);
+  if(!e) return;
+  const arr = pasanganArrGetForDisplay(e, lokasiField, namaField).map(p=>({...p}));
+  if(arr.length<=1) return;
+  arr.splice(idx,1);
+  e[lokasiField+'PasanganArr'] = arr;
+  e[lokasiField] = arr[0].lokasi||'';
+  e[namaField] = arr[0].nama||'';
+  pupukSimpanDanRender(entryId, mode);
+}
+/* Teks Detail untuk cetak: "Pupuk: KCL 600, Urea 300, TSP 300 (1.200 kg)" -
+ * `baris` = baris-baris (p) dalam 1 kelompok lokasi+mandor. */
+function pupukDetailTeks(baris){
+  const bagian = baris.filter(p=>p.jenisPupuk||p.beratKg).map(p=>{
+    const nm = p.jenisPupuk || 'Pupuk';
+    const kg = parseFloat(p.beratKg)||0;
+    return kg ? nm+' '+fmtThousandsLive(String(Math.round(kg))) : nm;
+  });
+  if(bagian.length===0) return 'Pupuk';
+  const total = baris.reduce((s,p)=>s+(parseFloat(p.beratKg)||0),0);
+  return 'Pupuk: '+bagian.join(', ')+(total>0 ? ' ('+fmtThousandsLive(String(Math.round(total)))+' kg)' : '');
+}
 function renderJenisLayananFields(e, suffix, mode){
   // mode: 'today' (entri utama hari ini, quickSave), 'secondary' (unit
   // tambahan hari ini, quickSaveEntry), atau 'edit' (edit baris dari Rekap ->
@@ -328,7 +449,7 @@ function renderJenisLayananFields(e, suffix, mode){
         <label class="flabel">Lokasi, Nama Mandor &amp; Berat (kg) <span style="font-weight:400;color:var(--on-surface-variant);">boleh lebih dari 1 lokasi dalam 1 kali jalan</span></label>${lokasiNamaPairInput('lokasi', {mandor:true, beratKg:true})}
       ` : ''}
       ${e[fk('muatTipe')]==='Pupuk' ? `
-        <label class="flabel">Lokasi, Nama Mandor, Jenis Pupuk &amp; Berat (kg) <span style="font-weight:400;color:var(--on-surface-variant);">boleh lebih dari 1 lokasi/jenis pupuk dalam 1 kali jalan</span></label>${lokasiNamaPairInput('lokasi', {mandor:true, jenisPupuk:true, beratKg:true})}
+        <label class="flabel">Lokasi, Nama Mandor, Jenis Pupuk &amp; Berat (kg) <span style="font-weight:400;color:var(--on-surface-variant);">boleh lebih dari 1 lokasi/jenis pupuk dalam 1 kali jalan</span></label>${pupukGroupedInput(e, mode, fk('lokasi'), fk('nama'))}
       ` : ''}
     ` : ''}
     ${jenis==='Drone' ? `

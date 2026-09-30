@@ -646,21 +646,37 @@ function namaCetakRows(namaFilterLower, dariIso, sampaiIso){
   ENTRIES.forEach(e=>{
     if(dariIso && e.date<dariIso) return;
     if(sampaiIso && e.date>sampaiIso) return;
-    const cekSlot = (lokasiField, namaField, jenis, groupKey) => {
+    const cekSlot = (lokasiField, namaField, jenis, groupKey, suffix) => {
+      // Label Jenis Layanan untuk cetak: "Antar Tenaga"/"Jemput Tenaga" kalau
+      // hanya satu arah, dan "Loading (Pupuk)"/"Loading (Gula)" dst untuk Loading.
+      let jenisLabel = jenisLayananArahLabel(jenis, e, suffix) || jenis;
+      const muatTipe = e['muatTipe'+suffix];
+      if(jenis==='Loading' && muatTipe) jenisLabel = 'Loading ('+muatTipe+')';
+      // Loading > Pupuk: 1 lokasi+mandor dengan beberapa jenis pupuk tersimpan
+      // sebagai beberapa baris - di cetak ini cukup 1 baris per lokasi+mandor.
+      const isPupuk = jenis==='Loading' && muatTipe==='Pupuk';
+      const sudahAda = new Set();
       pasanganArrGetForDisplay(e, lokasiField, namaField).forEach(p=>{
         if(!p.lokasi || !p.nama) return;
+        if(isPupuk){
+          const k = pupukGrupKey(p);
+          if(sudahAda.has(k)) return;
+          sudahAda.add(k);
+        }
         const namaDiBaris = splitNamaKoma(p.nama);
         if(namaFilterLower.length>0 && !namaDiBaris.some(n=>namaFilterLower.includes(n.toLowerCase()))) return;
         // Shift di sini SHIFT OPERATOR yang diantar/dijemput (per orang,
         // diisi di baris Lokasi & Nama) - cuma relevan untuk Jenis Layanan
         // Operator, jenis lain kosong.
         const shift = jenis==='Operator' ? (p.shift||'') : '';
-        rows.push({date:e.date, btId:e.btId, jenis, nama:p.nama, blok:p.lokasi, shift, _groupKey:groupKey});
+        // Jumlah orang yang diantar/dijemput - cuma untuk Antar/Jemput Tenaga.
+        const org = jenis==='Antar/Jemput Tenaga' ? (parseInt(p.jumlahOrang,10)||0) : 0;
+        rows.push({date:e.date, btId:e.btId, jenis, jenisLabel, nama:p.nama, blok:p.lokasi, shift, org, _groupKey:groupKey});
       });
     };
-    cekSlot('lokasi','nama', e.jenisLayanan, e.id+'|');
-    if(e.adaLayanan2) cekSlot('lokasi2','nama2', e.jenisLayanan2||e.jenisLayanan, e.id+'|2');
-    if(e.adaLayanan3) cekSlot('lokasi3','nama3', e.jenisLayanan3||e.jenisLayanan, e.id+'|3');
+    cekSlot('lokasi','nama', e.jenisLayanan, e.id+'|', '');
+    if(e.adaLayanan2) cekSlot('lokasi2','nama2', e.jenisLayanan2||e.jenisLayanan, e.id+'|2', '2');
+    if(e.adaLayanan3) cekSlot('lokasi3','nama3', e.jenisLayanan3||e.jenisLayanan, e.id+'|3', '3');
   });
   rows.sort((a,b)=>a.date.localeCompare(b.date));
   // "1 sel" untuk Tanggal/No Unit/Jenis Layanan kalau baris-baris itu masih
@@ -683,6 +699,7 @@ async function cetakRiwayatNama(){
   const namaFilterLower = namaRaw ? namaRaw.split(',').map(s=>s.trim().toLowerCase()).filter(Boolean) : [];
   const rows = namaCetakRows(namaFilterLower, dari, sampai);
   if(rows.length===0){ toast('Tidak ada data yang cocok'); return; }
+  const totalOrang = rows.reduce((s,r)=>s+(r.org||0),0);
   const { jsPDF } = window.jspdf;
   const doc = new jsPDF({orientation:'portrait'});
   doc.setFontSize(14); doc.setFont(undefined,'bold');
@@ -693,13 +710,17 @@ async function cetakRiwayatNama(){
   doc.text('Periode: '+periodeLabel+'  |  Nama: '+namaLabel, 14, 22);
   doc.autoTable({
     startY: 28,
-    head: [['Tanggal','No Unit','Jenis Layanan','Nama','Blok','Shift']],
+    head: [['Tanggal','No Unit','Jenis Layanan','Nama','Blok','Org','Shift']],
     body: rows.map(r=>[
       r._tanggalKosong?'':fmtLabel(r.date),
       r._noUnitKosong?'':btLabel(r.btId),
-      r._jenisKosong?'':(r.jenis||'-'),
-      r.nama, r.blok, r.jenis==='Operator' ? operatorShiftKode(r.shift) : '-'
+      r._jenisKosong?'':(r.jenisLabel||r.jenis||'-'),
+      r.nama, r.blok,
+      r.jenis==='Antar/Jemput Tenaga' ? (r.org>0 ? String(r.org) : '-') : '-',
+      r.jenis==='Operator' ? operatorShiftKode(r.shift) : '-'
     ]),
+    ...(totalOrang>0 ? {foot:[['TOTAL','','','','',String(totalOrang),'']], footStyles:{fillColor:[240,230,210], textColor:[30,20,0], fontStyle:'bold'}} : {}),
+    columnStyles:{5:{halign:'center'}, 6:{halign:'center'}},
     styles:{fontSize:8},
     headStyles:{fillColor:[46,90,166]},
     didParseCell(data){
@@ -843,14 +864,28 @@ function getExportRows(){
     if(isSystemUnitId(e.btId)) return [{jenisLabel:'-', detail:'-', lokasi:'-', jmlOrang:'-'}];
     const slots = LAYANAN_SUFFIXES.filter(sfx => sfx==='' ? e.jenisLayanan : (e['adaLayanan'+sfx] && e['jenisLayanan'+sfx]));
     if(slots.length===0) return [{jenisLabel:'-', detail:'-', lokasi:'-', jmlOrang:'-'}];
-    return slots.map(sfx=>{
+    return slots.flatMap(sfx=>{
       const jenis = e['jenisLayanan'+sfx];
-      return {
+      // Loading > Pupuk: 1 baris cetak per kelompok Lokasi+Mandor, Detail memuat
+      // berat tiap jenis pupuk. Baris ke-2 dst tidak mengulang Jenis Layanan.
+      if(jenis==='Loading' && e['muatTipe'+sfx]==='Pupuk'){
+        const arr = pasanganArrGetForDisplay(e, 'lokasi'+sfx, 'nama'+sfx);
+        return pupukGrupList(arr).map((g,gi)=>{
+          const baris = arr.slice(g.start, g.start+g.count);
+          return {
+            jenisLabel: gi===0 ? (jenisLayananArahLabel(jenis, e, sfx) || '-') : '',
+            detail: pupukDetailTeks(baris),
+            lokasi: (arr[g.start].lokasi||'').trim() || '-',
+            jmlOrang: '-'
+          };
+        });
+      }
+      return [{
         jenisLabel: jenisLayananArahLabel(jenis, e, sfx) || '-',
         detail: detailUntukLayanan(e, jenis, sfx) || '-',
         lokasi: lokasiUntukLayanan(e, jenis, sfx) || '-',
         jmlOrang: jmlOrangUntukLayanan(e, jenis, sfx) || '-'
-      };
+      }];
     });
   };
   /* Kolom yang levelnya "1x per hari" (bukan per kegiatan) - dicetak sama di
