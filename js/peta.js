@@ -767,14 +767,14 @@ async function cetakRiwayatNama(){
   toast(result==='shared'?'PDF siap dibagikan':'PDF diunduh');
   closeModal();
 }
-const ALL_EXPORT_HEADERS = ['Tanggal','No Unit','Jenis Layanan','Detail','Lokasi','Jml Orang','Absen Berangkat','Absen Pulang','Istirahat','HM Awal','HM Akhir','HM Terpakai','BBM (L)','Lembur (j)','Lembur Final','BU/TU','BS/TS','Catatan','Catatan Khusus'];
+const ALL_EXPORT_HEADERS = ['Tanggal','No Unit','Jenis Layanan','Detail','Lokasi','Jml Orang','Absen Berangkat','Absen Pulang','Istirahat','HM Awal','HM Akhir','HM Terpakai','BBM (L)','Lembur (j)','Lembur Final','OT Aktual','OT Aktual Final','Catatan','Catatan Khusus'];
 function slugCol(h){ return h.toLowerCase().replace(/[^a-z0-9]+/g,'-'); }
-/* Grup checklist kolom cetak: kolom cuaca (BU/TU + BS/TS) digabung jadi 1 ceklis "Cuaca" */
+/* Grup checklist kolom cetak: OT Aktual + OT Aktual Final digabung jadi 1 ceklis "OT Aktual" */
 function buildExportCheckGroups(){
   const groups = [];
   ALL_EXPORT_HEADERS.forEach(h=>{
-    if(h==='BU/TU'){ groups.push({label:'Cuaca', headers:['BU/TU','BS/TS']}); }
-    else if(h==='BS/TS'){ /* sudah masuk grup Cuaca di atas */ }
+    if(h==='OT Aktual'){ groups.push({label:'OT Aktual', headers:['OT Aktual','OT Aktual Final']}); }
+    else if(h==='OT Aktual Final'){ /* sudah masuk grup OT Aktual di atas */ }
     else groups.push({label:h, headers:[h]});
   });
   return groups;
@@ -920,13 +920,15 @@ function getExportRows(){
    * yang sudah dari dulu dikosongkan kalau tanggalnya sama dengan baris
    * sebelumnya) - bukan sungguhan digabung sebagai 1 sel PDF/Excel, tapi
    * hasilnya di layar terlihat sama seperti sel gabung. */
-  const MERGE_PER_HARI_COLS = ['Absen Berangkat','Absen Pulang','Istirahat','HM Awal','HM Akhir','HM Terpakai','BBM (L)','Lembur (j)','Lembur Final','Catatan','Catatan Khusus','BU/TU','BS/TS'];
+  const MERGE_PER_HARI_COLS = ['Absen Berangkat','Absen Pulang','Istirahat','HM Awal','HM Akhir','HM Terpakai','BBM (L)','Lembur (j)','Lembur Final','OT Aktual','OT Aktual Final','Catatan','Catatan Khusus'];
   const data = [];
   rows.forEach(e=>{
     const isSys = isSystemUnitId(e.btId);
     const ha=parseFloat(e.hmAwal), hb=parseFloat(e.hmAkhir);
     const hmTerpakai = (!isNaN(ha)&&!isNaN(hb)&&hb>=ha) ? (hb-ha).toFixed(1) : '-';
-    const wlog = getWeatherLogForDate(e.date);
+    /* OT Aktual = lembur versi mandor (diinput lewat menu Lembur Aktual), OT Aktual Final =
+     * hasil rumus yang sama dengan Lembur Final. Entri tambahan & hari Libur/Cuti/Standby "-". */
+    const otAktual = (isSys || e.isSecondary) ? null : lemburAktualJam(e.date);
     /* Hari Libur/Cuti/Standby: tidak ada kerja sama sekali, jadi semua kolom
      * kerja "-" (BUKAN nilai bawaan seperti jam istirahat default atau angka
      * 0 di BBM/Lembur yang menyesatkan seolah memang terisi). Cuaca &
@@ -939,7 +941,8 @@ function getExportRows(){
       'BBM (L)': isSys ? '-' : fmtLiterID((parseFloat(e.bbmLiter)||0)/1000),
       'Lembur (j)': (isSys || e.isSecondary) ? '-' : (e.lembur||'0'),
       'Lembur Final': (isSys || e.isSecondary) ? '-' : computeLemburFinal(e).toFixed(1),
-      'BU/TU': cuacaCellText(wlog && wlog.utara), 'BS/TS': cuacaCellText(wlog && wlog.selatan),
+      'OT Aktual': otAktual===null ? '-' : lmFmt(otAktual),
+      'OT Aktual Final': otAktual===null ? '-' : lmFmt(lemburAktualFinal(otAktual, e.date, e.liburMerah)),
       'Catatan': e.catatan||'', 'Catatan Khusus': e.catatanKhusus||''
     };
     kegiatanUntukEntry(e).forEach(k=>{
@@ -958,9 +961,14 @@ function getExportRows(){
   const totalLemburFinal = rows.reduce((s,e)=>s+computeLemburFinal(e),0);
   const totalBbm = rows.reduce((s,e)=>s+(parseFloat(e.bbmLiter)||0),0)/1000; // ml -> liter
   const totalJmlOrang = data.reduce((s,r)=>s+(parseInt(r['Jml Orang'],10)||0),0);
-  const uniqueDates = Array.from(new Set(rows.map(e=>e.date)));
-  const totalRainUtara = uniqueDates.reduce((s,d)=>{ const w=getWeatherLogForDate(d); return s+(w&&w.utara?(w.utara.rainMm||0):0); },0);
-  const totalRainSelatan = uniqueDates.reduce((s,d)=>{ const w=getWeatherLogForDate(d); return s+(w&&w.selatan?(w.selatan.rainMm||0):0); },0);
+  let totalOtAktual = 0, totalOtAktualFinal = 0;
+  rows.forEach(e=>{
+    if(isSystemUnitId(e.btId) || e.isSecondary) return;
+    const j = lemburAktualJam(e.date);
+    if(j===null) return;
+    totalOtAktual += j;
+    totalOtAktualFinal += lemburAktualFinal(j, e.date, e.liburMerah);
+  });
   // Baris kegiatan ke-2/ke-3 dalam 1 entri yang sama: kosongkan kolom "1x per
   // hari" (termasuk No Unit KALAU sama dengan baris sebelumnya - beda unit
   // antar entri tetap ditulis masing-masing, tidak ikut dikosongkan).
@@ -973,7 +981,7 @@ function getExportRows(){
   for(let i=data.length-1;i>0;i--){
     if(data[i]['Tanggal']===data[i-1]['Tanggal']) data[i]['Tanggal'] = '';
   }
-  return {headers, rows:data, totalHm, totalLembur, totalLemburFinal, totalBbm, totalJmlOrang, totalRainUtara, totalRainSelatan};
+  return {headers, rows:data, totalHm, totalLembur, totalLemburFinal, totalBbm, totalJmlOrang, totalOtAktual, totalOtAktualFinal};
 }
 function exportFileLabel(){
   const mode = document.querySelector('input[name="exp-mode"]:checked').value;
@@ -1013,7 +1021,7 @@ function weatherCategoryLabel(category){
   return map[category] || 'Berawan';
 }
 async function doExport(fmt){
-  const {headers, rows, totalHm, totalLembur, totalLemburFinal, totalBbm, totalJmlOrang, totalRainUtara, totalRainSelatan} = getExportRows();
+  const {headers, rows, totalHm, totalLembur, totalLemburFinal, totalBbm, totalJmlOrang, totalOtAktual, totalOtAktualFinal} = getExportRows();
   if(headers.length===0){ toast('Pilih minimal satu kolom dulu'); return; }
   if(rows.length===0){ toast('Tidak ada data pada periode ini'); return; }
   /* Ambil data libur nasional/Minggu untuk rentang tanggal yang tercakup di rows ini —
@@ -1027,8 +1035,8 @@ async function doExport(fmt){
     if(h==='Jml Orang') return totalJmlOrang>0 ? String(totalJmlOrang) : '';
     if(h==='Lembur (j)') return totalLembur.toFixed(1);
     if(h==='Lembur Final') return totalLemburFinal.toFixed(1);
-    if(h==='BU/TU') return totalRainUtara.toFixed(1)+' mm';
-    if(h==='BS/TS') return totalRainSelatan.toFixed(1)+' mm';
+    if(h==='OT Aktual') return lmFmt(totalOtAktual);
+    if(h==='OT Aktual Final') return lmFmt(totalOtAktualFinal);
     return '';
   });
   if(fmt==='xlsx'){

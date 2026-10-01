@@ -425,6 +425,7 @@ async function bootApp(){
     PK_SHIFT_LIST = LS.get('v2_pk_shift', ['Pagi','Siang']);
     LAYANAN_SINGKATAN = LS.get('v2_layanan_singkatan', {});
     CATATAN_MANDOR = LS.get('v2_catatan_mandor', []);
+    LEMBUR_AKTUAL = LS.get('v2_lembur_aktual', {}); // lembur versi mandor per tanggal (js/lembur-mandor.js)
     migratePkDataIfNeeded(); // konversi baris Program lama (v1.0.26, tanggal tunggal) ke skema rentang v1.0.27
     migratePkJamLayananIfNeeded(); // konversi jam otomatis lama (per-Layanan) ke per-sub-tipe (Agustus 2026)
     migrateLayananSingkatanIfNeeded(); // konversi Singkatan lama (per-Layanan) ke per-sub-tipe (v1.0.33)
