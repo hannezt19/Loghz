@@ -134,7 +134,10 @@ async function lmJalankanOcr(gambar, onProgress){
     workerPath: lmUrlAbs('vendor/tesseract/worker.min.js'),
     corePath: lmUrlAbs('vendor/tesseract/tesseract-core-lstm.wasm.js'),
     langPath: lmUrlAbs('vendor/tesseract/lang'),
-    gzip: true,
+    // Data bahasa dikirim TIDAK terkompresi (eng.traineddata, tanpa .gz): alat pengemas Android
+    // (AAPT) membuang akhiran .gz dari nama berkas aset, sehingga eng.traineddata.gz tidak
+    // ditemukan (404) di dalam APK.
+    gzip: false,
     cacheMethod: 'none',
     logger: m=>{ if(m && m.status==='recognizing text' && onProgress) onProgress(Math.round((m.progress||0)*100)); }
   });
