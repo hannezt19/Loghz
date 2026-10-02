@@ -79,10 +79,17 @@ jobs:
         run: |
           npm install tesseract.js@7.0.0 @tesseract.js-data/eng --no-save
           mkdir -p vendor/tesseract/lang
-          cp node_modules/tesseract.js/dist/tesseract.min.js vendor/tesseract/ || echo "PERINGATAN: tesseract.min.js tidak ditemukan"
-          cp node_modules/tesseract.js/dist/worker.min.js vendor/tesseract/ || echo "PERINGATAN: worker.min.js tidak ditemukan"
-          cp node_modules/tesseract.js-core/tesseract-core-lstm.wasm.js vendor/tesseract/ || echo "PERINGATAN: tesseract-core-lstm.wasm.js tidak ditemukan"
-          cp node_modules/@tesseract.js-data/eng/4.0.0_best_int/eng.traineddata.gz vendor/tesseract/lang/ || echo "PERINGATAN: eng.traineddata.gz tidak ditemukan"
+          cp node_modules/tesseract.js/dist/tesseract.min.js vendor/tesseract/
+          cp node_modules/tesseract.js/dist/worker.min.js vendor/tesseract/
+          cp node_modules/tesseract.js-core/tesseract-core-lstm.wasm.js vendor/tesseract/
+          # Data bahasa dikirim TIDAK terkompresi dan TANPA akhiran .gz: alat pengemas Android
+          # (AAPT) membuang akhiran .gz dari nama berkas aset, jadi eng.traineddata.gz
+          # tidak akan ditemukan di dalam APK.
+          LANG_GZ=$(find node_modules/@tesseract.js-data/eng -path '*best_int*' -name 'eng.traineddata.gz' | head -1)
+          if [ -z "$LANG_GZ" ]; then LANG_GZ=$(find node_modules/@tesseract.js-data/eng -name 'eng.traineddata.gz' | head -1); fi
+          echo "Data bahasa OCR: $LANG_GZ"
+          test -n "$LANG_GZ"
+          gunzip -c "$LANG_GZ" > vendor/tesseract/lang/eng.traineddata
           ls -la vendor/tesseract vendor/tesseract/lang
       - name: Siapkan library SQLite (untuk penyimpanan offline)
         run: |
@@ -158,6 +165,12 @@ jobs:
           cp android/app/src/main/res/mipmap-anydpi-v26/ic_launcher.xml android/app/src/main/res/mipmap-anydpi-v26/ic_launcher_round.xml
       - name: Sync web assets
         run: npx cap sync android
+      - name: Pastikan berkas OCR ikut masuk ke aplikasi
+        run: |
+          ls -la android/app/src/main/assets/public/vendor/tesseract android/app/src/main/assets/public/vendor/tesseract/lang
+          test -s android/app/src/main/assets/public/vendor/tesseract/lang/eng.traineddata
+          test -s android/app/src/main/assets/public/vendor/tesseract/tesseract-core-lstm.wasm.js
+          test -s android/app/src/main/assets/public/vendor/tesseract/worker.min.js
 
       - name: Sinkronkan nomor versi dari index.html
         run: |
