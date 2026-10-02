@@ -678,6 +678,7 @@ function renderRiwayatCardHtml(e, dupDates){
         <div><label class="flabel">Istirahat Mulai</label><input type="text" inputmode="numeric" value="${escapeHtml(e.istMulai)}" placeholder="11.00" oninput="this.value=fmtJamTitikLive(this.value)" onchange="editEntryField('${e.id}','istMulai',this.value)"></div>
         <div><label class="flabel">Istirahat Selesai</label><input type="text" inputmode="numeric" value="${escapeHtml(e.istSelesai)}" placeholder="13.30" oninput="this.value=fmtJamTitikLive(this.value)" onchange="editEntryField('${e.id}','istSelesai',this.value)"></div>
       </div>` : ''}
+      ${jedaTambahanHtml(e, 'edit')}
       <div class="chk-row" style="margin-top:8px;"><input type="checkbox" id="ed-liburMerah-${e.id}" ${e.liburMerah?'checked':''} onchange="editEntryField('${e.id}','liburMerah',this.checked)"><label for="ed-liburMerah-${e.id}" style="margin-left:6px;">${ic('calendar')} Tanggal Merah / Libur Nasional</label></div>
       ` : `
       <div class="field-sub" style="margin-top:10px;">Ini entri tambahan (tanggal ini sudah ada entri lain) — tanpa absen otomatis, Jam Lembur di bawah diisi manual.</div>

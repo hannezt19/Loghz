@@ -936,7 +936,7 @@ function getExportRows(){
     const perHari = {
       'Absen Berangkat': isSys ? '-' : (e.absenBerangkat||(e.menginap?'Menginap':'-')),
       'Absen Pulang': isSys ? '-' : (e.absenPulang||(e.menginap?'Menginap':'-')),
-      'Istirahat': (isSys || e.isSecondary) ? '-' : (e.istirahat ? ((e.istMulai||'-')+'-'+(e.istSelesai||'-')) : 'Lembur'),
+      'Istirahat': (isSys || e.isSecondary) ? '-' : istirahatTeksCetak(e),
       'HM Awal': isSys ? '-' : (e.hmAwal||'-'), 'HM Akhir': isSys ? '-' : (e.hmAkhir||'-'), 'HM Terpakai': isSys ? '-' : hmTerpakai,
       'BBM (L)': isSys ? '-' : fmtLiterID((parseFloat(e.bbmLiter)||0)/1000),
       'Lembur (j)': (isSys || e.isSecondary) ? '-' : (e.lembur||'0'),

@@ -648,6 +648,7 @@ function renderHari(){
         <div><label class="flabel">Istirahat Mulai</label><input type="text" inputmode="numeric" value="${escapeHtml(e.istMulai)}" placeholder="11.00" oninput="this.value=fmtJamTitikLive(this.value)" onchange="quickSave('istMulai', this.value)"></div>
         <div><label class="flabel">Istirahat Selesai</label><input type="text" inputmode="numeric" value="${escapeHtml(e.istSelesai)}" placeholder="13.30" oninput="this.value=fmtJamTitikLive(this.value)" onchange="quickSave('istSelesai', this.value)"></div>
       </div>` : ''}
+      ${jedaTambahanHtml(e, 'hari')}
       <div class="chk-row" style="margin-top:8px;"><input type="checkbox" id="qf-liburMerah" ${e.liburMerah?'checked':''} onchange="quickSave('liburMerah', this.checked)"><label for="qf-liburMerah" style="margin-left:6px;">${ic('calendar')} Tanggal Merah / Libur Nasional</label></div>
       <div class="field-sub" style="margin-top:4px;">Jam lembur dihitung otomatis dari Absen &amp; Istirahat di atas, tapi tetap bisa diedit manual di bawah.</div>
     </div>
@@ -992,12 +993,76 @@ function computeLembur(e){
       worked -= istDur;
     }
   }
+  /* Jeda tambahan (hari kerja 3 tahap / split-shift): tiap jeda yang terisi
+   * lengkap (Mulai & Selesai) ikut dikurangkan dari jam kerja. */
+  jedaTambahanList(e).forEach(j=>{ worked -= j.dur; });
   const normal = normalJamKerja(e.date, e.liburMerah);
   let lembur = worked - normal;
   if(lembur < 0) lembur = 0;
   return lembur;
 }
-const LEMBUR_TRIGGER_KEYS = ['absenBerangkat','absenPulang','istirahat','istMulai','istSelesai','liburMerah','date'];
+/* ---- Jeda tambahan: maksimal 2 (field jeda2M/jeda2S, jeda3M/jeda3S).
+ * Data lama tanpa field ini tetap valid (dianggap tidak ada jeda tambahan). */
+function jedaCount(e){
+  const filled = (e.jeda3M||e.jeda3S) ? 2 : ((e.jeda2M||e.jeda2S) ? 1 : 0);
+  return Math.max(parseInt(e.jedaN,10)||0, filled);
+}
+function jedaTambahanList(e){
+  const out = [];
+  [['jeda2M','jeda2S'],['jeda3M','jeda3S']].forEach(([km,ks])=>{
+    const m = parseJamTitik(e[km]), s = parseJamTitik(e[ks]);
+    if(m===null || s===null) return;
+    let dur = s - m; if(dur < 0) dur += 24;
+    out.push({m:e[km], s:e[ks], dur});
+  });
+  return out;
+}
+/* Teks untuk kolom Istirahat di cetak Rekap: jeda utama + jeda tambahan. */
+function istirahatTeksCetak(e){
+  const base = e.istirahat ? ((e.istMulai||'-')+'-'+(e.istSelesai||'-')) : 'Lembur';
+  const ext = jedaTambahanList(e).map(j=>j.m+'-'+j.s);
+  return ext.length ? [base].concat(ext).join('\n') : base;
+}
+/* UI kecil "Jeda tambahan". mode 'hari' = form Hari Ini, 'edit' = form Rekap. */
+function jedaTambahanHtml(e, mode){
+  const n = jedaCount(e);
+  const set = (k)=> mode==='hari'
+    ? `quickSave('${k}', this.value)`
+    : `editEntryField('${e.id}','${k}',this.value)`;
+  const aksi = (a)=> `jedaAksi('${mode}','${e.id}','${a}')`;
+  const row = (no, km, ks)=> `
+      <div class="grid2" style="margin-top:6px;">
+        <div><label class="flabel">Jeda ${no} Mulai</label><input type="text" inputmode="numeric" value="${escapeHtml(e[km]||'')}" placeholder="15.30" oninput="this.value=fmtJamTitikLive(this.value)" onchange="${set(km)}"></div>
+        <div><label class="flabel">Jeda ${no} Selesai</label><input type="text" inputmode="numeric" value="${escapeHtml(e[ks]||'')}" placeholder="20.30" oninput="this.value=fmtJamTitikLive(this.value)" onchange="${set(ks)}"></div>
+      </div>`;
+  return `
+      ${n>=1 ? row(1,'jeda2M','jeda2S') : ''}
+      ${n>=2 ? row(2,'jeda3M','jeda3S') : ''}
+      <div style="display:flex;gap:8px;margin-top:6px;flex-wrap:wrap;">
+        ${n<2 ? `<button class="chip" onclick="${aksi('tambah')}">+ Jeda tambahan</button>` : ''}
+        ${n>0 ? `<button class="chip" onclick="${aksi('hapus')}">&minus; Hapus jeda</button>` : ''}
+      </div>
+      ${n>0 ? `<div class="field-sub" style="margin-top:4px;">Jam di antara Mulai-Selesai jeda tidak dihitung kerja. Berangkat = jam pertama, Pulang = jam terakhir.</div>` : ''}`;
+}
+function jedaAksi(mode, id, aksi){
+  const e = mode==='hari' ? getTodayEntry() : ENTRIES.find(x=>x.id===id);
+  if(!e) return;
+  let n = jedaCount(e);
+  if(aksi==='tambah'){
+    if(n>=2) return;
+    e.jedaN = n+1;
+  } else {
+    if(n<=0) return;
+    const pre = n===2 ? 'jeda3' : 'jeda2';
+    e[pre+'M'] = ''; e[pre+'S'] = '';
+    e.jedaN = n-1;
+  }
+  recomputeLemburIfNeeded(e, 'jedaN');
+  saveEntries();
+  if(mode==='hari'){ renderHari(); }
+  else { expandedRowId = e.id; renderRekap(); }
+}
+const LEMBUR_TRIGGER_KEYS = ['absenBerangkat','absenPulang','istirahat','istMulai','istSelesai','liburMerah','date','jedaN','jeda2M','jeda2S','jeda3M','jeda3S'];
 /* Field yang statusnya digambar lewat class/tampilan tombol (chip aktif,
  * blok tersembunyi/muncul) - bukan lewat elemen native (checkbox/select) yang
  * sudah otomatis kelihatan berubah sendiri di layar. Field ini WAJIB
