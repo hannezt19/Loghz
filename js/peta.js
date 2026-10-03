@@ -662,7 +662,7 @@ function namaCetakRows(namaFilterLower, dariIso, sampaiIso){
       // Loading selain Pupuk/Gula (Gleaning, Bibit, atau Tipe belum dipilih) tidak
       // punya isian Nama - tetap dicatat 1 baris (Nama "-") supaya riwayat harian
       // lengkap. Kalau kolom Nama difilter, baris tanpa nama ini otomatis tidak ikut.
-      if(jenis==='Loading' && muatTipe!=='Pupuk' && muatTipe!=='Gula'){
+      if(jenis==='Loading' && ['','Gleaning','Bibit'].includes(muatTipe||'')){
         if(adaFilter) return;
         const blok = muatTipe==='Bibit'
           ? [e[fk('lokasiMuat')], e[fk('lokasiBongkar')]].filter(Boolean).join(' -> ')
@@ -674,6 +674,7 @@ function namaCetakRows(namaFilterLower, dariIso, sampaiIso){
       // Detail dasar per jenis (Pupuk & Gula dihitung per baris/kelompok di bawah).
       let detailDasar = '';
       if(jenis==='Antar/Jemput Tenaga') detailDasar = [e[fk('tipeAntar')], e[fk('kegiatan')]].filter(Boolean).join(' / ');
+      else if(jenis==='Loading') detailDasar = muatTipe || ''; // Tipe Loading buatan sendiri (mis. gerabah)
       else if(jenis==='Drone') detailDasar = e[fk('droneJenis')] || '';
       else if(jenis==='Operator') detailDasar = e[fk('shift')] ? 'Shift: '+e[fk('shift')] : '';
       const pasangan = pasanganArrGetForDisplay(e, lokasiField, namaField).filter(p=>p.lokasi||p.nama);

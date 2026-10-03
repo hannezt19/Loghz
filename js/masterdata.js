@@ -424,9 +424,12 @@ function tenagaTetapGrup(arr, g){
 function jmlOrangRantai(arr){
   return antarGrupList(arr).reduce((s,g)=>s+tenagaTetapGrup(arr,g),0);
 }
-/* Teks rantai untuk cetak (ASCII supaya aman di font PDF bawaan):
- * "Blok 1 (10) -> Blok 2 (5) [ulang 2x] -> Blok 3 (15)". Kalau ada lebih dari 1
- * mandor: 1 baris per mandor, diawali "Nama: ". */
+/* Teks rantai untuk cetak (ASCII supaya aman di font PDF bawaan), 1 lokasi per
+ * baris, urut ke bawah:
+ *   Blok 1 (10) >
+ *   Blok 2 (5) [ulang 2x] >
+ *   Blok 3 (15)
+ * Kalau ada lebih dari 1 mandor: tiap mandor diawali baris "Nama:". */
 function rantaiBlokTeks(arr, ulangMap){
   const grups = antarGrupList(arr);
   const baris = grups.map(g=>{
@@ -434,10 +437,10 @@ function rantaiBlokTeks(arr, ulangMap){
       const org = parseInt(p.jumlahOrang,10)||0;
       const u = blokUlangN(ulangMap, p);
       return String(p.lokasi).trim()+(org?' ('+org+')':'')+(u?' [ulang '+u+'x]':'');
-    }).join(' -> ');
+    }).join(' >\n');
     if(!rantai) return '';
     const nm = String(arr[g.start].nama||'').trim();
-    return (grups.length>1 && nm) ? nm+': '+rantai : rantai;
+    return (grups.length>1 && nm) ? nm+':\n'+rantai : rantai;
   }).filter(Boolean);
   return baris.join('\n');
 }
@@ -592,6 +595,9 @@ function renderJenisLayananFields(e, suffix, mode){
       </div>` : ''}
       ${e[fk('muatTipe')]==='Gula' ? `
         <label class="flabel">Lokasi, Nama Mandor &amp; Berat (kg) <span style="font-weight:400;color:var(--on-surface-variant);">boleh lebih dari 1 lokasi dalam 1 kali jalan</span></label>${lokasiNamaPairInput('lokasi', {mandor:true, beratKg:true})}
+      ` : ''}
+      ${(e[fk('muatTipe')] && !['Gleaning','Bibit','Gula','Pupuk'].includes(e[fk('muatTipe')])) ? `
+        <label class="flabel">Lokasi &amp; Nama Mandor <span style="font-weight:400;color:var(--on-surface-variant);">(opsional) &middot; boleh lebih dari 1 lokasi dalam 1 kali jalan</span></label>${lokasiNamaPairInput('lokasi', {mandor:true})}
       ` : ''}
       ${e[fk('muatTipe')]==='Pupuk' ? `
         <label class="flabel">Lokasi, Nama Mandor, Jenis Pupuk &amp; Berat (kg) <span style="font-weight:400;color:var(--on-surface-variant);">boleh lebih dari 1 lokasi/jenis pupuk dalam 1 kali jalan</span></label>${pupukGroupedInput(e, mode, fk('lokasi'), fk('nama'))}
