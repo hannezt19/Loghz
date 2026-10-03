@@ -733,6 +733,11 @@ function namaCetakRows(namaFilterLower, dariIso, sampaiIso){
       rows[i]._tanggalKosong = true; rows[i]._noUnitKosong = true; rows[i]._jenisKosong = true;
     }
   }
+  // Tanggal ditulis 1x untuk semua baris di hari yang sama, walau unit/kegiatannya
+  // berbeda - supaya 1 hari kebaca sebagai 1 kelompok.
+  for(let i=rows.length-1;i>0;i--){
+    if(rows[i].date===rows[i-1].date) rows[i]._tanggalKosong = true;
+  }
   return rows;
 }
 async function cetakRiwayatNama(){
