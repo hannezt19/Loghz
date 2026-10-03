@@ -643,6 +643,7 @@ function togglePetaCetakCustomRange(show){
  * terisi (lokasi tanpa nama tidak relevan untuk laporan "per nama" ini). */
 function namaCetakRows(namaFilterLower, dariIso, sampaiIso){
   const rows = [];
+  const ulangCache = {};
   const adaFilter = namaFilterLower.length>0;
   ENTRIES.forEach(e=>{
     if(dariIso && e.date<dariIso) return;
@@ -679,6 +680,26 @@ function namaCetakRows(namaFilterLower, dariIso, sampaiIso){
       // Kegiatan tanpa lokasi/nama sama sekali tetap dicatat 1 baris "-" (kecuali sedang filter nama).
       if(pasangan.length===0){
         if(!adaFilter) rows.push(baris('-', '-', '', 0, detailDasar));
+        return;
+      }
+      // Antar/Jemput Tenaga: 1 baris per mandor, kolom Blok berisi RANTAI perpindahan
+      // "Blok 1 (15) -> Blok 2 (10) -> ..." dan Org = jumlah orang tertinggi (bukan dijumlah,
+      // karena orangnya sama, hanya berpindah/terbagi antar blok).
+      if(jenis==='Antar/Jemput Tenaga'){
+        const um = ulangCache[e.date] || (ulangCache[e.date] = antarBlokUlangMap(e.date));
+        const grup = [], idxByKey = {};
+        pasangan.forEach(p=>{
+          const k = normBlokKey(p.nama);
+          if(!(k in idxByKey)){ idxByKey[k] = grup.length; grup.push([]); }
+          grup[idxByKey[k]].push(p);
+        });
+        grup.forEach(g=>{
+          if(adaFilter){
+            const namaDiBaris = splitNamaKoma(g[0].nama||'');
+            if(!namaDiBaris.some(n=>namaFilterLower.includes(n.toLowerCase()))) return;
+          }
+          rows.push(baris(g[0].nama, rantaiBlokTeks(g, um) || '-', '', jmlOrangRantai(g), detailDasar));
+        });
         return;
       }
       // Loading > Pupuk: 1 lokasi+mandor dengan beberapa jenis pupuk tersimpan
@@ -845,6 +866,7 @@ function getExportRows(){
   }
   rows.sort((a,b)=>a.date.localeCompare(b.date));
   const headers = getSelectedColumns();
+  const ulangCacheExport = {};
   const detailUntukLayanan = (e, jenis, suffix) => {
     const fk = (name)=>name+suffix;
     if(jenis==='Antar/Jemput Tenaga') return [e[fk('tipeAntar')], e[fk('kegiatan')]].filter(Boolean).join(' / ');
@@ -865,6 +887,12 @@ function getExportRows(){
   const lokasiUntukLayanan = (e, jenis, suffix) => {
     const fk = (name)=>name+suffix;
     if(jenis==='Loading' && e[fk('muatTipe')]==='Bibit') return [e[fk('lokasiMuat')],e[fk('lokasiBongkar')]].filter(Boolean).join(' -> ');
+    // Antar/Jemput Tenaga: cetak seluruh RANTAI perpindahan antar blok + penanda ulang.
+    if(jenis==='Antar/Jemput Tenaga'){
+      const um = ulangCacheExport[e.date] || (ulangCacheExport[e.date] = antarBlokUlangMap(e.date));
+      const t = rantaiBlokTeks(pasanganArrGetForDisplay(e, fk('lokasi'), fk('nama')), um);
+      if(t) return t;
+    }
     // Kalau lokasinya lebih dari 1 (1 kegiatan mencakup beberapa blok), yang
     // dicetak cuma yang PERTAMA sebagai wakil - biar laporan tetap ringkas.
     return lokasiArrGetForDisplay(e, fk('lokasi'))[0] || '';
@@ -877,7 +905,7 @@ function getExportRows(){
     if(jenis!=='Antar/Jemput Tenaga') return '';
     const fk = (name)=>name+suffix;
     const arr = pasanganArrGetForDisplay(e, fk('lokasi'), fk('nama'));
-    const total = arr.reduce((s,p)=>s+(parseInt(p.jumlahOrang,10)||0),0);
+    const total = jmlOrangRantai(arr); // tertinggi per mandor, bukan dijumlah antar blok
     return total>0 ? String(total) : '';
   };
   /* 1 hari kerja = 1 s/d 3 "kegiatan" (Jenis Layanan utama/ke-2/ke-3, unit

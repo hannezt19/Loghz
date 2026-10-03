@@ -300,6 +300,10 @@ function renderBeranda(){
   const maxTotal15 = Math.max(1, ...days15.map(d=>d.hm+d.lembur));
 
   const recent = ENTRIES.slice().sort((a,b)=>b.date.localeCompare(a.date)).slice(0,10);
+  /* Lembur/OT hanya ditulis di entri PERTAMA tiap tanggal (urutan input).
+   * Entri/unit ke-2 dst di tanggal yang sama: kolom OT di Log Terakhir dikosongkan. */
+  const pertamaPerTanggal = {};
+  ENTRIES.forEach(x=>{ if(!(x.date in pertamaPerTanggal)) pertamaPerTanggal[x.date] = x.id; });
 
   let statusColor = 'var(--success)', statusText = 'Kondisi normal';
   let svcPct = 0;
@@ -455,7 +459,7 @@ function renderBeranda(){
           const d = new Date(e.date+'T00:00:00');
           const shortDate = d.getDate()+'-'+(d.getMonth()+1)+'-'+String(d.getFullYear()).slice(2);
           return `<div class="field-sub" style="font-size:12.5px;display:grid;grid-template-columns:1.1fr 0.9fr 0.9fr 0.9fr 1.3fr;gap:4px;padding:9px 4px;border-bottom:1px solid var(--outline-variant);">
-            <span>${shortDate}</span><span>${escapeHtml(btLabel(e.btId))}</span><span>${hmUsed}j</span><span>${escapeHtml(e.lembur||'0')}j OT</span><span style="overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">${escapeHtml(entryTipeLabel(e))}</span>
+            <span>${shortDate}</span><span>${escapeHtml(btLabel(e.btId))}</span><span>${hmUsed}j</span><span>${pertamaPerTanggal[e.date]===e.id ? escapeHtml(e.lembur||'0')+'j OT' : ''}</span><span style="overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">${escapeHtml(entryTipeLabel(e))}</span>
           </div>`;
         }).join('')}
     </div>

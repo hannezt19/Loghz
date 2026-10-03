@@ -368,6 +368,100 @@ function pupukDetailTeks(baris){
   const total = baris.reduce((s,p)=>s+(parseFloat(p.beratKg)||0),0);
   return 'Pupuk: '+bagian.join(', ')+(total>0 ? ' ('+fmtThousandsLive(String(Math.round(total)))+' kg)' : '');
 }
+/* ===== Antar/Jemput Tenaga: RANTAI PERPINDAHAN antar blok =====
+ * Data TIDAK berubah: tetap array baris `lokasiPasanganArr`(+suffix), tiap baris
+ * {lokasi, nama, jumlahOrang}. Urutan baris = urutan pindah (blok 1 -> 2 -> 3).
+ * 1 mandor saja untuk seluruh rantai: nama disalin ke semua baris supaya
+ * Peta/Riwayat per Nama/backup/data lama tetap jalan tanpa migrasi. */
+function normBlokKey(s){ return String(s||'').trim().toLowerCase().replace(/\s+/g,' '); }
+/* Hitung berapa kali tiap blok (+mandor yang sama) muncul di 1 tanggal, lintas
+ * semua kegiatan Antar/Jemput Tenaga hari itu. Dipakai untuk penanda "ulang". */
+function antarBlokUlangMap(dateIso){
+  const map = {};
+  ENTRIES.forEach(en=>{
+    if(en.date!==dateIso || isSystemUnitId(en.btId)) return;
+    ['','2','3'].forEach(sfx=>{
+      if(sfx && !en['adaLayanan'+sfx]) return;
+      if(en['jenisLayanan'+sfx]!=='Antar/Jemput Tenaga') return;
+      pasanganArrGetForDisplay(en, 'lokasi'+sfx, 'nama'+sfx).forEach(p=>{
+        if(!normBlokKey(p.lokasi)) return;
+        const k = normBlokKey(p.nama)+'|'+normBlokKey(p.lokasi);
+        map[k] = (map[k]||0)+1;
+      });
+    });
+  });
+  return map;
+}
+function blokUlangN(map, p){
+  const n = (map && map[normBlokKey(p.nama)+'|'+normBlokKey(p.lokasi)]) || 0;
+  return n>1 ? n : 0;
+}
+/* Jumlah orang sebenarnya = angka TERTINGGI per mandor (orangnya sama, cuma
+ * berpindah/terbagi antar blok); kalau ada beberapa mandor berbeda, dijumlah. */
+function jmlOrangRantai(arr){
+  const g = {};
+  arr.forEach(p=>{
+    const k = normBlokKey(p.nama);
+    g[k] = Math.max(g[k]||0, parseInt(p.jumlahOrang,10)||0);
+  });
+  return Object.values(g).reduce((s,n)=>s+n,0);
+}
+/* Teks rantai untuk cetak (ASCII supaya aman di font PDF bawaan):
+ * "Blok 1 (15) -> Blok 2 (10) -> Blok 3 (5) [ulang 2x]" */
+function rantaiBlokTeks(arr, ulangMap){
+  return arr.filter(p=>String(p.lokasi||'').trim()).map(p=>{
+    const org = parseInt(p.jumlahOrang,10)||0;
+    const u = blokUlangN(ulangMap, p);
+    return String(p.lokasi).trim()+(org?' ('+org+')':'')+(u?' [ulang '+u+'x]':'');
+  }).join(' -> ');
+}
+function antarNamaSemua(entryId, mode, lokasiField, namaField, value){
+  const e = ENTRIES.find(x=>x.id===entryId);
+  if(!e) return;
+  const arr = pasanganArrGetForDisplay(e, lokasiField, namaField).map(p=>({...p, nama:value}));
+  e[lokasiField+'PasanganArr'] = arr;
+  e[namaField] = value;
+  pupukSimpanDanRender(entryId, mode);
+}
+/* + Pindah lokasi: baris baru, mandor & jumlah orang disalin dari baris terakhir. */
+function antarPindahLokasi(entryId, mode, lokasiField, namaField){
+  const e = ENTRIES.find(x=>x.id===entryId);
+  if(!e) return;
+  const arr = pasanganArrGetForDisplay(e, lokasiField, namaField).map(p=>({...p}));
+  const last = arr[arr.length-1] || {};
+  arr.push({lokasi:'', nama:last.nama||'', shift:'', jumlahOrang:last.jumlahOrang||''});
+  e[lokasiField+'PasanganArr'] = arr;
+  pupukSimpanDanRender(entryId, mode);
+}
+function antarRantaiInput(e, mode, lokasiField, namaField, arr){
+  const a = `'${e.id}','${mode}','${lokasiField}','${namaField}'`;
+  const um = antarBlokUlangMap(e.date);
+  const baris = arr.map((p,idx)=>{
+    const u = blokUlangN(um, p);
+    return `
+      ${idx>0 ? `<div class="field-sub" style="margin:2px 0 2px 8px;font-size:11.5px;">&darr; pindah</div>` : ''}
+      <div style="display:flex;gap:6px;align-items:center;">
+        <span style="flex:0 0 20px;height:20px;border-radius:50%;background:var(--primary);color:#fff;font-size:11px;font-weight:700;display:flex;align-items:center;justify-content:center;">${idx+1}</span>
+        <input type="text" list="lokasiSuggest" placeholder="Blok / Lokasi" style="flex:1;min-width:0;margin-bottom:0;" oninput="onLokasiInput(this)" onfocus="onLokasiFocus(this)" value="${escapeHtml(p.lokasi||'')}" onchange="pasanganArrChange(${a},${idx},'lokasi',this.value)">
+        <input type="text" inputmode="numeric" placeholder="Org" title="Jumlah orang/tenaga" style="flex:0 0 52px;min-width:0;margin-bottom:0;text-align:center;" value="${escapeHtml(p.jumlahOrang||'')}" oninput="this.value=this.value.replace(/\\D/g,'').slice(0,2)" onchange="pasanganArrChange(${a},${idx},'jumlahOrang',this.value)">
+        ${arr.length>1 ? `<button type="button" class="icon-btn" title="Hapus langkah ini" style="flex:0 0 auto;" onclick="pupukHapusBaris(${a},${idx})">${ic('trash',16)}</button>` : ''}
+      </div>
+      ${u ? `<div style="margin:2px 0 0 26px;font-size:11.5px;font-weight:700;color:#C77700;">&#8635; ${u}x &middot; blok ini muncul ${u}x hari ini</div>` : ''}`;
+  }).join('');
+  return `
+    <div style="display:flex;gap:8px;align-items:flex-start;">
+      <div style="flex:0 0 31%;min-width:84px;">
+        <label class="flabel" style="margin-top:0;">Mandor</label>
+        <input type="text" list="namaSuggest" placeholder="Nama" style="margin-bottom:0;" oninput="onNamaInput(this)" onfocus="onNamaFocus(this)" value="${escapeHtml(arr[0].nama||'')}" onchange="antarNamaSemua(${a},this.value)">
+      </div>
+      <div style="flex:1;min-width:0;">
+        <label class="flabel" style="margin-top:0;">Blok &amp; Org</label>
+        ${baris}
+      </div>
+    </div>
+    <button type="button" class="pill-btn sm outline" style="margin-top:8px;" onclick="antarPindahLokasi(${a})">${ic('plus',12)} Pindah lokasi</button>
+  `;
+}
 function renderJenisLayananFields(e, suffix, mode){
   // mode: 'today' (entri utama hari ini, quickSave), 'secondary' (unit
   // tambahan hari ini, quickSaveEntry), atau 'edit' (edit baris dari Rekap ->
@@ -402,6 +496,12 @@ function renderJenisLayananFields(e, suffix, mode){
     const lokasiField = fk(lokasiFieldBase);
     const namaField = fk('nama');
     const arr = pasanganArrGetForDisplay(e, lokasiField, namaField);
+    /* Rantai perpindahan (Antar/Jemput): 1 mandor + daftar blok berurutan. Kalau
+     * data lama punya mandor BERBEDA-beda per baris, tetap pakai tampilan lama
+     * supaya tidak ada nama yang tertimpa. */
+    if(opts.rantai && new Set(arr.map(p=>normBlokKey(p.nama))).size<=1){
+      return antarRantaiInput(e, mode, lokasiField, namaField, arr);
+    }
     return `
       ${arr.map((p,idx)=>`
         <div style="display:flex;flex-wrap:${(opts.beratKg||opts.jenisPupuk)?'wrap':'nowrap'};gap:6px;margin-bottom:6px;">
@@ -432,7 +532,7 @@ function renderJenisLayananFields(e, suffix, mode){
         <button type="button" class="chip ${e[fk('arahAntarJemput')]!=='jemput'?'active':''}" onclick="${chgRaw('arahAntarJemput',"'antar'")}">Antar</button>
         <button type="button" class="chip ${e[fk('arahAntarJemput')]==='jemput'?'active':''}" onclick="${chgRaw('arahAntarJemput',"'jemput'")}">Jemput</button>
       </div>` : ''}
-      <label class="flabel">Lokasi &amp; Nama <span style="font-weight:400;color:var(--on-surface-variant);">(vendor/mandor, opsional) &middot; boleh lebih dari 1, pisah pakai koma &middot; "Org" = jumlah orang/tenaga yang diangkut di baris itu</span></label>${lokasiNamaPairInput('lokasi', {jumlahOrang:true})}
+      <label class="flabel">Mandor &amp; Blok <span style="font-weight:400;color:var(--on-surface-variant);">(opsional) &middot; 1 mandor, lalu tambah "Pindah lokasi" tiap tim pindah blok &middot; "Org" = jumlah orang di blok itu</span></label>${lokasiNamaPairInput('lokasi', {jumlahOrang:true, rantai:true})}
     ` : ''}
     ${jenis==='Loading' ? `
       <div style="margin-top:8px;"><label class="flabel">Tipe</label>${sel('muatTipe', MUAT_TIPE_LIST)}</div>
