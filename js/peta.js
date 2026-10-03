@@ -683,17 +683,12 @@ function namaCetakRows(namaFilterLower, dariIso, sampaiIso){
         return;
       }
       // Antar/Jemput Tenaga: 1 baris per mandor, kolom Blok berisi RANTAI perpindahan
-      // "Blok 1 (15) -> Blok 2 (10) -> ..." dan Org = jumlah orang tertinggi (bukan dijumlah,
-      // karena orangnya sama, hanya berpindah/terbagi antar blok).
+      // "Blok 1 (10) -> Blok 2 (5) -> ..." dan Org = jumlah tenaga tetap mandor itu (bukan
+      // dijumlah antar blok, karena orangnya sama, hanya berpindah/terbagi).
       if(jenis==='Antar/Jemput Tenaga'){
         const um = ulangCache[e.date] || (ulangCache[e.date] = antarBlokUlangMap(e.date));
-        const grup = [], idxByKey = {};
-        pasangan.forEach(p=>{
-          const k = normBlokKey(p.nama);
-          if(!(k in idxByKey)){ idxByKey[k] = grup.length; grup.push([]); }
-          grup[idxByKey[k]].push(p);
-        });
-        grup.forEach(g=>{
+        antarGrupList(pasangan).forEach(gr=>{
+          const g = pasangan.slice(gr.start, gr.start+gr.count);
           if(adaFilter){
             const namaDiBaris = splitNamaKoma(g[0].nama||'');
             if(!namaDiBaris.some(n=>namaFilterLower.includes(n.toLowerCase()))) return;
