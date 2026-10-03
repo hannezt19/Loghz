@@ -653,10 +653,10 @@ function namaCetakRows(namaFilterLower, dariIso, sampaiIso){
       if(!jenis) return;
       const fk = (name)=>name+suffix;
       // Label Jenis Layanan untuk cetak: "Antar Tenaga"/"Jemput Tenaga" kalau
-      // hanya satu arah, dan "Loading (Pupuk)"/"Loading (Gleaning)" dst untuk Loading.
+      // hanya satu arah.
       let jenisLabel = jenisLayananArahLabel(jenis, e, suffix) || jenis;
       const muatTipe = e[fk('muatTipe')];
-      if(jenis==='Loading' && muatTipe) jenisLabel = 'Loading ('+muatTipe+')';
+      // Tipe Loading (Pupuk/Gula/gerabah dst) sudah tertulis di kolom Detail, jadi Jenis Layanan cukup "Loading".
       const baris = (nama, blok, shift, org, detail) => ({date:e.date, btId:e.btId, jenis, jenisLabel, nama:nama||'-', blok:blok||'-', shift:shift||'', org:org||0, detail:detail||'-', _groupKey:groupKey});
       const kg = (v) => { const n = parseFloat(v)||0; return n>0 ? fmtThousandsLive(String(Math.round(n)))+' kg' : ''; };
       // Loading selain Pupuk/Gula (Gleaning, Bibit, atau Tipe belum dipilih) tidak
