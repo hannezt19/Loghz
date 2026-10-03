@@ -395,21 +395,23 @@ function deleteNamaOrang(id){
  * - Penanda "dipakai N kali" di tiap item.
  * - Hapus hanya mencabut item dari daftar PILIHAN. Catatan lama TIDAK diubah
  *   dan tetap tampil di Rekap & cetak.
- * - 4 Jenis Layanan inti dikunci (tidak bisa diganti nama/dihapus) karena
+ * - 5 Jenis Layanan inti dikunci (tidak bisa diganti nama/dihapus) karena
  *   logika app (form, Program Kerja, cetak) mengenali mereka lewat namanya. */
-const JENIS_INTI = ['Antar/Jemput Tenaga','Loading','Drone','Operator'];
+const JENIS_INTI = ['Antar/Jemput Tenaga','Loading','Drone','Operator','Ekstra Pagi'];
 const KELOLA_CFG = {
   jenis:     {judul:'Kelola Jenis Layanan', kata:'jenis layanan', placeholder:'mis. Perawatan Jalan', kosong:'Belum ada jenis layanan.'},
   tipeAntar: {judul:'Kelola Tipe (Antar/Jemput)', kata:'tipe', placeholder:'mis. Tebang', kosong:'Belum ada tipe. Tambahkan di atas.'},
-  kegiatan:  {judul:'Kelola Kegiatan', kata:'kegiatan', placeholder:'mis. Pemupukan', kosong:'Belum ada kegiatan. Tambahkan di atas.'}
+  kegiatan:  {judul:'Kelola Kegiatan', kata:'kegiatan', placeholder:'mis. Pemupukan', kosong:'Belum ada kegiatan. Tambahkan di atas.'},
+  ekstraTipe:{judul:'Kelola Tipe (Ekstra Pagi)', kata:'tipe', placeholder:'mis. Ngupu', kosong:'Belum ada tipe. Tambahkan di atas.'}
 };
-function kelolaList(kind){ return kind==='jenis' ? JENIS_LAYANAN_LIST : (kind==='tipeAntar' ? TIPE_ANTAR_LIST : KEGIATAN_LIST); }
+function kelolaList(kind){ return kind==='jenis' ? JENIS_LAYANAN_LIST : (kind==='tipeAntar' ? TIPE_ANTAR_LIST : (kind==='ekstraTipe' ? EKSTRA_TIPE_LIST : KEGIATAN_LIST)); }
 function kelolaSetList(kind, arr){
   if(kind==='jenis'){ JENIS_LAYANAN_LIST = arr; saveJenisList(); }
   else if(kind==='tipeAntar'){ TIPE_ANTAR_LIST = arr; saveTipeAntarList(); }
+  else if(kind==='ekstraTipe'){ EKSTRA_TIPE_LIST = arr; saveEkstraTipeList(); }
   else { KEGIATAN_LIST = arr; saveKegiatanList(); }
 }
-function kelolaTerkunci(kind, val){ return kind==='jenis' && JENIS_INTI.includes(val); }
+function kelolaTerkunci(kind, val){ return kind==='jenis' && (JENIS_INTI.includes(val) || isEkstraPagi(val)); }
 /* Hitung berapa kali sebuah nama dipakai di catatan (Hari Ini/Rekap + Program Kerja). */
 function kelolaHitungPakai(kind, val){
   let n = 0;
@@ -424,6 +426,8 @@ function kelolaHitungPakai(kind, val){
       if(a.layanan==='Antar/Jemput Tenaga' && a.tipe===val) n++;
       if(a.lanjutLayanan==='Antar/Jemput Tenaga' && a.lanjutTipe===val) n++;
     });
+  } else if(kind==='ekstraTipe'){
+    ENTRIES.forEach(e=>['ekstraTipe','ekstraTipe2','ekstraTipe3'].forEach(k=>{ if(e[k]===val) n++; }));
   } else {
     ENTRIES.forEach(e=>['kegiatan','kegiatan2','kegiatan3'].forEach(k=>{ if(e[k]===val) n++; }));
   }
@@ -456,6 +460,9 @@ function kelolaTerapkanGantiNama(kind, oldVal, newVal){
       delete LAYANAN_SINGKATAN[kOld];
     }
     saveEntries(); saveProgramRencana(); saveProgramAktual(); savePiketJamLayanan(); saveLayananSingkatan();
+  } else if(kind==='ekstraTipe'){
+    ENTRIES.forEach(e=>['ekstraTipe','ekstraTipe2','ekstraTipe3'].forEach(k=>{ if(e[k]===oldVal) e[k]=newVal; }));
+    saveEntries();
   } else {
     ENTRIES.forEach(e=>['kegiatan','kegiatan2','kegiatan3'].forEach(k=>{ if(e[k]===oldVal) e[k]=newVal; }));
     saveEntries();
@@ -464,6 +471,7 @@ function kelolaTerapkanGantiNama(kind, oldVal, newVal){
 function openKelolaJenis(){ closeDrawer(); renderKelolaModal('jenis'); }
 function openKelolaTipeAntar(){ closeDrawer(); renderKelolaModal('tipeAntar'); }
 function openKelolaKegiatan(){ closeDrawer(); renderKelolaModal('kegiatan'); }
+function openKelolaEkstraTipe(){ closeDrawer(); renderKelolaModal('ekstraTipe'); }
 function renderKelolaModal(kind){
   const cfg = KELOLA_CFG[kind];
   const list = kelolaList(kind);
@@ -479,7 +487,7 @@ function renderKelolaModal(kind){
   }).join('');
   openModal(`
     <div class="mhead"><h2>${cfg.judul}</h2><button class="mclose" onclick="closeModal()">&times;</button></div>
-    ${kind==='jenis' ? '<div class="field-sub" style="margin-bottom:10px;">4 jenis inti (Antar/Jemput Tenaga, Loading, Drone, Operator) dikunci karena punya field khusus otomatis. Jenis tambahan memakai field Lokasi biasa.</div>' : ''}
+    ${kind==='jenis' ? '<div class="field-sub" style="margin-bottom:10px;">5 jenis inti (Antar/Jemput Tenaga, Loading, Drone, Operator, Ekstra Pagi) dikunci karena punya field khusus otomatis. Jenis tambahan memakai field Lokasi biasa.</div>' : ''}
     <div class="field-sub" style="margin-bottom:10px;">Ganti nama (pensil) ikut memperbarui semua catatan lama. Hapus hanya mencabut dari daftar pilihan &mdash; catatan lama tetap tersimpan dan tampil.</div>
     <div style="display:flex;gap:8px;margin-bottom:12px;">
       <input type="text" id="kelolaBaru" placeholder="${cfg.placeholder}" style="margin-bottom:0;">

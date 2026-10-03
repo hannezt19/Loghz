@@ -515,7 +515,8 @@ function riwayatUntukBlok(label){
         jenis = e['jenisLayanan'+slotCocok] || e.jenisLayanan;
         tonase = e['tonaseKg'+slotCocok];
       }
-      const detail = (jenis==='Loading' && tonase) ? (fmtThousandsLive(String(tonase))+' kg') : '';
+      const detail = (jenis==='Loading' && tonase) ? (fmtThousandsLive(String(tonase))+' kg')
+        : (isEkstraPagi(jenis) ? (e['ekstraTipe'+(slotCocok||'')]||'') : '');
       // Nama yang ditampilkan HANYA yang benar-benar BERPASANGAN dengan lokasi
       // ini - bukan gabungan semua nama di entri itu - supaya tidak tertukar
       // kalau entrinya punya beberapa lokasi sekaligus.
@@ -676,6 +677,7 @@ function namaCetakRows(namaFilterLower, dariIso, sampaiIso){
       if(jenis==='Antar/Jemput Tenaga') detailDasar = [e[fk('tipeAntar')], e[fk('kegiatan')]].filter(Boolean).join(' / ');
       else if(jenis==='Loading') detailDasar = muatTipe || ''; // Tipe Loading buatan sendiri (mis. gerabah)
       else if(jenis==='Drone') detailDasar = e[fk('droneJenis')] || '';
+      else if(isEkstraPagi(jenis)) detailDasar = e[fk('ekstraTipe')] || '';
       else if(jenis==='Operator') detailDasar = e[fk('shift')] ? 'Shift: '+e[fk('shift')] : '';
       const pasangan = pasanganArrGetForDisplay(e, lokasiField, namaField).filter(p=>p.lokasi||p.nama);
       // Kegiatan tanpa lokasi/nama sama sekali tetap dicatat 1 baris "-" (kecuali sedang filter nama).
@@ -877,6 +879,7 @@ function getExportRows(){
       return [tipe, e[fk('tonaseKg')]?e[fk('tonaseKg')]+' kg':''].filter(Boolean).join(' / ');
     }
     if(jenis==='Drone') return e[fk('droneJenis')]||'';
+    if(isEkstraPagi(jenis)) return e[fk('ekstraTipe')]||'';
     if(jenis==='Operator') return e[fk('shift')]||'';
     return '';
   };

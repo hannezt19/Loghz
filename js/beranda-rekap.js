@@ -486,6 +486,7 @@ function handleEditSelectCustom(entryId, fieldKey, val){
     else if(baseKey==='kegiatan'){ if(!KEGIATAN_LIST.includes(typed)){ KEGIATAN_LIST.push(typed); saveKegiatanList(); } }
     else if(baseKey==='muatTipe'){ if(!MUAT_TIPE_LIST.includes(typed)){ MUAT_TIPE_LIST.push(typed); saveMuatTipeList(); } }
     else if(baseKey==='droneJenis'){ if(!DRONE_JENIS_LIST.includes(typed)){ DRONE_JENIS_LIST.push(typed); saveDroneJenisList(); } }
+    else if(baseKey==='ekstraTipe'){ if(!EKSTRA_TIPE_LIST.includes(typed)){ EKSTRA_TIPE_LIST.push(typed); saveEkstraTipeList(); } }
     else if(baseKey==='shift'){ if(!SHIFT_LIST.includes(typed)){ SHIFT_LIST.push(typed); saveShiftList(); } }
     editEntryField(entryId, fieldKey, typed);
   } else {

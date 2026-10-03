@@ -82,6 +82,9 @@ let KEGIATAN_LIST = LS.get('v2_kegiatan', ['Pel. Umum','Pemupukan','Penyemprotan
 let MUAT_TIPE_LIST = LS.get('v2_muattipe', ['Bibit','Gleaning','Gula','Pupuk']);
 let PUPUK_JENIS_LIST = LS.get('v2_pupukjenis', []); // [string, ...] - daftar Jenis Pupuk, bisa ditambah sendiri lewat "+ Lainnya"
 let DRONE_JENIS_LIST = LS.get('v2_dronejenis', ['Penyemprotan','Pemetaan']);
+let EKSTRA_TIPE_LIST = LS.get('v2_ekstratipe', ['Ngupu','Weeding']); // Tipe untuk Jenis Layanan "Ekstra Pagi"
+/* Jenis Layanan "Ekstra Pagi" (kegiatan sebelum kegiatan utama: ngupu/weeding) - dicocokkan tanpa peduli huruf besar/kecil. */
+function isEkstraPagi(j){ return String(j||'').trim().toLowerCase()==='ekstra pagi'; }
 let SHIFT_LIST = LS.get('v2_shift', ['Pagi','Siang','Malam']);
 /* Shift OPERATOR yang diantar/dijemput (beda dengan SHIFT_LIST di atas yang
  * itu shift SOPIR sendiri) - dipilih per-orang di "Lokasi & Nama" khusus
@@ -334,6 +337,7 @@ function saveKegiatanList(){ LS.set('v2_kegiatan', KEGIATAN_LIST); }
 function saveMuatTipeList(){ LS.set('v2_muattipe', MUAT_TIPE_LIST); }
 function savePupukJenisList(){ LS.set('v2_pupukjenis', PUPUK_JENIS_LIST); }
 function saveDroneJenisList(){ LS.set('v2_dronejenis', DRONE_JENIS_LIST); }
+function saveEkstraTipeList(){ LS.set('v2_ekstratipe', EKSTRA_TIPE_LIST); }
 function saveShiftList(){ LS.set('v2_shift', SHIFT_LIST); }
 
 /* ================= SUMBER DATA LIBUR NASIONAL (v2 — multi-sumber + fallback) =================

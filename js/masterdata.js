@@ -214,6 +214,7 @@ function handleSelectCustom(fieldKey, val){
     else if(baseKey==='kegiatan'){ if(!KEGIATAN_LIST.includes(typed)){ KEGIATAN_LIST.push(typed); saveKegiatanList(); } }
     else if(baseKey==='muatTipe'){ if(!MUAT_TIPE_LIST.includes(typed)){ MUAT_TIPE_LIST.push(typed); saveMuatTipeList(); } }
     else if(baseKey==='droneJenis'){ if(!DRONE_JENIS_LIST.includes(typed)){ DRONE_JENIS_LIST.push(typed); saveDroneJenisList(); } }
+    else if(baseKey==='ekstraTipe'){ if(!EKSTRA_TIPE_LIST.includes(typed)){ EKSTRA_TIPE_LIST.push(typed); saveEkstraTipeList(); } }
     else if(baseKey==='shift'){ if(!SHIFT_LIST.includes(typed)){ SHIFT_LIST.push(typed); saveShiftList(); } }
     quickSave(fieldKey, typed);
   } else {
@@ -611,7 +612,11 @@ function renderJenisLayananFields(e, suffix, mode){
       <div style="margin-top:8px;"><label class="flabel">Shift (Anda)</label>${sel('shift', SHIFT_LIST)}</div>
       <label class="flabel">Lokasi &amp; Nama <span style="font-weight:400;color:var(--on-surface-variant);">(opsional) &middot; boleh lebih dari 1, pisah pakai koma &middot; Shift di tiap baris = shift OPERATOR yang diantar/dijemput, beda dengan Shift Anda di atas</span></label>${lokasiNamaPairInput('lokasi', {shift:true})}
     ` : ''}
-    ${jenis && !['Antar/Jemput Tenaga','Loading','Drone','Operator'].includes(jenis) ? `
+    ${isEkstraPagi(jenis) ? `
+      <div style="margin-top:8px;"><label class="flabel">Tipe</label>${sel('ekstraTipe', EKSTRA_TIPE_LIST)}</div>
+      <label class="flabel">Lokasi &amp; Nama <span style="font-weight:400;color:var(--on-surface-variant);">(opsional) &middot; boleh lebih dari 1, pisah pakai koma</span></label>${lokasiNamaPairInput('lokasi')}
+    ` : ''}
+    ${jenis && !isEkstraPagi(jenis) && !['Antar/Jemput Tenaga','Loading','Drone','Operator'].includes(jenis) ? `
       <label class="flabel">Lokasi &amp; Nama <span style="font-weight:400;color:var(--on-surface-variant);">(opsional) &middot; boleh lebih dari 1, pisah pakai koma</span></label>${lokasiNamaPairInput('lokasi')}
     ` : ''}
   `;
@@ -683,8 +688,8 @@ function lokasiArrTambah(entryId, mode, fieldBase){
   saveEntries();
   if(mode==='edit'){ expandedRowId=entryId; renderRekap(); } else renderHari();
 }
-const LAYANAN2_FIELDS = ['jenisLayanan2','tipeAntar2','kegiatan2','muatTipe2','tonaseKg2','lokasi2','lokasiArr2','lokasi2PasanganArr','lokasiMuat2','lokasiBongkar2','droneJenis2','shift2','nama2','nama2Arr','hanyaSatuArah2','arahAntarJemput2'];
-const LAYANAN3_FIELDS = ['jenisLayanan3','tipeAntar3','kegiatan3','muatTipe3','tonaseKg3','lokasi3','lokasiArr3','lokasi3PasanganArr','lokasiMuat3','lokasiBongkar3','droneJenis3','shift3','nama3','nama3Arr','hanyaSatuArah3','arahAntarJemput3'];
+const LAYANAN2_FIELDS = ['jenisLayanan2','tipeAntar2','kegiatan2','muatTipe2','tonaseKg2','lokasi2','lokasiArr2','lokasi2PasanganArr','lokasiMuat2','lokasiBongkar2','droneJenis2','ekstraTipe2','shift2','nama2','nama2Arr','hanyaSatuArah2','arahAntarJemput2'];
+const LAYANAN3_FIELDS = ['jenisLayanan3','tipeAntar3','kegiatan3','muatTipe3','tonaseKg3','lokasi3','lokasiArr3','lokasi3PasanganArr','lokasiMuat3','lokasiBongkar3','droneJenis3','ekstraTipe3','shift3','nama3','nama3Arr','hanyaSatuArah3','arahAntarJemput3'];
 /* Tambah/hapus Jenis Layanan ke-2/ke-3 - KHUSUS unit yang sama, hari yang sama
  * (mis. semprot 2 bahan berbeda, atau beberapa kegiatan berbeda dalam 1 hari
  * dengan unit yang sama - operator siang lalu antar mekanik, dst). Kalau perlu
@@ -883,6 +888,7 @@ function handleSelectCustomHari(entryId, fieldKey, val){
     else if(baseKey==='kegiatan'){ if(!KEGIATAN_LIST.includes(typed)){ KEGIATAN_LIST.push(typed); saveKegiatanList(); } }
     else if(baseKey==='muatTipe'){ if(!MUAT_TIPE_LIST.includes(typed)){ MUAT_TIPE_LIST.push(typed); saveMuatTipeList(); } }
     else if(baseKey==='droneJenis'){ if(!DRONE_JENIS_LIST.includes(typed)){ DRONE_JENIS_LIST.push(typed); saveDroneJenisList(); } }
+    else if(baseKey==='ekstraTipe'){ if(!EKSTRA_TIPE_LIST.includes(typed)){ EKSTRA_TIPE_LIST.push(typed); saveEkstraTipeList(); } }
     else if(baseKey==='shift'){ if(!SHIFT_LIST.includes(typed)){ SHIFT_LIST.push(typed); saveShiftList(); } }
     quickSaveEntry(entryId, fieldKey, typed);
   } else {
@@ -954,6 +960,7 @@ function entryTipeSingleLabel(jenis, e, suffix){
   if(jenis==='Antar/Jemput Tenaga') return e[fk('tipeAntar')] || jenis;
   if(jenis==='Loading') return e[fk('muatTipe')] || jenis;
   if(jenis==='Drone') return e[fk('droneJenis')] || jenis;
+  if(isEkstraPagi(jenis)) return e[fk('ekstraTipe')] || jenis;
   if(jenis==='Operator') return e[fk('shift')] || jenis;
   return jenis;
 }

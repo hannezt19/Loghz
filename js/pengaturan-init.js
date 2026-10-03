@@ -411,6 +411,9 @@ async function bootApp(){
     MUAT_TIPE_LIST = LS.get('v2_muattipe', ['Bibit','Gleaning','Gula','Pupuk']);
     PUPUK_JENIS_LIST = LS.get('v2_pupukjenis', []);
     DRONE_JENIS_LIST = LS.get('v2_dronejenis', ['Penyemprotan','Pemetaan']);
+    EKSTRA_TIPE_LIST = LS.get('v2_ekstratipe', ['Ngupu','Weeding']);
+    // Pastikan Jenis Layanan "Ekstra Pagi" ada di daftar (tidak menimpa kalau sudah dibuat sendiri).
+    if(!JENIS_LAYANAN_LIST.some(isEkstraPagi)){ JENIS_LAYANAN_LIST = JENIS_LAYANAN_LIST.concat(['Ekstra Pagi']); saveJenisList(); }
     SHIFT_LIST = LS.get('v2_shift', ['Pagi','Siang','Malam']);
     JENIS_KERUSAKAN_LIST = LS.get('v2_jeniskerusakan', ['Rem','Mesin','Hidrolik','Kelistrikan','Ban/Roda']);
     MEKANIK_LIST = LS.get('v2_mekanik', []);
