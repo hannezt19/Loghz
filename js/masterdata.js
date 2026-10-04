@@ -578,8 +578,9 @@ function renderJenisLayananFields(e, suffix, mode){
       <div class="chk-row" style="margin-top:8px;"><input type="checkbox" id="hsa-${e.id||'today'}${suffix}" ${e[fk('hanyaSatuArah')]?'checked':''} onchange="${chgRaw('hanyaSatuArah','this.checked')}"><label for="hsa-${e.id||'today'}${suffix}" style="margin-left:6px;">Hanya salah satu (bukan dua-duanya)</label></div>
       ${e[fk('hanyaSatuArah')] ? `
       <div style="display:flex;gap:8px;margin-top:6px;">
-        <button type="button" class="chip ${e[fk('arahAntarJemput')]!=='jemput'?'active':''}" onclick="${chgRaw('arahAntarJemput',"'antar'")}">Antar</button>
+        <button type="button" class="chip ${(e[fk('arahAntarJemput')]!=='jemput' && e[fk('arahAntarJemput')]!=='pindah')?'active':''}" onclick="${chgRaw('arahAntarJemput',"'antar'")}">Antar</button>
         <button type="button" class="chip ${e[fk('arahAntarJemput')]==='jemput'?'active':''}" onclick="${chgRaw('arahAntarJemput',"'jemput'")}">Jemput</button>
+        <button type="button" class="chip ${e[fk('arahAntarJemput')]==='pindah'?'active':''}" onclick="${chgRaw('arahAntarJemput',"'pindah'")}">Pindah</button>
       </div>` : ''}
       <label class="flabel">Mandor &amp; Lokasi <span style="font-weight:400;color:var(--on-surface-variant);">(opsional) &middot; "+ Mandor" untuk vendor lain, "+ Lokasi" kalau tim pindah/dibagi &middot; "Org" = jumlah orang di lokasi itu</span></label>${lokasiNamaPairInput('lokasi', {jumlahOrang:true, rantai:true})}
     ` : ''}
@@ -964,13 +965,14 @@ function entryTipeSingleLabel(jenis, e, suffix){
   if(jenis==='Operator') return e[fk('shift')] || jenis;
   return jenis;
 }
-/* Nama Jenis Layanan "Antar/Jemput Tenaga" berubah jadi "Antar Tenaga" atau
- * "Jemput Tenaga" kalau ceklis "Hanya salah satu" dicentang untuk slot itu -
+/* Nama Jenis Layanan "Antar/Jemput Tenaga" berubah jadi "Antar Tenaga",
+ * "Jemput Tenaga", atau "Pindah Tenaga" kalau ceklis "Hanya salah satu" dicentang untuk slot itu -
  * dipakai di kartu Rekap & di cetak PDF/Excel supaya konsisten. */
 function jenisLayananArahLabel(jenis, e, suffix){
   const fk = (name)=>name+suffix;
   if(jenis!=='Antar/Jemput Tenaga' || !e[fk('hanyaSatuArah')]) return jenis;
-  return e[fk('arahAntarJemput')]==='jemput' ? 'Jemput Tenaga' : 'Antar Tenaga';
+  const arah = e[fk('arahAntarJemput')];
+  return arah==='jemput' ? 'Jemput Tenaga' : (arah==='pindah' ? 'Pindah Tenaga' : 'Antar Tenaga');
 }
 function entryTipeLabel(e){
   const parts = [];

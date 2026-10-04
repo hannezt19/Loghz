@@ -653,7 +653,7 @@ function namaCetakRows(namaFilterLower, dariIso, sampaiIso){
     const cekSlot = (lokasiField, namaField, jenis, groupKey, suffix) => {
       if(!jenis) return;
       const fk = (name)=>name+suffix;
-      // Label Jenis Layanan untuk cetak: "Antar Tenaga"/"Jemput Tenaga" kalau
+      // Label Jenis Layanan untuk cetak: "Antar Tenaga"/"Jemput Tenaga"/"Pindah Tenaga" kalau
       // hanya satu arah.
       let jenisLabel = jenisLayananArahLabel(jenis, e, suffix) || jenis;
       const muatTipe = e[fk('muatTipe')];
