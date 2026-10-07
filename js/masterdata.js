@@ -512,6 +512,55 @@ function antarRantaiInput(e, mode, lokasiField, namaField, arr){
     <div class="field-sub" style="margin-top:6px;">Angka "Tenaga" = jumlah orang tetap milik mandor itu. Lokasi ber-&rarr; = semua tenaga pindah; tanpa &rarr; = tenaga dibagi.</div>
   `;
 }
+/* ===== Loading > Gorong-gorong: Lokasi Asal (1) + Mandor (1) + Lokasi Bongkar (boleh banyak) + Jumlah pcs.
+ * Lokasi Bongkar disimpan sebagai baris `lokasiPasanganArr`(+suffix) {lokasi, nama}: nama mandor yang
+ * sama disalin ke semua baris. Data lama yang cuma punya `lokasiBongkar` (1 teks) tetap terbaca. */
+function gorongBongkarList(e, sfx){
+  const arr = e['lokasi'+sfx+'PasanganArr'];
+  const l = (Array.isArray(arr) ? arr : []).map(p=>String(p.lokasi||'').trim()).filter(Boolean);
+  if(l.length) return l;
+  return e['lokasiBongkar'+sfx] ? [String(e['lokasiBongkar'+sfx]).trim()] : [];
+}
+function gorongMandor(e, sfx){
+  const arr = e['lokasi'+sfx+'PasanganArr'];
+  const p = (Array.isArray(arr) ? arr : []).find(x=>String(x.nama||'').trim());
+  return p ? String(p.nama).trim() : String(e['nama'+sfx]||'').trim();
+}
+function gorongRuteTeks(e, sfx){
+  const muat = String(e['lokasiMuat'+sfx]||'').trim();
+  return [muat, gorongBongkarList(e, sfx).join(', ')].filter(Boolean).join(' -> ');
+}
+function gorongTambahBongkar(entryId, mode, lokasiField, namaField){
+  const e = ENTRIES.find(x=>x.id===entryId);
+  if(!e) return;
+  const arr = pasanganArrGetForDisplay(e, lokasiField, namaField).map(p=>({...p}));
+  arr.push({lokasi:'', nama:(arr[0] && arr[0].nama) || '', shift:''});
+  e[lokasiField+'PasanganArr'] = arr;
+  pupukSimpanDanRender(entryId, mode);
+}
+function gorongFormHtml(e, mode, suffix, lokasiInput, chgRaw){
+  const lokasiField = 'lokasi'+suffix, namaField = 'nama'+suffix;
+  const a = `'${e.id}','${mode}','${lokasiField}','${namaField}'`;
+  const key = lokasiField+'PasanganArr';
+  let arr = (Array.isArray(e[key]) && e[key].length) ? e[key].map(p=>({...p})) : [{lokasi:'', nama:e[namaField]||''}];
+  if(!arr.some(p=>String(p.lokasi||'').trim()) && e['lokasiBongkar'+suffix]) arr[0].lokasi = e['lokasiBongkar'+suffix];
+  const mandor = (arr.find(p=>String(p.nama||'').trim()) || arr[0]).nama || '';
+  const rows = arr.map((p,idx)=>`
+      <div style="display:flex;gap:6px;align-items:center;margin-bottom:6px;">
+        <input type="text" list="lokasiSuggest" placeholder="Lokasi bongkar ${idx+1}" style="flex:1;min-width:0;margin-bottom:0;" oninput="onLokasiInput(this)" onfocus="onLokasiFocus(this)" value="${escapeHtml(p.lokasi||'')}" onchange="pasanganArrChange(${a},${idx},'lokasi',this.value)">
+        ${arr.length>1 ? `<button type="button" class="icon-btn" title="Hapus lokasi bongkar ini" style="flex:0 0 auto;" onclick="pupukHapusBaris(${a},${idx})">${ic('trash',16)}</button>` : ''}
+      </div>`).join('');
+  return `
+      <div class="grid2">
+        <div><label class="flabel">Lokasi Asal (Muat)</label>${lokasiInput('lokasiMuat')}</div>
+        <div><label class="flabel">Jumlah (pcs)</label><input type="text" inputmode="numeric" value="${escapeHtml(e['jumlahPcs'+suffix]||'')}" oninput="this.value=this.value.replace(/\\D/g,'').slice(0,5)" onchange="${chgRaw('jumlahPcs','this.value')}"></div>
+      </div>
+      <label class="flabel">Nama Mandor <span style="font-weight:400;color:var(--on-surface-variant);">(opsional, 1 saja)</span></label>
+      <input type="text" list="namaSuggest" placeholder="Nama mandor" oninput="onNamaInput(this)" onfocus="onNamaFocus(this)" value="${escapeHtml(mandor)}" onchange="pupukGrupUbah(${a},0,${arr.length},'nama',this.value)">
+      <label class="flabel">Lokasi Bongkar <span style="font-weight:400;color:var(--on-surface-variant);">boleh lebih dari 1 titik</span></label>
+      ${rows}
+      <button type="button" class="pill-btn sm outline" onclick="gorongTambahBongkar(${a})">${ic('plus',12)} Lokasi Bongkar</button>`;
+}
 function renderJenisLayananFields(e, suffix, mode){
   // mode: 'today' (entri utama hari ini, quickSave), 'secondary' (unit
   // tambahan hari ini, quickSaveEntry), atau 'edit' (edit baris dari Rekap ->
@@ -598,12 +647,7 @@ function renderJenisLayananFields(e, suffix, mode){
       ${e[fk('muatTipe')]==='Gula' ? `
         <label class="flabel">Lokasi, Nama Mandor &amp; Berat (kg) <span style="font-weight:400;color:var(--on-surface-variant);">boleh lebih dari 1 lokasi dalam 1 kali jalan</span></label>${lokasiNamaPairInput('lokasi', {mandor:true, beratKg:true})}
       ` : ''}
-      ${isGorong(e[fk('muatTipe')]) ? `
-      <div class="grid2">
-        <div><label class="flabel">Lokasi Asal (Muat)</label>${lokasiInput('lokasiMuat')}</div>
-        <div><label class="flabel">Lokasi Bongkar</label>${lokasiInput('lokasiBongkar')}</div>
-        <div><label class="flabel">Jumlah (pcs)</label><input type="text" inputmode="numeric" value="${escapeHtml(e[fk('jumlahPcs')]||'')}" oninput="this.value=this.value.replace(/\\D/g,'').slice(0,5)" onchange="${chgRaw('jumlahPcs','this.value')}"></div>
-      </div>` : ''}
+      ${isGorong(e[fk('muatTipe')]) ? gorongFormHtml(e, mode, suffix, lokasiInput, chgRaw) : ''}
       ${(e[fk('muatTipe')] && !isGorong(e[fk('muatTipe')]) && !['Gleaning','Bibit','Gula','Pupuk'].includes(e[fk('muatTipe')])) ? `
         <label class="flabel">Lokasi &amp; Nama Mandor <span style="font-weight:400;color:var(--on-surface-variant);">(opsional) &middot; boleh lebih dari 1 lokasi dalam 1 kali jalan</span></label>${lokasiNamaPairInput('lokasi', {mandor:true})}
       ` : ''}
@@ -1013,7 +1057,10 @@ function refreshLokasiDatalist(filterText){
   matches.reverse();
   matches = matches.slice(0,7);
   const dl = document.getElementById('lokasiSuggest');
-  if(dl) dl.innerHTML = matches.map(l=>`<option value="${escapeHtml(l)}">`).join('');
+  /* Isi daftar HANYA diganti kalau memang berbeda. Menulis ulang isi yang sama membuat pop-up saran
+   * bawaan Android digambar ulang di tengah jalan (tampil abu-abu/transparan). */
+  const html = matches.map(l=>`<option value="${escapeHtml(l)}">`).join('');
+  if(dl && dl.dataset.isi!==html){ dl.innerHTML = html; dl.dataset.isi = html; }
 }
 function fmtJamTitikLive(v){
   const digits = String(v||'').replace(/\D/g,'').slice(0,4);
@@ -1063,7 +1110,8 @@ function refreshNamaDatalist(filterText){
   if(q) matches = matches.filter(n=>n.toLowerCase().includes(q));
   matches = matches.slice(0,6);
   const dl = document.getElementById('namaSuggest');
-  if(dl) dl.innerHTML = matches.map(n=>`<option value="${escapeHtml(n)}">`).join('');
+  const html = matches.map(n=>`<option value="${escapeHtml(n)}">`).join('');
+  if(dl && dl.dataset.isi!==html){ dl.innerHTML = html; dl.dataset.isi = html; }
 }
 function onNamaFocus(el){
   refreshNamaDatalist(el.value);
@@ -1085,7 +1133,7 @@ function onNamaInput(el){
   if(lastSeg.length>=2) refreshNamaDatalist(lastSeg);
   else {
     const dl = document.getElementById('namaSuggest');
-    if(dl) dl.innerHTML = '';
+    if(dl && dl.dataset.isi){ dl.innerHTML = ''; dl.dataset.isi = ''; }
   }
 }
 function stripDots(v){ return v==null?'':String(v).replace(/\./g,''); }
