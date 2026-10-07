@@ -515,7 +515,8 @@ function riwayatUntukBlok(label){
         jenis = e['jenisLayanan'+slotCocok] || e.jenisLayanan;
         tonase = e['tonaseKg'+slotCocok];
       }
-      const detail = (jenis==='Loading' && tonase) ? (fmtThousandsLive(String(tonase))+' kg')
+      const detail = (jenis==='Loading' && isGorong(e['muatTipe'+(slotCocok||'')]) && e['jumlahPcs'+(slotCocok||'')]) ? (e['jumlahPcs'+(slotCocok||'')]+' pcs')
+        : (jenis==='Loading' && tonase) ? (fmtThousandsLive(String(tonase))+' kg')
         : (isEkstraPagi(jenis) ? (e['ekstraTipe'+(slotCocok||'')]||'') : '');
       // Nama yang ditampilkan HANYA yang benar-benar BERPASANGAN dengan lokasi
       // ini - bukan gabungan semua nama di entri itu - supaya tidak tertukar
@@ -587,7 +588,7 @@ function terapkanLokasiKeEntry(blockId, entryId){
   const b = PETA_BLOCKS.find(x=>x.id===blockId);
   const e = ENTRIES.find(x=>x.id===entryId);
   if(!b || !e) return;
-  if(e.jenisLayanan==='Loading' && e.muatTipe==='Bibit'){
+  if(e.jenisLayanan==='Loading' && (e.muatTipe==='Bibit' || isGorong(e.muatTipe))){
     if(!e.lokasiMuat){ e.lokasiMuat = b.label; toast('Lokasi Muat diisi: '+b.label); }
     else { e.lokasiBongkar = b.label; toast('Lokasi Bongkar diisi: '+b.label); }
     saveEntries();
@@ -663,12 +664,13 @@ function namaCetakRows(namaFilterLower, dariIso, sampaiIso){
       // Loading selain Pupuk/Gula (Gleaning, Bibit, atau Tipe belum dipilih) tidak
       // punya isian Nama - tetap dicatat 1 baris (Nama "-") supaya riwayat harian
       // lengkap. Kalau kolom Nama difilter, baris tanpa nama ini otomatis tidak ikut.
-      if(jenis==='Loading' && ['','Gleaning','Bibit'].includes(muatTipe||'')){
+      if(jenis==='Loading' && (['','Gleaning','Bibit'].includes(muatTipe||'') || isGorong(muatTipe))){
         if(adaFilter) return;
-        const blok = muatTipe==='Bibit'
+        const blok = (muatTipe==='Bibit' || isGorong(muatTipe))
           ? [e[fk('lokasiMuat')], e[fk('lokasiBongkar')]].filter(Boolean).join(' -> ')
           : lokasiArrGetForDisplay(e, lokasiField).filter(Boolean).join(', ');
-        const detail = muatTipe==='Gleaning' ? ['Gleaning', kg(e[fk('tonaseKg')])].filter(Boolean).join(': ') : (muatTipe||'');
+        const detail = muatTipe==='Gleaning' ? ['Gleaning', kg(e[fk('tonaseKg')])].filter(Boolean).join(': ')
+          : (isGorong(muatTipe) ? [muatTipe, e[fk('jumlahPcs')] ? e[fk('jumlahPcs')]+' pcs' : ''].filter(Boolean).join(': ') : (muatTipe||''));
         rows.push(baris('-', blok, '', 0, detail));
         return;
       }
@@ -881,7 +883,7 @@ function getExportRows(){
         const jenisPupukList = tipe==='Pupuk' ? [...new Set(arr.map(p=>p.jenisPupuk).filter(Boolean))].join(', ') : '';
         return [tipe, jenisPupukList, totalKg?totalKg+' kg':''].filter(Boolean).join(' / ');
       }
-      return [tipe, e[fk('tonaseKg')]?e[fk('tonaseKg')]+' kg':''].filter(Boolean).join(' / ');
+      return [tipe, e[fk('tonaseKg')]?e[fk('tonaseKg')]+' kg':'', (isGorong(tipe) && e[fk('jumlahPcs')]) ? e[fk('jumlahPcs')]+' pcs' : ''].filter(Boolean).join(' / ');
     }
     if(jenis==='Drone') return e[fk('droneJenis')]||'';
     if(isEkstraPagi(jenis)) return e[fk('ekstraTipe')]||'';
@@ -890,7 +892,7 @@ function getExportRows(){
   };
   const lokasiUntukLayanan = (e, jenis, suffix) => {
     const fk = (name)=>name+suffix;
-    if(jenis==='Loading' && e[fk('muatTipe')]==='Bibit') return [e[fk('lokasiMuat')],e[fk('lokasiBongkar')]].filter(Boolean).join(' -> ');
+    if(jenis==='Loading' && (e[fk('muatTipe')]==='Bibit' || isGorong(e[fk('muatTipe')]))) return [e[fk('lokasiMuat')],e[fk('lokasiBongkar')]].filter(Boolean).join(' -> ');
     // Antar/Jemput Tenaga: cetak seluruh RANTAI perpindahan antar blok + penanda ulang.
     if(jenis==='Antar/Jemput Tenaga'){
       const um = ulangCacheExport[e.date] || (ulangCacheExport[e.date] = antarBlokUlangMap(e.date));

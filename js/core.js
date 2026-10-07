@@ -84,6 +84,8 @@ let PUPUK_JENIS_LIST = LS.get('v2_pupukjenis', []); // [string, ...] - daftar Je
 let DRONE_JENIS_LIST = LS.get('v2_dronejenis', ['Penyemprotan','Pemetaan']);
 let EKSTRA_TIPE_LIST = LS.get('v2_ekstratipe', ['Ngupu','Weeding']); // Tipe untuk Jenis Layanan "Ekstra Pagi"
 /* Jenis Layanan "Ekstra Pagi" (kegiatan sebelum kegiatan utama: ngupu/weeding) - dicocokkan tanpa peduli huruf besar/kecil. */
+/* Tipe Loading "Gorong-gorong" (tulisan sendiri): Lokasi Muat/Bongkar + Jumlah pcs, seperti Bibit. */
+function isGorong(t){ return /^gorong/.test(String(t||'').trim().toLowerCase()); }
 function isEkstraPagi(j){ return String(j||'').trim().toLowerCase()==='ekstra pagi'; }
 let SHIFT_LIST = LS.get('v2_shift', ['Pagi','Siang','Malam']);
 /* Shift OPERATOR yang diantar/dijemput (beda dengan SHIFT_LIST di atas yang

@@ -598,7 +598,13 @@ function renderJenisLayananFields(e, suffix, mode){
       ${e[fk('muatTipe')]==='Gula' ? `
         <label class="flabel">Lokasi, Nama Mandor &amp; Berat (kg) <span style="font-weight:400;color:var(--on-surface-variant);">boleh lebih dari 1 lokasi dalam 1 kali jalan</span></label>${lokasiNamaPairInput('lokasi', {mandor:true, beratKg:true})}
       ` : ''}
-      ${(e[fk('muatTipe')] && !['Gleaning','Bibit','Gula','Pupuk'].includes(e[fk('muatTipe')])) ? `
+      ${isGorong(e[fk('muatTipe')]) ? `
+      <div class="grid2">
+        <div><label class="flabel">Lokasi Asal (Muat)</label>${lokasiInput('lokasiMuat')}</div>
+        <div><label class="flabel">Lokasi Bongkar</label>${lokasiInput('lokasiBongkar')}</div>
+        <div><label class="flabel">Jumlah (pcs)</label><input type="text" inputmode="numeric" value="${escapeHtml(e[fk('jumlahPcs')]||'')}" oninput="this.value=this.value.replace(/\\D/g,'').slice(0,5)" onchange="${chgRaw('jumlahPcs','this.value')}"></div>
+      </div>` : ''}
+      ${(e[fk('muatTipe')] && !isGorong(e[fk('muatTipe')]) && !['Gleaning','Bibit','Gula','Pupuk'].includes(e[fk('muatTipe')])) ? `
         <label class="flabel">Lokasi &amp; Nama Mandor <span style="font-weight:400;color:var(--on-surface-variant);">(opsional) &middot; boleh lebih dari 1 lokasi dalam 1 kali jalan</span></label>${lokasiNamaPairInput('lokasi', {mandor:true})}
       ` : ''}
       ${e[fk('muatTipe')]==='Pupuk' ? `
@@ -689,8 +695,8 @@ function lokasiArrTambah(entryId, mode, fieldBase){
   saveEntries();
   if(mode==='edit'){ expandedRowId=entryId; renderRekap(); } else renderHari();
 }
-const LAYANAN2_FIELDS = ['jenisLayanan2','tipeAntar2','kegiatan2','muatTipe2','tonaseKg2','lokasi2','lokasiArr2','lokasi2PasanganArr','lokasiMuat2','lokasiBongkar2','droneJenis2','ekstraTipe2','shift2','nama2','nama2Arr','hanyaSatuArah2','arahAntarJemput2'];
-const LAYANAN3_FIELDS = ['jenisLayanan3','tipeAntar3','kegiatan3','muatTipe3','tonaseKg3','lokasi3','lokasiArr3','lokasi3PasanganArr','lokasiMuat3','lokasiBongkar3','droneJenis3','ekstraTipe3','shift3','nama3','nama3Arr','hanyaSatuArah3','arahAntarJemput3'];
+const LAYANAN2_FIELDS = ['jenisLayanan2','tipeAntar2','kegiatan2','muatTipe2','tonaseKg2','lokasi2','lokasiArr2','lokasi2PasanganArr','lokasiMuat2','lokasiBongkar2','jumlahPcs2','droneJenis2','ekstraTipe2','shift2','nama2','nama2Arr','hanyaSatuArah2','arahAntarJemput2'];
+const LAYANAN3_FIELDS = ['jenisLayanan3','tipeAntar3','kegiatan3','muatTipe3','tonaseKg3','lokasi3','lokasiArr3','lokasi3PasanganArr','lokasiMuat3','lokasiBongkar3','jumlahPcs3','droneJenis3','ekstraTipe3','shift3','nama3','nama3Arr','hanyaSatuArah3','arahAntarJemput3'];
 /* Tambah/hapus Jenis Layanan ke-2/ke-3 - KHUSUS unit yang sama, hari yang sama
  * (mis. semprot 2 bahan berbeda, atau beberapa kegiatan berbeda dalam 1 hari
  * dengan unit yang sama - operator siang lalu antar mekanik, dst). Kalau perlu
