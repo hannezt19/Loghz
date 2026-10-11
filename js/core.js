@@ -81,7 +81,7 @@ let TIPE_ANTAR_LIST = LS.get('v2_tipeantar', ['Pekerja Kebun','Tebang','Tanam'])
 let KEGIATAN_LIST = LS.get('v2_kegiatan', ['Pel. Umum','Pemupukan','Penyemprotan']);
 let MUAT_TIPE_LIST = LS.get('v2_muattipe', ['Bibit','Gleaning','Gula','Pupuk']);
 let PUPUK_JENIS_LIST = LS.get('v2_pupukjenis', []); // [string, ...] - daftar Jenis Pupuk, bisa ditambah sendiri lewat "+ Lainnya"
-let DRONE_JENIS_LIST = LS.get('v2_dronejenis', ['Penyemprotan','Pemetaan']);
+let DRONE_JENIS_LIST = LS.get('v2_dronejenis', ['Pemetaan','ZPK','Prevatone']);
 let EKSTRA_TIPE_LIST = LS.get('v2_ekstratipe', ['Ngupu','Weeding']); // Tipe untuk Jenis Layanan "Ekstra Pagi"
 /* Jenis Layanan "Ekstra Pagi" (kegiatan sebelum kegiatan utama: ngupu/weeding) - dicocokkan tanpa peduli huruf besar/kecil. */
 /* Tipe Loading "Gorong-gorong" (tulisan sendiri): Lokasi Muat/Bongkar + Jumlah pcs, seperti Bibit. */

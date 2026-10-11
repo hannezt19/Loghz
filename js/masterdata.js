@@ -561,6 +561,21 @@ function gorongFormHtml(e, mode, suffix, lokasiInput, chgRaw){
       ${rows}
       <button type="button" class="pill-btn sm outline" onclick="gorongTambahBongkar(${a})">${ic('plus',12)} Lokasi Bongkar</button>`;
 }
+/* 1 nama (di atas) + beberapa lokasi (di bawah). Nama disalin ke semua baris pasangan, jadi Peta/Riwayat
+ * per Nama/backup tetap membaca data yang sama. */
+function namaSatuLokasiBanyakHtml(e, mode, lokasiField, namaField, arr){
+  const a = `'${e.id}','${mode}','${lokasiField}','${namaField}'`;
+  const nama = (arr.find(p=>String(p.nama||'').trim()) || arr[0]).nama || '';
+  const rows = arr.map((p,idx)=>`
+      <div style="display:flex;gap:6px;align-items:center;margin-bottom:6px;">
+        <input type="text" list="lokasiSuggest" placeholder="Lokasi ${idx+1}" style="flex:1;min-width:0;margin-bottom:0;" oninput="onLokasiInput(this)" onfocus="onLokasiFocus(this)" value="${escapeHtml(p.lokasi||'')}" onchange="pasanganArrChange(${a},${idx},'lokasi',this.value)">
+        ${arr.length>1 ? `<button type="button" class="icon-btn" title="Hapus lokasi ini" style="flex:0 0 auto;" onclick="pupukHapusBaris(${a},${idx})">${ic('trash',16)}</button>` : ''}
+      </div>`).join('');
+  return `
+      <input type="text" list="namaSuggest" placeholder="Nama (1 saja)" oninput="onNamaInput(this)" onfocus="onNamaFocus(this)" value="${escapeHtml(nama)}" onchange="pupukGrupUbah(${a},0,${arr.length},'nama',this.value)">
+      ${rows}
+      <button type="button" class="pill-btn sm outline" onclick="gorongTambahBongkar(${a})">${ic('plus',12)} Lokasi</button>`;
+}
 function renderJenisLayananFields(e, suffix, mode){
   // mode: 'today' (entri utama hari ini, quickSave), 'secondary' (unit
   // tambahan hari ini, quickSaveEntry), atau 'edit' (edit baris dari Rekap ->
@@ -595,6 +610,11 @@ function renderJenisLayananFields(e, suffix, mode){
     const lokasiField = fk(lokasiFieldBase);
     const namaField = fk('nama');
     const arr = pasanganArrGetForDisplay(e, lokasiField, namaField);
+    /* 1 nama + banyak lokasi (Drone). Kalau data lama punya nama BERBEDA per baris, tetap tampilan lama
+     * supaya tidak ada nama yang tertimpa. */
+    if(opts.namaSatu && new Set(arr.map(p=>normBlokKey(p.nama)).filter(Boolean)).size<=1){
+      return namaSatuLokasiBanyakHtml(e, mode, lokasiField, namaField, arr);
+    }
     /* Rantai perpindahan (Antar/Jemput): kelompok per mandor, tiap mandor punya
      * daftar lokasi berurutan. Data lama otomatis dikelompokkan lewat nama mandor. */
     if(opts.rantai){
@@ -657,7 +677,7 @@ function renderJenisLayananFields(e, suffix, mode){
     ` : ''}
     ${jenis==='Drone' ? `
       <div style="margin-top:8px;"><label class="flabel">Jenis Drone</label>${sel('droneJenis', DRONE_JENIS_LIST)}</div>
-      <label class="flabel">Lokasi &amp; Nama <span style="font-weight:400;color:var(--on-surface-variant);">(opsional) &middot; boleh lebih dari 1, pisah pakai koma</span></label>${lokasiNamaPairInput('lokasi')}
+      <label class="flabel">Nama &amp; Lokasi <span style="font-weight:400;color:var(--on-surface-variant);">(opsional) &middot; 1 nama, boleh banyak lokasi</span></label>${lokasiNamaPairInput('lokasi', {namaSatu:true})}
     ` : ''}
     ${jenis==='Operator' ? `
       <div style="margin-top:8px;"><label class="flabel">Shift (Anda)</label>${sel('shift', SHIFT_LIST)}</div>

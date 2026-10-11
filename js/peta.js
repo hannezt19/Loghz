@@ -695,6 +695,19 @@ function namaCetakRows(namaFilterLower, dariIso, sampaiIso){
         if(!adaFilter) rows.push(baris('-', '-', '', 0, detailDasar));
         return;
       }
+      // Drone: 1 baris per nama, kolom Blok berisi SEMUA lokasinya (dipisah koma).
+      if(jenis==='Drone'){
+        antarGrupList(pasangan).forEach(gr=>{
+          const g = pasangan.slice(gr.start, gr.start+gr.count);
+          if(adaFilter){
+            const namaDiBaris = splitNamaKoma(g[0].nama||'');
+            if(!namaDiBaris.some(n=>namaFilterLower.includes(n.toLowerCase()))) return;
+          }
+          const lok = g.map(p=>String(p.lokasi||'').trim()).filter(Boolean).join(', ');
+          rows.push(baris(g[0].nama, lok || '-', '', 0, detailDasar));
+        });
+        return;
+      }
       // Antar/Jemput Tenaga: 1 baris per mandor, kolom Blok berisi RANTAI perpindahan
       // "Blok 1 (10) -> Blok 2 (5) -> ..." dan Org = jumlah tenaga tetap mandor itu (bukan
       // dijumlah antar blok, karena orangnya sama, hanya berpindah/terbagi).
@@ -902,6 +915,10 @@ function getExportRows(){
     const fk = (name)=>name+suffix;
     if(jenis==='Loading' && e[fk('muatTipe')]==='Bibit') return [e[fk('lokasiMuat')],e[fk('lokasiBongkar')]].filter(Boolean).join(' -> ');
     if(jenis==='Loading' && isGorong(e[fk('muatTipe')])) return gorongRuteTeks(e, suffix);
+    if(jenis==='Drone'){
+      const l = pasanganArrGetForDisplay(e, fk('lokasi'), fk('nama')).map(p=>String(p.lokasi||'').trim()).filter(Boolean);
+      if(l.length) return l.join(', ');
+    }
     // Antar/Jemput Tenaga: cetak seluruh RANTAI perpindahan antar blok + penanda ulang.
     if(jenis==='Antar/Jemput Tenaga'){
       const um = ulangCacheExport[e.date] || (ulangCacheExport[e.date] = antarBlokUlangMap(e.date));

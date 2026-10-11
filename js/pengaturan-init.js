@@ -410,7 +410,14 @@ async function bootApp(){
     KEGIATAN_LIST = LS.get('v2_kegiatan', ['Pel. Umum','Pemupukan','Penyemprotan']);
     MUAT_TIPE_LIST = LS.get('v2_muattipe', ['Bibit','Gleaning','Gula','Pupuk']);
     PUPUK_JENIS_LIST = LS.get('v2_pupukjenis', []);
-    DRONE_JENIS_LIST = LS.get('v2_dronejenis', ['Penyemprotan','Pemetaan']);
+    DRONE_JENIS_LIST = LS.get('v2_dronejenis', ['Pemetaan','ZPK','Prevatone']);
+    // Sekali jalan: Jenis Drone jadi Pemetaan / ZPK / Prevatone ("Penyemprotan" diganti ZPK, termasuk di catatan lama).
+    if(!LS.get('v2_mig_drone_zpk', false)){
+      DRONE_JENIS_LIST = ['Pemetaan','ZPK','Prevatone']; saveDroneJenisList();
+      ENTRIES.forEach(e=>['droneJenis','droneJenis2','droneJenis3'].forEach(k=>{ if(e[k]==='Penyemprotan') e[k]='ZPK'; }));
+      saveEntries();
+      LS.set('v2_mig_drone_zpk', true);
+    }
     EKSTRA_TIPE_LIST = LS.get('v2_ekstratipe', ['Ngupu','Weeding']);
     // Pastikan Jenis Layanan "Ekstra Pagi" ada di daftar (tidak menimpa kalau sudah dibuat sendiri).
     if(!JENIS_LAYANAN_LIST.some(isEkstraPagi)){ JENIS_LAYANAN_LIST = JENIS_LAYANAN_LIST.concat(['Ekstra Pagi']); saveJenisList(); }
