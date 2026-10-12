@@ -155,10 +155,58 @@ function renderPetaEditOverlaySvg(){
  * nama per pencarian (bukan daftar dipisah koma seperti di Cetak). ----- */
 let petaCariNamaAktif = false;
 let petaCariNamaQuery = '';
+let petaCariMode = 'nama'; // 'nama' | 'blok'
 function togglePetaCariNama(){
   petaCariNamaAktif = !petaCariNamaAktif;
-  if(!petaCariNamaAktif) petaCariNamaQuery = '';
+  if(!petaCariNamaAktif){ petaCariNamaQuery = ''; petaCariMode = 'nama'; }
   renderPeta();
+}
+/* Saklar Nama | Blok di kolom pencarian. Ganti mode = kosongkan kolom. */
+function setPetaCariMode(m){
+  if(petaCariMode===m) return;
+  petaCariMode = m;
+  petaCariNamaQuery = '';
+  renderPeta();
+  setTimeout(()=>{ const i=document.getElementById('petaCariInput'); if(i) i.focus(); }, 50);
+}
+/* Luas disimpan sebagai teks berkoma ("7,95"). Titik/koma dianggap sama. */
+function luasNormalisasi(v){
+  let t = String(v==null?'':v).trim().replace(/\./g,',').replace(/\s+/g,'');
+  t = t.replace(/,+$/,'');
+  return t;
+}
+function luasValid(t){ return t==='' || /^\d+(,\d+)?$/.test(t); }
+function luasLabel(b){ return (b && b.luas) ? b.luas+' ha' : ''; }
+/* Mode Blok: titik/koma = cari LUAS (awalan: "7," -> semua 7,x ; "7,9" -> 7,9 &
+ * 7,95). "/" atau spasi = cari NO BLOK ("10/", "10 T"; nol depan diabaikan).
+ * Angka polos tanpa tanda tidak dicari. */
+function blokTerhighlightUntukBlok(q){
+  const set = new Set();
+  q = String(q||'');
+  if(!q.trim()) return set;
+  if(/^\s*\d+[.,]\d*\s*$/.test(q)){
+    const qn = q.trim().replace(',','.');
+    PETA_BLOCKS.forEach(b=>{
+      if(!b.luas) return;
+      if((String(b.luas).replace(',','.')+'.').startsWith(qn) || String(b.luas).replace(',','.').startsWith(qn)) set.add(b.label);
+    });
+    return set;
+  }
+  if(/[\/ ]/.test(q)){
+    let n = q.toUpperCase().replace(/\//g,' ').replace(/\s+/g,' ').trimStart();
+    if(/^\d /.test(n)) n = '0'+n;
+    const mulaiAngka = /^\d/.test(n);
+    const nt = n.trim();
+    if(!nt) return set;
+    PETA_BLOCKS.forEach(b=>{
+      const l = String(b.label||'').toUpperCase();
+      if(mulaiAngka ? l.startsWith(n.endsWith(' ')?n:nt) : l.includes(nt)) set.add(b.label);
+    });
+  }
+  return set;
+}
+function blokTerhighlightPeta(q){
+  return petaCariMode==='blok' ? blokTerhighlightUntukBlok(q) : blokTerhighlightUntukNama(q);
 }
 /* FIX: dulu tiap ketik 1 huruf memanggil renderPeta() penuh (mengganti ulang
  * SELURUH innerHTML layar Peta, termasuk kotak input itu sendiri) - input-nya
@@ -167,8 +215,8 @@ function togglePetaCariNama(){
  * kotak input & sisa layar tidak disentuh sama sekali. */
 function onPetaCariNamaInput(el){
   petaCariNamaQuery = el.value;
-  refreshNamaDatalist(el.value);
-  const highlightSet = blokTerhighlightUntukNama(petaCariNamaQuery);
+  if(petaCariMode==='nama') refreshNamaDatalist(el.value);
+  const highlightSet = blokTerhighlightPeta(petaCariNamaQuery);
   document.querySelectorAll('#petaFullWrap polygon[data-blok]').forEach(poly=>{
     const on = highlightSet.has(poly.getAttribute('data-blok'));
     poly.setAttribute('fill', on ? 'rgba(211,47,47,0.38)' : 'rgba(46,125,50,0.14)');
@@ -216,7 +264,7 @@ function renderPeta(){
     return;
   }
   const svgPoints = petaDrawPoints.map(p=>p.x+','+p.y).join(' ');
-  const highlightSet = petaCariNamaAktif ? blokTerhighlightUntukNama(petaCariNamaQuery) : new Set();
+  const highlightSet = petaCariNamaAktif ? blokTerhighlightPeta(petaCariNamaQuery) : new Set();
   host.innerHTML = `
     <div id="petaFullWrap" style="position:relative;width:100%;height:100%;overflow:hidden;">
       <div id="petaImgWrap" style="position:relative;width:100%;height:100%;overflow:hidden;touch-action:none;" onclick="handlePetaTap(event)" ontouchstart="petaTouchStart(event)" ontouchmove="petaTouchMove(event)" ontouchend="petaTouchEnd(event)">
@@ -236,7 +284,13 @@ function renderPeta(){
 
       ${(petaCariNamaAktif && !petaEditingBlockId) ? `
       <div style="position:absolute;left:10px;right:10px;top:10px;background:var(--surface);border-radius:12px;padding:5px 10px;box-shadow:0 3px 12px rgba(0,0,0,.3);z-index:45;">
-        <input type="text" list="namaSuggest" placeholder="Ketik nama untuk highlight blok" value="${escapeHtml(petaCariNamaQuery)}" style="margin-bottom:0;height:38px;" oninput="onPetaCariNamaInput(this)" onfocus="refreshNamaDatalist(this.value)">
+        <div style="display:flex;gap:8px;align-items:center;">
+          <input type="text" id="petaCariInput" ${petaCariMode==='nama'?'list="namaSuggest"':''} placeholder="${petaCariMode==='nama'?'Ketik nama untuk highlight blok':'Luas: 7, / 7,9 \u00b7 Blok: 10/ atau 10 T'}" value="${escapeHtml(petaCariNamaQuery)}" style="margin-bottom:0;height:38px;flex:1;min-width:0;" oninput="onPetaCariNamaInput(this)" ${petaCariMode==='nama'?'onfocus="refreshNamaDatalist(this.value)"':''}>
+          <div style="display:flex;flex-shrink:0;border:1px solid var(--outline-variant);border-radius:10px;overflow:hidden;">
+            <button onclick="setPetaCariMode('nama')" style="border:none;padding:0 10px;height:38px;font-size:12px;font-weight:600;background:${petaCariMode==='nama'?'var(--primary)':'transparent'};color:${petaCariMode==='nama'?'#fff':'var(--on-surface)'};">Nama</button>
+            <button onclick="setPetaCariMode('blok')" style="border:none;padding:0 10px;height:38px;font-size:12px;font-weight:600;background:${petaCariMode==='blok'?'var(--primary)':'transparent'};color:${petaCariMode==='blok'?'#fff':'var(--on-surface)'};">Blok</button>
+          </div>
+        </div>
       </div>
       ` : ''}
 
@@ -438,13 +492,25 @@ function undoPetaPoint(){
 }
 function finishPetaDraw(){
   if(petaDrawPoints.length < 3){ toast('Minimal 3 titik untuk membentuk area'); return; }
-  const typed = prompt('Nama blok ini?');
-  if(!typed){ return; }
+  openModal(`
+    <div class="mhead"><h2>Blok Baru</h2><button class="mclose" onclick="closeModal()">&times;</button></div>
+    <label class="flabel">No Blok</label>
+    <input type="text" id="petaNewLabel" placeholder="mis. 09 TS 30" autocomplete="off">
+    <label class="flabel">Luas (ha)</label>
+    <input type="text" inputmode="decimal" id="petaNewLuas" placeholder="mis. 7,95 (boleh kosong)" autocomplete="off">
+    <button class="btn-block" onclick="confirmPetaNewBlock()">Simpan</button>
+  `);
+}
+function confirmPetaNewBlock(){
+  const typed = (document.getElementById('petaNewLabel').value||'').trim();
+  if(!typed){ toast('No blok wajib diisi'); return; }
+  const luas = luasNormalisasi(document.getElementById('petaNewLuas').value);
+  if(!luasValid(luas)){ toast('Luas tidak valid (contoh 7,95)'); return; }
   // Auto-rapikan format (2 angka + 2 huruf kapital + 2 angka, mis. "20 BS 12")
   // - sama seperti field Lokasi di Hari Ini - supaya nama blok konsisten dan
   // bisa dicocokkan dengan akurat untuk fitur Riwayat.
   const label = fmtBlokKode(typed);
-  PETA_BLOCKS.push({id:uid(), label, points: petaDrawPoints.slice(), date: todayIso()});
+  PETA_BLOCKS.push({id:uid(), label, points: petaDrawPoints.slice(), date: todayIso(), luas});
   savePetaBlocks();
   if(!BLOKS.some(b=>b.kode.toLowerCase()===label.toLowerCase())){
     BLOKS.push({id:uid(), kode:label});
@@ -452,6 +518,7 @@ function finishPetaDraw(){
   }
   petaDrawing = false;
   petaDrawPoints = [];
+  closeModal();
   renderPeta();
   toast('Blok ditambahkan');
 }
@@ -538,7 +605,7 @@ function showPetaBlock(id){
   // titik non-blok (mis. Tower Pemadam, Pos Jaga, Gudang) juga punya Riwayat.
   const riwayat = riwayatUntukBlok(b.label);
   openModal(`
-    <div class="mhead"><h2>${ic('map')} ${escapeHtml(b.label)}</h2><button class="mclose" onclick="closeModal()">&times;</button></div>
+    <div class="mhead"><h2>${ic('map')} ${escapeHtml(b.label)}${b.luas?`<span style="margin-left:18px;font-size:14px;font-weight:500;color:var(--on-surface-variant);">${escapeHtml(luasLabel(b))}</span>`:''}</h2><button class="mclose" onclick="closeModal()">&times;</button></div>
     <button class="pill-btn" style="margin-bottom:14px;" onclick="usePetaBlockAsLokasi('${b.id}')">+ Lokasi Hari Ini</button>
     <div class="section-eyebrow">Riwayat</div>
     <div style="max-height:110px;overflow-y:auto;border:1px solid var(--outline-variant);border-radius:12px;padding:6px 12px;margin-bottom:16px;">
@@ -554,12 +621,31 @@ function showPetaBlock(id){
 function editPetaBlockName(id){
   const b = PETA_BLOCKS.find(x=>x.id===id);
   if(!b) return;
-  const typed = prompt('Ganti nama blok:', b.label);
-  if(!typed) return;
+  openModal(`
+    <div class="mhead"><h2>Edit Blok</h2><button class="mclose" onclick="closeModal()">&times;</button></div>
+    <label class="flabel">No Blok</label>
+    <input type="text" id="petaEditLabel" value="${escapeHtml(b.label)}" autocomplete="off">
+    <label class="flabel">Luas (ha)</label>
+    <input type="text" inputmode="decimal" id="petaEditLuas" value="${escapeHtml(b.luas||'')}" placeholder="mis. 7,95 (boleh kosong)" autocomplete="off">
+    <div style="display:flex;gap:8px;">
+      <button class="pill-btn" style="flex:1;justify-content:center;" onclick="savePetaBlockInfo('${b.id}')">Simpan</button>
+      <button class="pill-btn outline" style="flex:1;justify-content:center;" onclick="showPetaBlock('${b.id}')">Batal</button>
+    </div>
+  `);
+}
+function savePetaBlockInfo(id){
+  const b = PETA_BLOCKS.find(x=>x.id===id);
+  if(!b) return;
+  const typed = (document.getElementById('petaEditLabel').value||'').trim();
+  if(!typed){ toast('No blok wajib diisi'); return; }
+  const luas = luasNormalisasi(document.getElementById('petaEditLuas').value);
+  if(!luasValid(luas)){ toast('Luas tidak valid (contoh 7,95)'); return; }
   b.label = fmtBlokKode(typed); // auto-rapikan format, sama seperti waktu blok dibuat
+  b.luas = luas;
   savePetaBlocks();
-  toast('Nama blok diperbarui');
+  toast('Blok diperbarui');
   showPetaBlock(id);
+  if(typeof renderPeta==='function') renderPeta();
 }
 /* Kalau hari ini cuma ada 1 unit, langsung terapkan seperti biasa - tidak
  * perlu tanya apa-apa. Kalau ada lebih dari 1 (unit utama + tambahan), tanya
