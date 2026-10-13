@@ -16,9 +16,16 @@ function renderKelolaDriverModal(){
     </div>
     <div class="card card-flat">
       ${DRIVER_LIST.length===0 ? '<div class="empty-note">Belum ada driver. Tambahkan di atas.</div>' :
-        DRIVER_LIST.map(d=>`<div class="list-row"><span onclick="editDriver('${d.id}')" style="cursor:pointer;">${escapeHtml(d.nama)}</span><button class="icon-btn" onclick="deleteDriver('${d.id}')">${ic('trash')}</button></div>`).join('')}
+        DRIVER_LIST.map((d,i)=>`<div class="list-row"><span style="display:flex;align-items:center;">${urutBtnHtml(`geserDriver('${d.id}',-1)`,`geserDriver('${d.id}',1)`,i===0,i===DRIVER_LIST.length-1)}<span onclick="editDriver('${d.id}')" style="cursor:pointer;">${escapeHtml(d.nama)}</span></span><button class="icon-btn" onclick="deleteDriver('${d.id}')">${ic('trash')}</button></div>`).join('')}
     </div>
   `);
+}
+function geserDriver(id, arah){
+  const i = DRIVER_LIST.findIndex(d=>d.id===id), t = i+arah;
+  if(i<0 || t<0 || t>=DRIVER_LIST.length) return;
+  const tmp = DRIVER_LIST[i]; DRIVER_LIST[i] = DRIVER_LIST[t]; DRIVER_LIST[t] = tmp;
+  saveDriverList();
+  renderKelolaDriverModal();
 }
 function addDriver(){
   const val = document.getElementById('newDriverNama').value.trim();
@@ -375,6 +382,35 @@ function pupukDetailTeks(baris){
  * 1 mandor saja untuk seluruh rantai: nama disalin ke semua baris supaya
  * Peta/Riwayat per Nama/backup/data lama tetap jalan tanpa migrasi. */
 function normBlokKey(s){ return String(s||'').trim().toLowerCase().replace(/\s+/g,' '); }
+/* ===== BALANCE (blok dikerjakan sebagian) =====
+ * Saklar per baris lokasi: Selesai (default, tanpa tanda) | Balance (^).
+ * Berlaku untuk Antar/Jemput Tenaga, Drone, dan jenis layanan Custom. Disimpan
+ * di baris pasangan sebagai p.balance=true. Tanda cetak memakai "^" (ASCII,
+ * aman di font PDF). Blok dianggap balance sampai ada entri Selesai dengan
+ * blok + mandor + kegiatan yang sama (lihat blokBalanceSet di peta.js). */
+function balTanda(p){ return (p && p.balance) ? ' ^' : ''; }
+function balanceJenisBerlaku(jenis){
+  if(!jenis) return false;
+  if(jenis==='Loading' || jenis==='Operator') return false;
+  if(typeof isEkstraPagi==='function' && isEkstraPagi(jenis)) return false;
+  return true; // Antar/Jemput Tenaga, Drone, dan Custom
+}
+function balanceKegiatanKey(e, sfx, jenis){
+  let sub = '';
+  if(jenis==='Antar/Jemput Tenaga') sub = normBlokKey(e['kegiatan'+sfx]);
+  else if(jenis==='Drone') sub = normBlokKey(e['droneJenis'+sfx]);
+  return normBlokKey(jenis)+'|'+sub;
+}
+function balanceBtnHtml(a, idx, p){
+  const on = !!(p && p.balance);
+  return `<button type="button" title="${on?'Balance (belum selesai) - tap untuk Selesai':'Selesai - tap untuk tandai Balance'}" style="flex:0 0 30px;height:34px;padding:0;border-radius:8px;font-size:16px;font-weight:800;line-height:1;cursor:pointer;border:1.5px solid ${on?'#F9A825':'var(--outline-variant)'};background:${on?'#F9A825':'transparent'};color:${on?'#000':'var(--on-surface-variant)'};" onclick="pasanganArrBalance(${a},${idx})">^</button>`;
+}
+function pasanganArrBalance(entryId, mode, lokasiField, namaField, idx){
+  const e = ENTRIES.find(x=>x.id===entryId);
+  if(!e) return;
+  const arr = pasanganArrGetForDisplay(e, lokasiField, namaField);
+  pasanganArrChange(entryId, mode, lokasiField, namaField, idx, 'balance', !(arr[idx] && arr[idx].balance));
+}
 /* Hitung berapa kali tiap blok (+mandor yang sama) muncul di 1 tanggal, lintas
  * semua kegiatan Antar/Jemput Tenaga hari itu. Dipakai untuk penanda "ulang". */
 function antarBlokUlangMap(dateIso){
@@ -437,7 +473,7 @@ function rantaiBlokTeks(arr, ulangMap){
     const rantai = arr.slice(g.start, g.start+g.count).filter(p=>String(p.lokasi||'').trim()).map(p=>{
       const org = parseInt(p.jumlahOrang,10)||0;
       const u = blokUlangN(ulangMap, p);
-      return String(p.lokasi).trim()+(org?' ('+org+')':'')+(u?' [ulang '+u+'x]':'');
+      return String(p.lokasi).trim()+balTanda(p)+(org?' ('+org+')':'')+(u?' [ulang '+u+'x]':'');
     }).join(' >\n');
     if(!rantai) return '';
     const nm = String(arr[g.start].nama||'').trim();
@@ -492,6 +528,7 @@ function antarRantaiInput(e, mode, lokasiField, namaField, arr){
           ${badge}
           <input type="text" list="lokasiSuggest" placeholder="Blok / Lokasi" style="flex:1;min-width:0;margin-bottom:0;" oninput="onLokasiInput(this)" onfocus="onLokasiFocus(this)" value="${escapeHtml(p.lokasi||'')}" onchange="pasanganArrChange(${a},${idx},'lokasi',this.value)">
           ${numInput(p.jumlahOrang, 'Org', 'Jumlah orang di lokasi ini', `pasanganArrChange(${a},${idx},'jumlahOrang',this.value)`)}
+          ${balanceBtnHtml(a, idx, p)}
           ${arr.length>1 ? `<button type="button" class="icon-btn" title="Hapus lokasi ini" style="flex:0 0 auto;" onclick="pupukHapusBaris(${a},${idx})">${ic('trash',16)}</button>` : ''}
         </div>
         ${u ? `<div style="margin:2px 0 6px 28px;font-size:11.5px;font-weight:700;color:#C77700;">&#8635; ${u}x &middot; blok ini muncul ${u}x hari ini</div>` : ''}`);
@@ -569,6 +606,7 @@ function namaSatuLokasiBanyakHtml(e, mode, lokasiField, namaField, arr){
   const rows = arr.map((p,idx)=>`
       <div style="display:flex;gap:6px;align-items:center;margin-bottom:6px;">
         <input type="text" list="lokasiSuggest" placeholder="Lokasi ${idx+1}" style="flex:1;min-width:0;margin-bottom:0;" oninput="onLokasiInput(this)" onfocus="onLokasiFocus(this)" value="${escapeHtml(p.lokasi||'')}" onchange="pasanganArrChange(${a},${idx},'lokasi',this.value)">
+        ${balanceBtnHtml(a, idx, p)}
         ${arr.length>1 ? `<button type="button" class="icon-btn" title="Hapus lokasi ini" style="flex:0 0 auto;" onclick="pupukHapusBaris(${a},${idx})">${ic('trash',16)}</button>` : ''}
       </div>`).join('');
   return `
@@ -625,6 +663,7 @@ function renderJenisLayananFields(e, suffix, mode){
         <div style="display:flex;flex-wrap:${(opts.beratKg||opts.jenisPupuk)?'wrap':'nowrap'};gap:6px;margin-bottom:6px;">
           <input type="text" list="lokasiSuggest" placeholder="Lokasi" style="flex:1;min-width:120px;" oninput="onLokasiInput(this)" onfocus="onLokasiFocus(this)" value="${escapeHtml(p.lokasi||'')}" onchange="pasanganArrChange('${e.id}','${mode}','${lokasiField}','${namaField}',${idx},'lokasi',this.value)">
           <input type="text" list="namaSuggest" placeholder="Nama ${opts.mandor?'Mandor ':''}(opsional)" style="flex:1;min-width:120px;" oninput="onNamaInput(this)" onfocus="onNamaFocus(this)" value="${escapeHtml(p.nama||'')}" onchange="pasanganArrChange('${e.id}','${mode}','${lokasiField}','${namaField}',${idx},'nama',this.value)">
+          ${opts.balance ? balanceBtnHtml(`'${e.id}','${mode}','${lokasiField}','${namaField}'`, idx, p) : ''}
           ${opts.shift ? `<select style="flex:0 0 86px;" onchange="pasanganArrChange('${e.id}','${mode}','${lokasiField}','${namaField}',${idx},'shift',this.value)">
             <option value="">Shift?</option>
             ${OPERATOR_SHIFT_LIST.map(s=>`<option value="${s}" ${p.shift===s?'selected':''}>${s}</option>`).join('')}
@@ -677,7 +716,7 @@ function renderJenisLayananFields(e, suffix, mode){
     ` : ''}
     ${jenis==='Drone' ? `
       <div style="margin-top:8px;"><label class="flabel">Jenis Drone</label>${sel('droneJenis', DRONE_JENIS_LIST)}</div>
-      <label class="flabel">Nama &amp; Lokasi <span style="font-weight:400;color:var(--on-surface-variant);">(opsional) &middot; 1 nama, boleh banyak lokasi</span></label>${lokasiNamaPairInput('lokasi', {namaSatu:true})}
+      <label class="flabel">Nama &amp; Lokasi <span style="font-weight:400;color:var(--on-surface-variant);">(opsional) &middot; 1 nama, boleh banyak lokasi &middot; tombol ^ = balance (blok belum selesai)</span></label>${lokasiNamaPairInput('lokasi', {namaSatu:true})}
     ` : ''}
     ${jenis==='Operator' ? `
       <div style="margin-top:8px;"><label class="flabel">Shift (Anda)</label>${sel('shift', SHIFT_LIST)}</div>
@@ -688,7 +727,7 @@ function renderJenisLayananFields(e, suffix, mode){
       <label class="flabel">Lokasi &amp; Nama <span style="font-weight:400;color:var(--on-surface-variant);">(opsional) &middot; boleh lebih dari 1, pisah pakai koma</span></label>${lokasiNamaPairInput('lokasi')}
     ` : ''}
     ${jenis && !isEkstraPagi(jenis) && !['Antar/Jemput Tenaga','Loading','Drone','Operator'].includes(jenis) ? `
-      <label class="flabel">Lokasi &amp; Nama <span style="font-weight:400;color:var(--on-surface-variant);">(opsional) &middot; boleh lebih dari 1, pisah pakai koma</span></label>${lokasiNamaPairInput('lokasi')}
+      <label class="flabel">Lokasi &amp; Nama <span style="font-weight:400;color:var(--on-surface-variant);">(opsional) &middot; boleh lebih dari 1, pisah pakai koma &middot; tombol ^ = balance (blok belum selesai)</span></label>${lokasiNamaPairInput('lokasi', {balance:true})}
     ` : ''}
   `;
 }

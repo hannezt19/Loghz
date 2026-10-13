@@ -219,9 +219,10 @@ function onPetaCariNamaInput(el){
   const highlightSet = blokTerhighlightPeta(petaCariNamaQuery);
   document.querySelectorAll('#petaFullWrap polygon[data-blok]').forEach(poly=>{
     const on = highlightSet.has(poly.getAttribute('data-blok'));
-    poly.setAttribute('fill', on ? 'rgba(211,47,47,0.38)' : 'rgba(46,125,50,0.14)');
-    poly.setAttribute('stroke', on ? '#D32F2F' : '#2E7D32');
-    poly.setAttribute('stroke-width', on ? '0.25' : '0.15');
+    const bal = !on && poly.getAttribute('data-bal')==='1';
+    poly.setAttribute('fill', on ? 'rgba(211,47,47,0.38)' : (bal ? PETA_FILL_BAL : 'rgba(46,125,50,0.14)'));
+    poly.setAttribute('stroke', on ? '#D32F2F' : (bal ? PETA_STROKE_BAL : '#2E7D32'));
+    poly.setAttribute('stroke-width', on ? '0.25' : (bal ? '0.2' : '0.15'));
   });
 }
 /* Nama disimpan sebagai 1 field, tapi kadang ditulis beberapa nama sekaligus
@@ -248,6 +249,33 @@ function blokTerhighlightUntukNama(nama){
   });
   return set;
 }
+/* Blok BALANCE (kuning di Peta): untuk tiap kombinasi blok + mandor + kegiatan
+ * (Antar/Jemput Tenaga, Drone, Custom), status TERAKHIR (urut tanggal, lalu
+ * urutan entri) yang menentukan. Selesai dari mandor/kegiatan lain tidak
+ * menghapus tanda. */
+function blokBalanceSet(){
+  const last = {};
+  ENTRIES.forEach((e,ei)=>{
+    if(isSystemUnitId(e.btId)) return;
+    ['','2','3'].forEach(sfx=>{
+      const jenis = e['jenisLayanan'+sfx];
+      if(sfx!=='' && !e['adaLayanan'+sfx]) return;
+      if(!balanceJenisBerlaku(jenis)) return;
+      const keg = balanceKegiatanKey(e, sfx, jenis);
+      const ord = e.date+'#'+String(ei).padStart(6,'0');
+      pasanganArrGetForDisplay(e,'lokasi'+sfx,'nama'+sfx).forEach(p=>{
+        splitLokasiKoma(p.lokasi).forEach(l=>{
+          const k = l+'|'+normBlokKey(p.nama)+'|'+keg;
+          if(!last[k] || ord>=last[k].ord) last[k] = {ord, bal:!!p.balance, label:l};
+        });
+      });
+    });
+  });
+  const set = new Set();
+  Object.values(last).forEach(v=>{ if(v.bal) set.add(v.label); });
+  return set;
+}
+const PETA_FILL_BAL = 'rgba(249,168,37,0.45)', PETA_STROKE_BAL = '#F9A825';
 function renderPeta(){
   const host = document.getElementById('screen-peta');
   if(!petaImageLoaded){
@@ -265,6 +293,7 @@ function renderPeta(){
   }
   const svgPoints = petaDrawPoints.map(p=>p.x+','+p.y).join(' ');
   const highlightSet = petaCariNamaAktif ? blokTerhighlightPeta(petaCariNamaQuery) : new Set();
+  const balanceSet = blokBalanceSet();
   host.innerHTML = `
     <div id="petaFullWrap" style="position:relative;width:100%;height:100%;overflow:hidden;">
       <div id="petaImgWrap" style="position:relative;width:100%;height:100%;overflow:hidden;touch-action:none;" onclick="handlePetaTap(event)" ontouchstart="petaTouchStart(event)" ontouchmove="petaTouchMove(event)" ontouchend="petaTouchEnd(event)">
@@ -273,7 +302,8 @@ function renderPeta(){
           <svg viewBox="0 0 100 100" preserveAspectRatio="none" style="position:absolute;top:0;left:0;width:100%;height:100%;pointer-events:none;">
             ${PETA_BLOCKS.map(b=>{
               const on = highlightSet.has(b.label);
-              return `<polygon data-blok="${escapeHtml(b.label)}" points="${b.points.map(p=>p.x+','+p.y).join(' ')}" fill="${on?'rgba(211,47,47,0.38)':'rgba(46,125,50,0.14)'}" stroke="${on?'#D32F2F':'#2E7D32'}" stroke-width="${on?'0.25':'0.15'}" vector-effect="non-scaling-stroke"></polygon>`;
+              const bal = !on && balanceSet.has(b.label);
+              return `<polygon data-blok="${escapeHtml(b.label)}" data-bal="${bal?'1':''}" points="${b.points.map(p=>p.x+','+p.y).join(' ')}" fill="${on?'rgba(211,47,47,0.38)':(bal?PETA_FILL_BAL:'rgba(46,125,50,0.14)')}" stroke="${on?'#D32F2F':(bal?PETA_STROKE_BAL:'#2E7D32')}" stroke-width="${on?'0.25':(bal?'0.2':'0.15')}" vector-effect="non-scaling-stroke"></polygon>`;
             }).join('')}
             ${petaDrawing && petaDrawPoints.length>0 ? `<polyline points="${svgPoints}" fill="none" stroke="#1565C0" stroke-width="0.15" stroke-dasharray="1.2,0.8" vector-effect="non-scaling-stroke"></polyline>
               ${petaDrawPoints.map(p=>`<circle class="peta-drawdot" cx="${p.x}" cy="${p.y}" r="0.9" fill="#1565C0" stroke="#fff" stroke-width="0.3" vector-effect="non-scaling-stroke"></circle>`).join('')}` : ''}
@@ -589,7 +619,7 @@ function riwayatUntukBlok(label){
       // ini - bukan gabungan semua nama di entri itu - supaya tidak tertukar
       // kalau entrinya punya beberapa lokasi sekaligus.
       const namaCocok = pasanganPerSlot.flat().map(p=>p.nama).filter(Boolean);
-      return {date:e.date, btId:e.btId, jenis, detail, nama:namaCocok.join(', ')};
+      return {date:e.date, btId:e.btId, jenis, detail, nama:namaCocok.join(', '), balance:pasanganPerSlot.flat().some(p=>p.balance)};
     });
 }
 function fmtTglSingkat(iso){
@@ -609,7 +639,7 @@ function showPetaBlock(id){
     <button class="pill-btn" style="margin-bottom:14px;" onclick="usePetaBlockAsLokasi('${b.id}')">+ Lokasi Hari Ini</button>
     <div class="section-eyebrow">Riwayat</div>
     <div style="max-height:110px;overflow-y:auto;border:1px solid var(--outline-variant);border-radius:12px;padding:6px 12px;margin-bottom:16px;">
-      ${riwayat.length===0 ? '' : riwayat.map(r=>`<div style="font-size:11px;color:var(--on-surface-variant);padding:4px 0;border-bottom:1px solid var(--outline-variant);">${fmtTglSingkat(r.date)} &middot; ${escapeHtml(btLabel(r.btId))} &middot; ${escapeHtml(r.jenis||'-')}${r.detail?' &middot; '+escapeHtml(r.detail):''}${r.nama?' &middot; '+escapeHtml(r.nama):''}</div>`).join('')}
+      ${riwayat.length===0 ? '' : riwayat.map(r=>`<div style="font-size:11px;color:var(--on-surface-variant);padding:4px 0;border-bottom:1px solid var(--outline-variant);">${fmtTglSingkat(r.date)} &middot; ${escapeHtml(btLabel(r.btId))} &middot; ${escapeHtml(r.jenis||'-')}${r.balance?' <b style="color:#F9A825;">^</b>':''}${r.detail?' &middot; '+escapeHtml(r.detail):''}${r.nama?' &middot; '+escapeHtml(r.nama):''}</div>`).join('')}
     </div>
     <div style="display:flex;gap:8px;">
       <button class="pill-btn outline" style="flex:1;justify-content:center;" onclick="editPetaBlockName('${b.id}')">${ic('edit')} Nama</button>
@@ -789,7 +819,7 @@ function namaCetakRows(namaFilterLower, dariIso, sampaiIso){
             const namaDiBaris = splitNamaKoma(g[0].nama||'');
             if(!namaDiBaris.some(n=>namaFilterLower.includes(n.toLowerCase()))) return;
           }
-          const lok = g.map(p=>String(p.lokasi||'').trim()).filter(Boolean).join(', ');
+          const lok = g.filter(p=>String(p.lokasi||'').trim()).map(p=>String(p.lokasi).trim()+balTanda(p)).join(', ');
           rows.push(baris(g[0].nama, lok || '-', '', 0, detailDasar));
         });
         return;
@@ -825,7 +855,7 @@ function namaCetakRows(namaFilterLower, dariIso, sampaiIso){
         // untuk Antar/Jemput Tenaga.
         const shift = jenis==='Operator' ? (p.shift||'') : '';
         const org = jenis==='Antar/Jemput Tenaga' ? (parseInt(p.jumlahOrang,10)||0) : 0;
-        rows.push(baris(p.nama, p.lokasi, shift, org, it.detail));
+        rows.push(baris(p.nama, p.lokasi ? String(p.lokasi)+balTanda(p) : p.lokasi, shift, org, it.detail));
       });
     };
     cekSlot('lokasi','nama', e.jenisLayanan, e.id+'|', '');
@@ -1002,7 +1032,7 @@ function getExportRows(){
     if(jenis==='Loading' && e[fk('muatTipe')]==='Bibit') return [e[fk('lokasiMuat')],e[fk('lokasiBongkar')]].filter(Boolean).join(' -> ');
     if(jenis==='Loading' && isGorong(e[fk('muatTipe')])) return gorongRuteTeks(e, suffix);
     if(jenis==='Drone'){
-      const l = pasanganArrGetForDisplay(e, fk('lokasi'), fk('nama')).map(p=>String(p.lokasi||'').trim()).filter(Boolean);
+      const l = pasanganArrGetForDisplay(e, fk('lokasi'), fk('nama')).filter(p=>String(p.lokasi||'').trim()).map(p=>String(p.lokasi).trim()+balTanda(p));
       if(l.length) return l.join(', ');
     }
     // Antar/Jemput Tenaga: cetak seluruh RANTAI perpindahan antar blok + penanda ulang.
@@ -1010,6 +1040,10 @@ function getExportRows(){
       const um = ulangCacheExport[e.date] || (ulangCacheExport[e.date] = antarBlokUlangMap(e.date));
       const t = rantaiBlokTeks(pasanganArrGetForDisplay(e, fk('lokasi'), fk('nama')), um);
       if(t) return t;
+    }
+    if(balanceJenisBerlaku(jenis) && jenis!=='Antar/Jemput Tenaga' && jenis!=='Drone'){
+      const p0 = pasanganArrGetForDisplay(e, fk('lokasi'), fk('nama'))[0];
+      if(p0 && p0.balance && String(p0.lokasi||'').trim()) return String(p0.lokasi).trim()+balTanda(p0);
     }
     // Kalau lokasinya lebih dari 1 (1 kegiatan mencakup beberapa blok), yang
     // dicetak cuma yang PERTAMA sebagai wakil - biar laporan tetap ringkas.

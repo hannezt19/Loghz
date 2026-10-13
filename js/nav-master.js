@@ -78,6 +78,29 @@ function openKelolaUnit(){
   closeDrawer();
   renderKelolaUnitModal();
 }
+function urutBtnHtml(onUp, onDown, first, last){
+  const st = (dis)=>`border:none;background:transparent;padding:4px 6px;font-size:15px;line-height:1;color:${dis?'var(--outline-variant)':'var(--on-surface)'};${dis?'':'cursor:pointer;'}`;
+  return `<span style="display:inline-flex;flex-direction:column;margin-right:4px;"><button type="button" title="Naik" style="${st(first)}" ${first?'disabled':''} onclick="event.stopPropagation();${onUp}">&#9650;</button><button type="button" title="Turun" style="${st(last)}" ${last?'disabled':''} onclick="event.stopPropagation();${onDown}">&#9660;</button></span>`;
+}
+/* Pindah urutan unit (hanya antar unit asli; unit bawaan sistem tidak ikut). */
+function geserUnit(id, arah){
+  const idxs = UNITS.map((u,i)=>u.isSystem?-1:i).filter(i=>i>=0);
+  const pos = idxs.findIndex(i=>UNITS[i].id===id);
+  const tujuan = pos+arah;
+  if(pos<0 || tujuan<0 || tujuan>=idxs.length) return;
+  const a = idxs[pos], b = idxs[tujuan];
+  const tmp = UNITS[a]; UNITS[a] = UNITS[b]; UNITS[b] = tmp;
+  saveUnits();
+  renderKelolaUnitModal();
+}
+function geserKelola(kind, idx, arah){
+  const list = kelolaList(kind).slice();
+  const t = idx+arah;
+  if(t<0 || t>=list.length) return;
+  const tmp = list[idx]; list[idx] = list[t]; list[t] = tmp;
+  kelolaSetList(kind, list);
+  renderKelolaModal(kind);
+}
 function renderKelolaUnitModal(){
   const unitAsli = UNITS.filter(u=>!u.isSystem);
   const unitSistem = UNITS.filter(u=>u.isSystem);
@@ -90,9 +113,9 @@ function renderKelolaUnitModal(){
     </div>
     <div class="card card-flat">
       ${unitAsli.length===0 ? '<div class="empty-note">Belum ada unit. Tambahkan di atas.</div>' :
-        unitAsli.map(u=>`<div class="list-row" style="cursor:pointer;" onclick="openUnitEditModal('${u.id}')"><span>${escapeHtml(u.kode)}</span>${ic('edit',16)}</div>`).join('')}
+        unitAsli.map((u,i)=>`<div class="list-row" style="cursor:pointer;" onclick="openUnitEditModal('${u.id}')"><span style="display:flex;align-items:center;">${urutBtnHtml(`geserUnit('${u.id}',-1)`,`geserUnit('${u.id}',1)`,i===0,i===unitAsli.length-1)}${escapeHtml(u.kode)}</span>${ic('edit',16)}</div>`).join('')}
     </div>
-    <div class="field-sub" style="margin:8px 0 12px;">Tap sebuah unit untuk mengubah nama atau menghapusnya.</div>
+    <div class="field-sub" style="margin:8px 0 12px;">Tap sebuah unit untuk mengubah nama atau menghapusnya. Tombol &#9650;&#9660; mengatur urutan.</div>
     ${orphans.length>0 ? `<div class="card card-flat" style="border:1px solid var(--secondary);cursor:pointer;margin-bottom:12px;" onclick="openOrphanUnitList()"><div class="field-sub" style="color:var(--secondary);font-weight:700;">${orphans.length} unit lama datanya masih ada tapi labelnya hilang &middot; tap untuk pulihkan</div></div>` : ''}
     <div class="field-sub" style="margin:12px 0 4px;">Bawaan aplikasi (tidak bisa dihapus)</div>
     <div class="card card-flat">
@@ -483,7 +506,8 @@ function renderKelolaModal(kind){
     const aksi = terkunci
       ? `<span style="color:var(--on-surface-variant);padding:0 8px;" title="Jenis inti - dikunci">${lockSvg}</span>`
       : `<button class="icon-btn" title="Ganti nama" onclick="kelolaGantiNama('${kind}',${i})">${ic('edit')}</button><button class="icon-btn" title="Hapus dari daftar" onclick="kelolaHapus('${kind}',${i})">${ic('trash')}</button>`;
-    return `<div class="list-row"><span style="min-width:0;"><div>${escapeHtml(v)}</div>${info}</span><span style="display:flex;gap:2px;align-items:center;">${aksi}</span></div>`;
+    const urut = kind==='jenis' ? urutBtnHtml(`geserKelola('${kind}',${i},-1)`,`geserKelola('${kind}',${i},1)`,i===0,i===list.length-1) : '';
+    return `<div class="list-row"><span style="min-width:0;display:flex;align-items:center;">${urut}<span style="min-width:0;"><div>${escapeHtml(v)}</div>${info}</span></span><span style="display:flex;gap:2px;align-items:center;">${aksi}</span></div>`;
   }).join('');
   openModal(`
     <div class="mhead"><h2>${cfg.judul}</h2><button class="mclose" onclick="closeModal()">&times;</button></div>
