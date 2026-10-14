@@ -219,11 +219,18 @@ function onPetaCariNamaInput(el){
   const highlightSet = blokTerhighlightPeta(petaCariNamaQuery);
   document.querySelectorAll('#petaFullWrap polygon[data-blok]').forEach(poly=>{
     const on = highlightSet.has(poly.getAttribute('data-blok'));
-    const bal = !on && poly.getAttribute('data-bal')==='1';
-    poly.setAttribute('fill', on ? 'rgba(211,47,47,0.38)' : (bal ? PETA_FILL_BAL : 'rgba(46,125,50,0.14)'));
-    poly.setAttribute('stroke', on ? '#D32F2F' : (bal ? PETA_STROKE_BAL : '#2E7D32'));
-    poly.setAttribute('stroke-width', on ? '0.25' : (bal ? '0.2' : '0.15'));
+    poly.setAttribute('fill', on ? 'rgba(211,47,47,0.38)' : 'rgba(46,125,50,0.14)');
+    poly.setAttribute('stroke', on ? '#D32F2F' : '#2E7D32');
+    poly.setAttribute('stroke-width', on ? '0.25' : '0.15');
   });
+  const svg = document.querySelector('#petaFullWrap svg');
+  if(svg){
+    svg.querySelectorAll('.peta-baldot').forEach(c=>c.remove());
+    const tmp = document.createElementNS('http://www.w3.org/2000/svg','g');
+    tmp.innerHTML = petaBalanceDotsHtml(highlightSet);
+    Array.from(tmp.childNodes).forEach(c=>svg.appendChild(c));
+    applyPetaTransform();
+  }
 }
 /* Nama disimpan sebagai 1 field, tapi kadang ditulis beberapa nama sekaligus
  * dipisah koma dalam 1 kotak yang sama (mis. "Wayan , Karmani") - supaya
@@ -253,7 +260,7 @@ function blokTerhighlightUntukNama(nama){
  * (Antar/Jemput Tenaga, Drone, Custom), status TERAKHIR (urut tanggal, lalu
  * urutan entri) yang menentukan. Selesai dari mandor/kegiatan lain tidak
  * menghapus tanda. */
-function blokBalanceSet(){
+function blokBalanceSet(namaLower){
   const last = {};
   ENTRIES.forEach((e,ei)=>{
     if(isSystemUnitId(e.btId)) return;
@@ -264,6 +271,7 @@ function blokBalanceSet(){
       const keg = balanceKegiatanKey(e, sfx, jenis);
       const ord = e.date+'#'+String(ei).padStart(6,'0');
       pasanganArrGetForDisplay(e,'lokasi'+sfx,'nama'+sfx).forEach(p=>{
+        if(namaLower && !splitNamaKoma(p.nama).some(n=>n.toLowerCase()===namaLower)) return;
         splitLokasiKoma(p.lokasi).forEach(l=>{
           const k = l+'|'+normBlokKey(p.nama)+'|'+keg;
           if(!last[k] || ord>=last[k].ord) last[k] = {ord, bal:!!p.balance, label:l};
@@ -275,7 +283,41 @@ function blokBalanceSet(){
   Object.values(last).forEach(v=>{ if(v.bal) set.add(v.label); });
   return set;
 }
-const PETA_FILL_BAL = 'rgba(249,168,37,0.45)', PETA_STROKE_BAL = '#F9A825';
+/* Titik di dalam poligon untuk menaruh penanda (centroid; kalau jatuh di luar
+ * poligon cekung, cari titik dalam lewat grid kasar). */
+function petaTitikDalam(points){
+  let a=0,cx=0,cy=0;
+  for(let i=0,j=points.length-1;i<points.length;j=i++){
+    const f = points[j].x*points[i].y - points[i].x*points[j].y;
+    a+=f; cx+=(points[j].x+points[i].x)*f; cy+=(points[j].y+points[i].y)*f;
+  }
+  if(a!==0){
+    const c = {x:cx/(3*a), y:cy/(3*a)};
+    if(pointInPolygon(c, points)) return c;
+  }
+  const xs=points.map(p=>p.x), ys=points.map(p=>p.y);
+  const x0=Math.min(...xs), x1=Math.max(...xs), y0=Math.min(...ys), y1=Math.max(...ys);
+  let best=null, bestD=-1;
+  for(let i=1;i<10;i++) for(let k=1;k<10;k++){
+    const c = {x:x0+(x1-x0)*i/10, y:y0+(y1-y0)*k/10};
+    if(pointInPolygon(c, points)){
+      const d = Math.hypot(c.x-(x0+x1)/2, c.y-(y0+y1)/2);
+      if(best===null || d<bestD){ best=c; bestD=d; }
+    }
+  }
+  return best || {x:(x0+x1)/2, y:(y0+y1)/2};
+}
+/* Titik kuning = blok Balance, HANYA tampil saat pencarian aktif dan blok itu
+ * ikut hasil pencarian (merah). Mode Nama: balance untuk nama itu saja; mode
+ * Blok: balance milik nama mana pun. */
+function petaBalanceDotsHtml(highlightSet){
+  if(!petaCariNamaAktif || highlightSet.size===0) return '';
+  const bal = blokBalanceSet(petaCariMode==='nama' ? String(petaCariNamaQuery||'').toLowerCase() : '');
+  return PETA_BLOCKS.filter(b=>highlightSet.has(b.label) && bal.has(b.label)).map(b=>{
+    const c = petaTitikDalam(b.points);
+    return `<circle class="peta-baldot" data-blok="${escapeHtml(b.label)}" cx="${c.x}" cy="${c.y}" r="1" fill="#F9A825" stroke="#fff" stroke-width="0.4" vector-effect="non-scaling-stroke" pointer-events="none"></circle>`;
+  }).join('');
+}
 function renderPeta(){
   const host = document.getElementById('screen-peta');
   if(!petaImageLoaded){
@@ -293,7 +335,6 @@ function renderPeta(){
   }
   const svgPoints = petaDrawPoints.map(p=>p.x+','+p.y).join(' ');
   const highlightSet = petaCariNamaAktif ? blokTerhighlightPeta(petaCariNamaQuery) : new Set();
-  const balanceSet = blokBalanceSet();
   host.innerHTML = `
     <div id="petaFullWrap" style="position:relative;width:100%;height:100%;overflow:hidden;">
       <div id="petaImgWrap" style="position:relative;width:100%;height:100%;overflow:hidden;touch-action:none;" onclick="handlePetaTap(event)" ontouchstart="petaTouchStart(event)" ontouchmove="petaTouchMove(event)" ontouchend="petaTouchEnd(event)">
@@ -302,9 +343,9 @@ function renderPeta(){
           <svg viewBox="0 0 100 100" preserveAspectRatio="none" style="position:absolute;top:0;left:0;width:100%;height:100%;pointer-events:none;">
             ${PETA_BLOCKS.map(b=>{
               const on = highlightSet.has(b.label);
-              const bal = !on && balanceSet.has(b.label);
-              return `<polygon data-blok="${escapeHtml(b.label)}" data-bal="${bal?'1':''}" points="${b.points.map(p=>p.x+','+p.y).join(' ')}" fill="${on?'rgba(211,47,47,0.38)':(bal?PETA_FILL_BAL:'rgba(46,125,50,0.14)')}" stroke="${on?'#D32F2F':(bal?PETA_STROKE_BAL:'#2E7D32')}" stroke-width="${on?'0.25':(bal?'0.2':'0.15')}" vector-effect="non-scaling-stroke"></polygon>`;
+              return `<polygon data-blok="${escapeHtml(b.label)}" points="${b.points.map(p=>p.x+','+p.y).join(' ')}" fill="${on?'rgba(211,47,47,0.38)':'rgba(46,125,50,0.14)'}" stroke="${on?'#D32F2F':'#2E7D32'}" stroke-width="${on?'0.25':'0.15'}" vector-effect="non-scaling-stroke"></polygon>`;
             }).join('')}
+            ${petaBalanceDotsHtml(highlightSet)}
             ${petaDrawing && petaDrawPoints.length>0 ? `<polyline points="${svgPoints}" fill="none" stroke="#1565C0" stroke-width="0.15" stroke-dasharray="1.2,0.8" vector-effect="non-scaling-stroke"></polyline>
               ${petaDrawPoints.map(p=>`<circle class="peta-drawdot" cx="${p.x}" cy="${p.y}" r="0.9" fill="#1565C0" stroke="#fff" stroke-width="0.3" vector-effect="non-scaling-stroke"></circle>`).join('')}` : ''}
             ${petaEditingBlockId ? renderPetaEditOverlaySvg() : ''}
@@ -412,6 +453,7 @@ function applyPetaTransform(){
   };
   applyRadius('.peta-drawdot', 7);
   applyRadius('.peta-editdot', 9);
+  applyRadius('.peta-baldot', 6);
 }
 function resetPetaZoom(){
   petaZoom = {scale:1, panX:0, panY:0};
@@ -619,7 +661,7 @@ function riwayatUntukBlok(label){
       // ini - bukan gabungan semua nama di entri itu - supaya tidak tertukar
       // kalau entrinya punya beberapa lokasi sekaligus.
       const namaCocok = pasanganPerSlot.flat().map(p=>p.nama).filter(Boolean);
-      return {date:e.date, btId:e.btId, jenis, detail, nama:namaCocok.join(', '), balance:pasanganPerSlot.flat().some(p=>p.balance)};
+      return {date:e.date, btId:e.btId, jenis, detail, nama:namaCocok.join(', '), balance:pasanganPerSlot.flat().some(p=>p.balance), ulang:(pasanganPerSlot.flat().find(p=>parseInt(p.ulang,10)>0)||{}).ulang||''};
     });
 }
 function fmtTglSingkat(iso){
@@ -639,7 +681,7 @@ function showPetaBlock(id){
     <button class="pill-btn" style="margin-bottom:14px;" onclick="usePetaBlockAsLokasi('${b.id}')">+ Lokasi Hari Ini</button>
     <div class="section-eyebrow">Riwayat</div>
     <div style="max-height:110px;overflow-y:auto;border:1px solid var(--outline-variant);border-radius:12px;padding:6px 12px;margin-bottom:16px;">
-      ${riwayat.length===0 ? '' : riwayat.map(r=>`<div style="font-size:11px;color:var(--on-surface-variant);padding:4px 0;border-bottom:1px solid var(--outline-variant);">${fmtTglSingkat(r.date)} &middot; ${escapeHtml(btLabel(r.btId))} &middot; ${escapeHtml(r.jenis||'-')}${r.balance?' <b style="color:#F9A825;">^</b>':''}${r.detail?' &middot; '+escapeHtml(r.detail):''}${r.nama?' &middot; '+escapeHtml(r.nama):''}</div>`).join('')}
+      ${riwayat.length===0 ? '' : riwayat.map(r=>`<div style="font-size:11px;color:var(--on-surface-variant);padding:4px 0;border-bottom:1px solid var(--outline-variant);">${fmtTglSingkat(r.date)} &middot; ${escapeHtml(btLabel(r.btId))} &middot; ${escapeHtml(r.jenis||'-')}${r.ulang?' '+escapeHtml(String(r.ulang))+'x':''}${r.balance?' <b style="color:#F9A825;">^</b>':''}${r.detail?' &middot; '+escapeHtml(r.detail):''}${r.nama?' &middot; '+escapeHtml(r.nama):''}</div>`).join('')}
     </div>
     <div style="display:flex;gap:8px;">
       <button class="pill-btn outline" style="flex:1;justify-content:center;" onclick="editPetaBlockName('${b.id}')">${ic('edit')} Nama</button>
@@ -761,7 +803,6 @@ function togglePetaCetakCustomRange(show){
  * terisi (lokasi tanpa nama tidak relevan untuk laporan "per nama" ini). */
 function namaCetakRows(namaFilterLower, dariIso, sampaiIso){
   const rows = [];
-  const ulangCache = {};
   const adaFilter = namaFilterLower.length>0;
   ENTRIES.forEach(e=>{
     if(dariIso && e.date<dariIso) return;
@@ -785,13 +826,20 @@ function namaCetakRows(namaFilterLower, dariIso, sampaiIso){
         const mandor = gorongMandor(e, suffix);
         if(adaFilter && !splitNamaKoma(mandor).some(n=>namaFilterLower.includes(n.toLowerCase()))) return;
         const pcs = e[fk('jumlahPcs')];
-        rows.push(baris(mandor||'-', gorongRuteTeks(e, suffix)||'-', '', 0, [muatTipe, pcs ? pcs+' pcs' : ''].filter(Boolean).join(': ')));
+        // 1 baris per lokasi bongkar: "asal > bongkar". Jumlah pcs hanya di baris pertama.
+        const muatG = String(e[fk('lokasiMuat')]||'').trim();
+        const bongkarG = gorongBongkarList(e, suffix);
+        const tujuanG = bongkarG.length ? bongkarG : [''];
+        tujuanG.forEach((bk,i)=>{
+          const blokG = [muatG, bk].filter(Boolean).join(' > ');
+          rows.push(baris(mandor||'-', blokG||'-', '', 0, [muatTipe, (i===0 && pcs) ? pcs+' pcs' : ''].filter(Boolean).join(': ')));
+        });
         return;
       }
       if(jenis==='Loading' && ['','Gleaning','Bibit'].includes(muatTipe||'')){
         if(adaFilter) return;
         const blok = (muatTipe==='Bibit')
-          ? [e[fk('lokasiMuat')], e[fk('lokasiBongkar')]].filter(Boolean).join(' -> ')
+          ? [e[fk('lokasiMuat')], e[fk('lokasiBongkar')]].filter(Boolean).join(' > ')
           : lokasiArrGetForDisplay(e, lokasiField).filter(Boolean).join(', ');
         const detail = muatTipe==='Gleaning' ? ['Gleaning', kg(e[fk('tonaseKg')])].filter(Boolean).join(': ')
           : (muatTipe||'');
@@ -811,31 +859,33 @@ function namaCetakRows(namaFilterLower, dariIso, sampaiIso){
         if(!adaFilter) rows.push(baris('-', '-', '', 0, detailDasar));
         return;
       }
-      // Drone: 1 baris per nama, kolom Blok berisi SEMUA lokasinya (dipisah koma).
+      // Drone: 1 baris per blok (tanda hanya ^).
       if(jenis==='Drone'){
-        antarGrupList(pasangan).forEach(gr=>{
-          const g = pasangan.slice(gr.start, gr.start+gr.count);
+        pasangan.forEach(p=>{
           if(adaFilter){
-            const namaDiBaris = splitNamaKoma(g[0].nama||'');
+            const namaDiBaris = splitNamaKoma(p.nama||'');
             if(!namaDiBaris.some(n=>namaFilterLower.includes(n.toLowerCase()))) return;
           }
-          const lok = g.filter(p=>String(p.lokasi||'').trim()).map(p=>String(p.lokasi).trim()+balTanda(p)).join(', ');
-          rows.push(baris(g[0].nama, lok || '-', '', 0, detailDasar));
+          rows.push(baris(p.nama, String(p.lokasi||'').trim() ? String(p.lokasi).trim()+tandaBlok(jenis,p) : '-', '', 0, detailDasar));
         });
         return;
       }
-      // Antar/Jemput Tenaga: 1 baris per mandor, kolom Blok berisi RANTAI perpindahan
-      // "Blok 1 (10) -> Blok 2 (5) -> ..." dan Org = jumlah tenaga tetap mandor itu (bukan
-      // dijumlah antar blok, karena orangnya sama, hanya berpindah/terbagi).
+      // Antar/Jemput Tenaga: 1 baris per blok. Kalau kegiatannya "Pindah", blok ke-2 dst
+      // ditulis "blok asal > blok tujuan". Tanda Nx dan ^ menempel di blok tujuan.
       if(jenis==='Antar/Jemput Tenaga'){
-        const um = ulangCache[e.date] || (ulangCache[e.date] = antarBlokUlangMap(e.date));
+        const pindah = isPindahEntry(e, suffix);
         antarGrupList(pasangan).forEach(gr=>{
           const g = pasangan.slice(gr.start, gr.start+gr.count);
           if(adaFilter){
             const namaDiBaris = splitNamaKoma(g[0].nama||'');
             if(!namaDiBaris.some(n=>namaFilterLower.includes(n.toLowerCase()))) return;
           }
-          rows.push(baris(g[0].nama, rantaiBlokTeks(g, um) || '-', '', jmlOrangRantai(g), detailDasar));
+          g.forEach((p,k)=>{
+            const lok = String(p.lokasi||'').trim();
+            const asal = (pindah && k>0) ? String(g[k-1].lokasi||'').trim() : '';
+            const blokTeks = lok ? ((asal ? asal+' > ' : '')+lok+tandaBlok(jenis,p)) : '-';
+            rows.push(baris(g[0].nama, blokTeks, '', parseInt(p.jumlahOrang,10)||0, detailDasar));
+          });
         });
         return;
       }
@@ -855,7 +905,7 @@ function namaCetakRows(namaFilterLower, dariIso, sampaiIso){
         // untuk Antar/Jemput Tenaga.
         const shift = jenis==='Operator' ? (p.shift||'') : '';
         const org = jenis==='Antar/Jemput Tenaga' ? (parseInt(p.jumlahOrang,10)||0) : 0;
-        rows.push(baris(p.nama, p.lokasi ? String(p.lokasi)+balTanda(p) : p.lokasi, shift, org, it.detail));
+        rows.push(baris(p.nama, p.lokasi ? String(p.lokasi)+tandaBlok(jenis,p) : p.lokasi, shift, org, it.detail));
       });
     };
     cekSlot('lokasi','nama', e.jenisLayanan, e.id+'|', '');
@@ -888,7 +938,6 @@ async function cetakRiwayatNama(){
   const namaFilterLower = namaRaw ? namaRaw.split(',').map(s=>s.trim().toLowerCase()).filter(Boolean) : [];
   const rows = namaCetakRows(namaFilterLower, dari, sampai);
   if(rows.length===0){ toast('Tidak ada data yang cocok'); return; }
-  const totalOrang = rows.reduce((s,r)=>s+(r.org||0),0);
   const { jsPDF } = window.jspdf;
   const doc = new jsPDF({orientation:'portrait'});
   doc.setFontSize(14); doc.setFont(undefined,'bold');
@@ -908,7 +957,6 @@ async function cetakRiwayatNama(){
       r.jenis==='Antar/Jemput Tenaga' ? (r.org>0 ? String(r.org) : '-') : '-',
       r.jenis==='Operator' ? operatorShiftKode(r.shift) : '-'
     ]),
-    ...(totalOrang>0 ? {foot:[['TOTAL','','','','','',String(totalOrang),'']], footStyles:{fillColor:[240,230,210], textColor:[30,20,0], fontStyle:'bold'}} : {}),
     columnStyles:{3:{cellWidth:46}, 4:{minCellWidth:24}, 6:{halign:'center'}, 7:{halign:'center'}},
     styles:{fontSize:8},
     headStyles:{fillColor:[46,90,166]},
@@ -1008,7 +1056,6 @@ function getExportRows(){
   }
   rows.sort((a,b)=>a.date.localeCompare(b.date));
   const headers = getSelectedColumns();
-  const ulangCacheExport = {};
   const detailUntukLayanan = (e, jenis, suffix) => {
     const fk = (name)=>name+suffix;
     if(jenis==='Antar/Jemput Tenaga') return [e[fk('tipeAntar')], e[fk('kegiatan')]].filter(Boolean).join(' / ');
@@ -1029,21 +1076,20 @@ function getExportRows(){
   };
   const lokasiUntukLayanan = (e, jenis, suffix) => {
     const fk = (name)=>name+suffix;
-    if(jenis==='Loading' && e[fk('muatTipe')]==='Bibit') return [e[fk('lokasiMuat')],e[fk('lokasiBongkar')]].filter(Boolean).join(' -> ');
+    if(jenis==='Loading' && e[fk('muatTipe')]==='Bibit') return [e[fk('lokasiMuat')],e[fk('lokasiBongkar')]].filter(Boolean).join(' > ');
     if(jenis==='Loading' && isGorong(e[fk('muatTipe')])) return gorongRuteTeks(e, suffix);
     if(jenis==='Drone'){
-      const l = pasanganArrGetForDisplay(e, fk('lokasi'), fk('nama')).filter(p=>String(p.lokasi||'').trim()).map(p=>String(p.lokasi).trim()+balTanda(p));
+      const l = pasanganArrGetForDisplay(e, fk('lokasi'), fk('nama')).filter(p=>String(p.lokasi||'').trim()).map(p=>String(p.lokasi).trim()+tandaBlok(jenis,p));
       if(l.length) return l.join(', ');
     }
     // Antar/Jemput Tenaga: cetak seluruh RANTAI perpindahan antar blok + penanda ulang.
     if(jenis==='Antar/Jemput Tenaga'){
-      const um = ulangCacheExport[e.date] || (ulangCacheExport[e.date] = antarBlokUlangMap(e.date));
-      const t = rantaiBlokTeks(pasanganArrGetForDisplay(e, fk('lokasi'), fk('nama')), um);
+      const t = rantaiBlokTeks(pasanganArrGetForDisplay(e, fk('lokasi'), fk('nama')), null, isPindahEntry(e, suffix));
       if(t) return t;
     }
     if(balanceJenisBerlaku(jenis) && jenis!=='Antar/Jemput Tenaga' && jenis!=='Drone'){
       const p0 = pasanganArrGetForDisplay(e, fk('lokasi'), fk('nama'))[0];
-      if(p0 && p0.balance && String(p0.lokasi||'').trim()) return String(p0.lokasi).trim()+balTanda(p0);
+      if(p0 && String(p0.lokasi||'').trim() && tandaBlok(jenis,p0)) return String(p0.lokasi).trim()+tandaBlok(jenis,p0);
     }
     // Kalau lokasinya lebih dari 1 (1 kegiatan mencakup beberapa blok), yang
     // dicetak cuma yang PERTAMA sebagai wakil - biar laporan tetap ringkas.

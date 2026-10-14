@@ -389,6 +389,20 @@ function normBlokKey(s){ return String(s||'').trim().toLowerCase().replace(/\s+/
  * aman di font PDF). Blok dianggap balance sampai ada entri Selesai dengan
  * blok + mandor + kegiatan yang sama (lihat blokBalanceSet di peta.js). */
 function balTanda(p){ return (p && p.balance) ? ' ^' : ''; }
+/* Ulang: angka diketik manual di kolom kecil (mis. 2) -> tercetak " 2x". */
+function ulangTanda(p){ const n = parseInt(p && p.ulang, 10); return n>0 ? ' '+n+'x' : ''; }
+/* Tanda di samping blok per jenis: Drone hanya ^ ; Antar/Jemput & Custom: Nx dan ^ ;
+ * jenis lain (Loading, Operator, Ekstra Pagi) tanpa tanda. */
+function tandaBlok(jenis, p){
+  if(!balanceJenisBerlaku(jenis)) return '';
+  if(jenis==='Drone') return balTanda(p);
+  return ulangTanda(p)+balTanda(p);
+}
+/* Arah Pindah (untuk tanda ">" dari -> ke di cetak). */
+function isPindahEntry(e, sfx){ return !!(e['hanyaSatuArah'+sfx] && e['arahAntarJemput'+sfx]==='pindah'); }
+function ulangInputHtml(a, idx, p){
+  return `<input type="text" inputmode="numeric" placeholder="Nx" title="Ulang (ketik 2 untuk 2x, 3 untuk 3x)" style="flex:0 0 40px;min-width:0;margin-bottom:0;text-align:center;padding-left:2px;padding-right:2px;" value="${escapeHtml((p&&p.ulang)||'')}" oninput="this.value=this.value.replace(/\\D/g,'').slice(0,1)" onchange="pasanganArrChange(${a},${idx},'ulang',this.value)">`;
+}
 function balanceJenisBerlaku(jenis){
   if(!jenis) return false;
   if(jenis==='Loading' || jenis==='Operator') return false;
@@ -461,20 +475,19 @@ function tenagaTetapGrup(arr, g){
 function jmlOrangRantai(arr){
   return antarGrupList(arr).reduce((s,g)=>s+tenagaTetapGrup(arr,g),0);
 }
-/* Teks rantai untuk cetak (ASCII supaya aman di font PDF bawaan), 1 lokasi per
- * baris, urut ke bawah:
- *   Blok 1 (10) >
- *   Blok 2 (5) [ulang 2x] >
- *   Blok 3 (15)
+/* Teks rantai untuk cetak/ekspor (ASCII supaya aman di font PDF), 1 lokasi per
+ * baris, urut ke bawah. Tanda ditulis manual oleh user: "Nx" (ulang) dan "^"
+ * (balance) menempel di blok. Tanda ">" (dari -> ke) HANYA dipakai kalau
+ * kegiatannya "Pindah" (pindah=true):
+ *   Pindah:  Blok 1 >         Bukan pindah:  Blok 1
+ *            Blok 2 2x ^                     Blok 2 2x ^
  * Kalau ada lebih dari 1 mandor: tiap mandor diawali baris "Nama:". */
-function rantaiBlokTeks(arr, ulangMap){
+function rantaiBlokTeks(arr, ulangMap, pindah){
   const grups = antarGrupList(arr);
   const baris = grups.map(g=>{
     const rantai = arr.slice(g.start, g.start+g.count).filter(p=>String(p.lokasi||'').trim()).map(p=>{
-      const org = parseInt(p.jumlahOrang,10)||0;
-      const u = blokUlangN(ulangMap, p);
-      return String(p.lokasi).trim()+balTanda(p)+(org?' ('+org+')':'')+(u?' [ulang '+u+'x]':'');
-    }).join(' >\n');
+      return String(p.lokasi).trim()+ulangTanda(p)+balTanda(p);
+    }).join(pindah ? ' >\n' : '\n');
     if(!rantai) return '';
     const nm = String(arr[g.start].nama||'').trim();
     return (grups.length>1 && nm) ? nm+':\n'+rantai : rantai;
@@ -528,6 +541,7 @@ function antarRantaiInput(e, mode, lokasiField, namaField, arr){
           ${badge}
           <input type="text" list="lokasiSuggest" placeholder="Blok / Lokasi" style="flex:1;min-width:0;margin-bottom:0;" oninput="onLokasiInput(this)" onfocus="onLokasiFocus(this)" value="${escapeHtml(p.lokasi||'')}" onchange="pasanganArrChange(${a},${idx},'lokasi',this.value)">
           ${numInput(p.jumlahOrang, 'Org', 'Jumlah orang di lokasi ini', `pasanganArrChange(${a},${idx},'jumlahOrang',this.value)`)}
+          ${ulangInputHtml(a, idx, p)}
           ${balanceBtnHtml(a, idx, p)}
           ${arr.length>1 ? `<button type="button" class="icon-btn" title="Hapus lokasi ini" style="flex:0 0 auto;" onclick="pupukHapusBaris(${a},${idx})">${ic('trash',16)}</button>` : ''}
         </div>
@@ -565,7 +579,7 @@ function gorongMandor(e, sfx){
 }
 function gorongRuteTeks(e, sfx){
   const muat = String(e['lokasiMuat'+sfx]||'').trim();
-  return [muat, gorongBongkarList(e, sfx).join(', ')].filter(Boolean).join(' -> ');
+  return [muat, gorongBongkarList(e, sfx).join(', ')].filter(Boolean).join(' > ');
 }
 function gorongTambahBongkar(entryId, mode, lokasiField, namaField){
   const e = ENTRIES.find(x=>x.id===entryId);
@@ -663,7 +677,7 @@ function renderJenisLayananFields(e, suffix, mode){
         <div style="display:flex;flex-wrap:${(opts.beratKg||opts.jenisPupuk)?'wrap':'nowrap'};gap:6px;margin-bottom:6px;">
           <input type="text" list="lokasiSuggest" placeholder="Lokasi" style="flex:1;min-width:120px;" oninput="onLokasiInput(this)" onfocus="onLokasiFocus(this)" value="${escapeHtml(p.lokasi||'')}" onchange="pasanganArrChange('${e.id}','${mode}','${lokasiField}','${namaField}',${idx},'lokasi',this.value)">
           <input type="text" list="namaSuggest" placeholder="Nama ${opts.mandor?'Mandor ':''}(opsional)" style="flex:1;min-width:120px;" oninput="onNamaInput(this)" onfocus="onNamaFocus(this)" value="${escapeHtml(p.nama||'')}" onchange="pasanganArrChange('${e.id}','${mode}','${lokasiField}','${namaField}',${idx},'nama',this.value)">
-          ${opts.balance ? balanceBtnHtml(`'${e.id}','${mode}','${lokasiField}','${namaField}'`, idx, p) : ''}
+          ${opts.balance ? ulangInputHtml(`'${e.id}','${mode}','${lokasiField}','${namaField}'`, idx, p)+balanceBtnHtml(`'${e.id}','${mode}','${lokasiField}','${namaField}'`, idx, p) : ''}
           ${opts.shift ? `<select style="flex:0 0 86px;" onchange="pasanganArrChange('${e.id}','${mode}','${lokasiField}','${namaField}',${idx},'shift',this.value)">
             <option value="">Shift?</option>
             ${OPERATOR_SHIFT_LIST.map(s=>`<option value="${s}" ${p.shift===s?'selected':''}>${s}</option>`).join('')}
@@ -727,7 +741,7 @@ function renderJenisLayananFields(e, suffix, mode){
       <label class="flabel">Lokasi &amp; Nama <span style="font-weight:400;color:var(--on-surface-variant);">(opsional) &middot; boleh lebih dari 1, pisah pakai koma</span></label>${lokasiNamaPairInput('lokasi')}
     ` : ''}
     ${jenis && !isEkstraPagi(jenis) && !['Antar/Jemput Tenaga','Loading','Drone','Operator'].includes(jenis) ? `
-      <label class="flabel">Lokasi &amp; Nama <span style="font-weight:400;color:var(--on-surface-variant);">(opsional) &middot; boleh lebih dari 1, pisah pakai koma &middot; tombol ^ = balance (blok belum selesai)</span></label>${lokasiNamaPairInput('lokasi', {balance:true})}
+      <label class="flabel">Lokasi &amp; Nama <span style="font-weight:400;color:var(--on-surface-variant);">(opsional) &middot; boleh lebih dari 1, pisah pakai koma &middot; kolom Nx = ulang (ketik 2 untuk 2x) &middot; ^ = balance (blok belum selesai)</span></label>${lokasiNamaPairInput('lokasi', {balance:true})}
     ` : ''}
   `;
 }
