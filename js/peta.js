@@ -310,12 +310,19 @@ function petaTitikDalam(points){
 /* Titik kuning = blok Balance, HANYA tampil saat pencarian aktif dan blok itu
  * ikut hasil pencarian (merah). Mode Nama: balance untuk nama itu saja; mode
  * Blok: balance milik nama mana pun. */
+/* Ukuran titik kuning TETAP terhadap peta (ikut membesar/mengecil saat zoom, seperti poligon).
+ * Peta digambar dengan skala x/y tidak sama, jadi ry dikoreksi dengan rasio gambar agar tetap bulat. */
+const PETA_DOT_R = 0.4;
+function petaDotRy(){
+  const img = document.getElementById('petaImgEl');
+  return (img && img.naturalWidth && img.naturalHeight) ? PETA_DOT_R*img.naturalWidth/img.naturalHeight : PETA_DOT_R;
+}
 function petaBalanceDotsHtml(highlightSet){
   if(!petaCariNamaAktif || highlightSet.size===0) return '';
   const bal = blokBalanceSet(petaCariMode==='nama' ? String(petaCariNamaQuery||'').toLowerCase() : '');
   return PETA_BLOCKS.filter(b=>highlightSet.has(b.label) && bal.has(b.label)).map(b=>{
     const c = petaTitikDalam(b.points);
-    return `<circle class="peta-baldot" data-blok="${escapeHtml(b.label)}" cx="${c.x}" cy="${c.y}" r="1" fill="#F9A825" stroke="#fff" stroke-width="0.4" vector-effect="non-scaling-stroke" pointer-events="none"></circle>`;
+    return `<ellipse class="peta-baldot" data-blok="${escapeHtml(b.label)}" cx="${c.x}" cy="${c.y}" rx="${PETA_DOT_R}" ry="${PETA_DOT_R}" fill="#F9A825" pointer-events="none"></ellipse>`;
   }).join('');
 }
 function renderPeta(){
@@ -339,7 +346,7 @@ function renderPeta(){
     <div id="petaFullWrap" style="position:relative;width:100%;height:100%;overflow:hidden;">
       <div id="petaImgWrap" style="position:relative;width:100%;height:100%;overflow:hidden;touch-action:none;" onclick="handlePetaTap(event)" ontouchstart="petaTouchStart(event)" ontouchmove="petaTouchMove(event)" ontouchend="petaTouchEnd(event)">
         <div id="petaImgInner" style="transform-origin:0 0;position:relative;">
-          <img src="${PETA_IMAGE}" style="width:100%;display:block;pointer-events:none;" id="petaImgEl">
+          <img src="${PETA_IMAGE}" style="width:100%;display:block;pointer-events:none;" id="petaImgEl" onload="applyPetaTransform()">
           <svg viewBox="0 0 100 100" preserveAspectRatio="none" style="position:absolute;top:0;left:0;width:100%;height:100%;pointer-events:none;">
             ${PETA_BLOCKS.map(b=>{
               const on = highlightSet.has(b.label);
@@ -453,7 +460,8 @@ function applyPetaTransform(){
   };
   applyRadius('.peta-drawdot', 7);
   applyRadius('.peta-editdot', 9);
-  applyRadius('.peta-baldot', 6);
+  const dotRy = petaDotRy();
+  document.querySelectorAll('.peta-baldot').forEach(c=>{ c.setAttribute('rx', PETA_DOT_R); c.setAttribute('ry', dotRy); });
 }
 function resetPetaZoom(){
   petaZoom = {scale:1, panX:0, panY:0};
@@ -654,9 +662,25 @@ function riwayatUntukBlok(label){
         jenis = e['jenisLayanan'+slotCocok] || e.jenisLayanan;
         tonase = e['tonaseKg'+slotCocok];
       }
-      const detail = (jenis==='Loading' && isGorong(e['muatTipe'+(slotCocok||'')]) && e['jumlahPcs'+(slotCocok||'')]) ? (e['jumlahPcs'+(slotCocok||'')]+' pcs')
-        : (jenis==='Loading' && tonase) ? (fmtThousandsLive(String(tonase))+' kg')
-        : (isEkstraPagi(jenis) ? (e['ekstraTipe'+(slotCocok||'')]||'') : '');
+      // Riwayat selengkap mungkin: Drone + jenis (ZPK/Pemetaan/Prevatone), Antar/Jemput
+      // + arah/tipe/kegiatan, Loading + tipe (+ pcs/kg), Operator + shift.
+      const sx = slotCocok||'';
+      let detail = '';
+      if(jenis==='Drone'){
+        jenis = 'Drone'+(e['droneJenis'+sx] ? ' '+e['droneJenis'+sx] : '');
+      } else if(jenis==='Antar/Jemput Tenaga'){
+        jenis = jenisLayananArahLabel(jenis, e, sx);
+        detail = [e['tipeAntar'+sx], e['kegiatan'+sx]].filter(Boolean).join(' / ');
+      } else if(jenis==='Loading'){
+        const mt = e['muatTipe'+sx];
+        const ukuran = (isGorong(mt) && e['jumlahPcs'+sx]) ? (e['jumlahPcs'+sx]+' pcs')
+          : (tonase ? (fmtThousandsLive(String(tonase))+' kg') : '');
+        detail = [mt, ukuran].filter(Boolean).join(' ');
+      } else if(isEkstraPagi(jenis)){
+        detail = e['ekstraTipe'+sx]||'';
+      } else if(jenis==='Operator'){
+        detail = e['shift'+sx] ? 'Shift '+e['shift'+sx] : '';
+      }
       // Nama yang ditampilkan HANYA yang benar-benar BERPASANGAN dengan lokasi
       // ini - bukan gabungan semua nama di entri itu - supaya tidak tertukar
       // kalau entrinya punya beberapa lokasi sekaligus.
