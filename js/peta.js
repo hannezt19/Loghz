@@ -322,7 +322,7 @@ function petaBalanceDotsHtml(highlightSet){
   const bal = blokBalanceSet(petaCariMode==='nama' ? String(petaCariNamaQuery||'').toLowerCase() : '');
   return PETA_BLOCKS.filter(b=>highlightSet.has(b.label) && bal.has(b.label)).map(b=>{
     const c = petaTitikDalam(b.points);
-    return `<ellipse class="peta-baldot" data-blok="${escapeHtml(b.label)}" cx="${c.x}" cy="${c.y}" rx="${PETA_DOT_R}" ry="${PETA_DOT_R}" fill="#F9A825" pointer-events="none"></ellipse>`;
+    return `<ellipse class="peta-baldot" data-blok="${escapeHtml(b.label)}" cx="${c.x}" cy="${c.y}" rx="${PETA_DOT_R}" ry="${PETA_DOT_R}" fill="#00E5FF" pointer-events="none"></ellipse>`;
   }).join('');
 }
 function renderPeta(){
