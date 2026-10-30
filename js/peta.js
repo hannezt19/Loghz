@@ -379,7 +379,7 @@ function renderPeta(){
             ? '<svg viewBox="0 0 24 24" width="24" height="24" fill="none" stroke="currentColor" stroke-width="2.2"><path d="M6 6l12 12M18 6L6 18"/></svg>'
             : '<svg viewBox="0 0 24 24" width="24" height="24" fill="none" stroke="currentColor" stroke-width="2.2"><circle cx="11" cy="11" r="7"/><path d="M21 21l-4.3-4.3"/></svg>'}
         </button>
-        ${petaCariNamaAktif ? `<button class="pill-btn" style="box-shadow:0 3px 10px rgba(0,0,0,.25);" onclick="openPetaCetakModal()">${ic('document',16)} Cetak</button>` : ''}
+        ${petaCariNamaAktif ? `<button class="pill-btn" style="box-shadow:0 3px 10px rgba(0,0,0,.25);" onclick="openPetaCetakModal()">${ic('document',16)} Cetak</button>` : `<button class="pill-btn" style="box-shadow:0 3px 10px rgba(0,0,0,.25);" onclick="exportBlokUntukHzTrip()">${ic('download',16)} Ekspor blok</button>`}
       </div>
       ` : ''}
 
@@ -1357,4 +1357,27 @@ async function doExport(fmt){
   const result = await saveOrShareBlob(pdfBlob, 'rekap-'+exportFileLabel()+'.pdf');
   toast(result==='shared'?'PDF siap dibagikan':'PDF diunduh');
   closeModal();
+}
+
+/* ----- Ekspor blok untuk HZ Trip (aplikasi lain, terpisah): berkas JSON berisi
+ * no blok, luas, dan titik poligon (persen terhadap gambar peta). HZ Trip
+ * menempelkan poligon ini ke peta PDF yang sudah dikalibrasi. Tidak mengubah
+ * data apa pun di Logbook.HZ. ----- */
+async function exportBlokUntukHzTrip(){
+  if(!PETA_BLOCKS.length){ toast('Belum ada blok untuk diekspor'); return; }
+  let w=0, h=0;
+  try{
+    await new Promise((res)=>{
+      const im = new Image();
+      im.onload = ()=>{ w = im.naturalWidth; h = im.naturalHeight; res(); };
+      im.onerror = ()=>res();
+      im.src = PETA_IMAGE;
+    });
+  }catch(e){}
+  const data = {
+    app: 'loghz-blok', v: 1, at: Date.now(), imgW: w, imgH: h,
+    blocks: PETA_BLOCKS.map(b=>({ label: b.label, luas: (b.luas===undefined||b.luas===null)?'':String(b.luas), points: b.points.map(p=>({x:p.x, y:p.y})) }))
+  };
+  const blob = new Blob([JSON.stringify(data)], {type:'application/json'});
+  await saveOrShareBlob(blob, 'blok-loghz-'+todayIso()+'.json');
 }
