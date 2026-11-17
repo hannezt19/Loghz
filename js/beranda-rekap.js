@@ -415,6 +415,7 @@ function renderBeranda(){
           <div style="display:flex;align-items:center;gap:8px;margin-top:2px;"><span style="color:var(--primary);opacity:.65;">${ic('hourglass',24)}</span><span style="font-size:18px;font-weight:800;">${totalLemburBulan.toFixed(1)} j</span></div>
           <div style="font-size:10px;color:var(--on-surface-variant);font-weight:600;margin-top:1px;">Bulan ini</div>
         </div>
+        ${typeof efektivitasCardHtml==='function' ? efektivitasCardHtml() : ''}
         <div class="card" style="flex:1;display:flex;flex-direction:column;justify-content:center;cursor:pointer;" onclick="openLiterJamDetailModal()">
           <div class="field-sub">Liter/Jam</div>
           <div style="display:flex;align-items:center;gap:8px;margin-top:2px;"><span style="color:var(--primary);opacity:.65;">${ic('sync',24)}</span><span style="font-size:18px;font-weight:800;">${literJam.cukupData?literJam.literPerJam.toFixed(2):'-'}</span></div>
