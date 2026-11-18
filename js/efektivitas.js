@@ -4,11 +4,16 @@
  * RUMUS (disepakati dengan Han, 17 Nov 2026):
  *  - Persen harian = HM hari itu / (jam normal + lembur mentah mandor).
  *      Contoh: HM 2 dari 8 jam (7 normal + 1 lembur mandor) = 25%.
- *  - Jam normal: Senin-Kamis 7, Jumat 6,5, Sabtu 5,5. Minggu & tanggal merah
- *    memakai standar 7 jam (BEDA dari normalJamKerja() yang mengembalikan 0).
+ *  - Jam normal: Senin-Kamis 7, Jumat 6,5, Sabtu 5,5.
  *  - Lembur mandor = angka MENTAH dari "Lembur Aktual (Mandor)" (lemburAktualJam),
  *    BUKAN "OT Aktual Final" (x2 - 0,5). Tanggal tanpa data mandor = 0 jam,
  *    dan dihitung jumlahnya supaya ditampilkan sebagai keterangan di modal.
+ *  - MINGGU & TANGGAL MERAH (v1.0.43): tidak ada jam pokok (semua jam kerja
+ *    = lembur), jadi penyebut = lembur hitungan app (dari Absen, kolom e.lembur,
+ *    dijumlah semua entri di tanggal itu - sama seperti kartu Overtime). Data
+ *    mandor TIDAK dipakai & TIDAK dituntut di hari ini; konfirmasi mandor
+ *    hanya untuk Senin-Sabtu. Kalau lembur app kosong/0 (absen belum diisi)
+ *    hari itu dilewati karena penyebutnya 0.
  *  - Hasil periode = RATA-RATA persen harian (bukan total HM / total jam).
  *
  * ATURAN HARI YANG DIHITUNG (data dari ENTRIES = sumber yang sama dengan Rekap):
@@ -16,6 +21,7 @@
  *  - Unit Standby                                  -> dihitung, HM 0 (= 0%).
  *  - Tanggal tanpa HM valid & tanpa Standby         -> dilewati
  *    (mis. lupa isi HM, supaya rata-rata tidak turun karena data kosong).
+ *  - Minggu/merah dengan lembur app 0 (mis. Standby)  -> dilewati.
  *  - Beberapa entri di 1 tanggal (unit ke-2)       -> HM dijumlahkan, jam kerja
  *    dihitung SEKALI per tanggal (sama seperti kartu Overtime/Total HM).
  *  - Persen tidak dibatasi 100% (HM bisa lebih besar dari jam kerja).
@@ -26,7 +32,6 @@
  * yang diubah; modul ini hanya MEMBACA ENTRIES & LEMBUR_AKTUAL.
  */
 const EF_KEY = 'v2_efektivitas_periode';
-const EF_JAM_STANDAR_LIBUR = 7; // Minggu & tanggal merah
 const EF_HARI_SINGKAT = ['Min','Sen','Sel','Rab','Kam','Jum','Sab'];
 
 function efPeriodeDefault(){
@@ -85,12 +90,24 @@ function efHitung(dari, sampai){
     });
     if(!adaStandby && !adaHm) return;                    // HM tidak terisi -> dilewati
     const merah = list.some(e=>e.liburMerah);
-    const normal = normalJamKerja(tgl, merah);
-    const dasar = normal > 0 ? normal : EF_JAM_STANDAR_LIBUR;
-    const lm = lemburAktualJam(tgl);                     // null kalau belum ada data mandor
-    const lembur = (lm !== null && lm > 0) ? lm : 0;
+    const normal = normalJamKerja(tgl, merah);           // 0 untuk Minggu & tanggal merah
+    const libur = normal <= 0;
+    let dasar, lembur, adaMandor, sumberApp = false;
+    if(libur){
+      // Minggu/merah: tanpa jam pokok & tanpa data mandor -> pakai lembur hitungan app
+      dasar = 0;
+      lembur = kerja.reduce((s,e)=>s+(parseFloat(e.lembur)||0), 0);
+      adaMandor = true;                                  // tidak dituntut konfirmasi mandor
+      sumberApp = true;
+    } else {
+      dasar = normal;
+      const lm = lemburAktualJam(tgl);                   // null kalau belum ada data mandor
+      lembur = (lm !== null && lm > 0) ? lm : 0;
+      adaMandor = (lm !== null);
+    }
     const jam = dasar + lembur;
-    hari.push({tgl, hm, dasar, lembur, jam, rasio:hm/jam, adaMandor:(lm !== null)});
+    if(jam <= 0) return;                                 // penyebut 0 (Minggu/merah tanpa lembur app)
+    hari.push({tgl, hm, dasar, lembur, jam, rasio:hm/jam, adaMandor, sumberApp});
   });
   const n = hari.length;
   const rata = n ? hari.reduce((s,d)=>s+d.rasio, 0) / n : null;
@@ -176,8 +193,8 @@ function renderEfektivitasModal(){
     hasilHtml = `<div class="card"><div class="empty-note">Belum ada hari yang bisa dihitung di periode ini.</div></div>`;
   } else {
     const ket = h.hariTanpaMandor > 0
-      ? `<div class="field-sub" style="margin-top:6px;">${h.hariTanpaMandor} dari ${h.jumlahHari} hari belum ada data lembur mandor (dihitung hanya jam normal).</div>`
-      : `<div class="field-sub" style="margin-top:6px;">Semua hari sudah memakai data lembur mandor.</div>`;
+      ? `<div class="field-sub" style="margin-top:6px;">${h.hariTanpaMandor} hari Senin&ndash;Sabtu belum ada data lembur mandor (dihitung hanya jam normal).</div>`
+      : `<div class="field-sub" style="margin-top:6px;">Semua hari Senin&ndash;Sabtu sudah memakai data lembur mandor.</div>`;
     const bulanHtml = h.perBulan.length > 1 ? `
       <div class="section-eyebrow">Rincian per Bulan</div>
       ${h.perBulan.map(b=>{
@@ -194,7 +211,9 @@ function renderEfektivitasModal(){
       ${h.hari.slice().reverse().map(d=>{
         const dt = new Date(d.tgl+'T00:00:00');
         const lbl = EF_HARI_SINGKAT[dt.getDay()]+' '+dt.getDate()+'/'+(dt.getMonth()+1);
-        const jamTxt = d.dasar+(d.lembur>0?' + '+lmFmt(d.lembur):'')+(d.adaMandor?'':' *');
+        const jamTxt = d.sumberApp
+          ? lmFmt(d.lembur)+' lembur app'
+          : d.dasar+(d.lembur>0?' + '+lmFmt(d.lembur):'')+(d.adaMandor?'':' *');
         return `<div style="display:grid;grid-template-columns:70px 1fr 56px;align-items:center;gap:6px;padding:4px 0;border-bottom:1px solid var(--outline-variant);">
           <div style="font-size:12px;font-weight:700;">${lbl}</div>
           <div style="font-size:11px;color:var(--on-surface-variant);">HM ${d.hm.toFixed(1)} &divide; (${jamTxt}) j</div>
@@ -202,7 +221,7 @@ function renderEfektivitasModal(){
         </div>`;
       }).join('')}
       </div>
-      ${h.hariTanpaMandor>0?'<div class="field-sub" style="font-size:10px;margin-top:4px;">* belum ada data lembur mandor</div>':''}` : '';
+      ${h.hariTanpaMandor>0?'<div class="field-sub" style="font-size:10px;margin-top:4px;">* belum ada data lembur mandor</div>':''}${h.hari.some(d=>d.sumberApp)?'<div class="field-sub" style="font-size:10px;margin-top:2px;">Minggu/tanggal merah: tanpa jam pokok, memakai lembur hitungan app.</div>':''}` : '';
     hasilHtml = `
       <div class="card" style="text-align:center;">
         <div class="field-sub">Rata-rata efektivitas &middot; ${escapeHtml(r.label)}</div>
@@ -223,6 +242,6 @@ function renderEfektivitasModal(){
     <div style="margin:6px 0 12px;">${kontrol}</div>
     ${hasilHtml}
     <div class="section-eyebrow">Cara Hitung</div>
-    <div class="field-sub">Tiap hari: HM &divide; (jam normal + lembur mandor). Jam normal: Sen&ndash;Kam 7, Jum 6,5, Sab 5,5; Minggu &amp; tanggal merah 7. Lembur mandor memakai angka mentah (sebelum &times;2 &minus; 0,5). Hasil periode = rata-rata persen harian. Hari Libur/Cuti dan hari tanpa HM tidak dihitung; Standby dihitung 0%. Beberapa unit di tanggal yang sama: HM dijumlahkan, jam kerja dihitung sekali.</div>
+    <div class="field-sub">Tiap hari: HM &divide; (jam normal + lembur mandor). Jam normal: Sen&ndash;Kam 7, Jum 6,5, Sab 5,5. Lembur mandor memakai angka mentah (sebelum &times;2 &minus; 0,5). Minggu &amp; tanggal merah tidak ada jam pokok: penyebut = lembur hitungan app (dari Absen), tanpa data mandor. Hasil periode = rata-rata persen harian. Hari Libur/Cuti dan hari tanpa HM tidak dihitung; Standby dihitung 0%. Beberapa unit di tanggal yang sama: HM dijumlahkan, jam kerja dihitung sekali.</div>
   `);
 }
